@@ -1,3 +1,123 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  ::selection {
+    @apply bg-green-200 text-green-900;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-green-500/50 ring-offset-1;
+  }
+}
+
+@layer components {
+  /* ---- campos de formulário ---- */
+  .eco-input {
+    @apply w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white text-stone-800
+      placeholder:text-stone-400 transition-all duration-150 ease-out
+      focus:outline-none focus:ring-2 focus:ring-green-500/40 focus:border-green-500;
+  }
+  .eco-input-sm {
+    @apply eco-input px-2.5 py-1.5;
+  }
+  .eco-label {
+    @apply text-xs font-medium text-stone-500 block mb-1;
+  }
+
+  /* ---- botões ----
+     Variantes de cor (primary/secondary/danger/ghost) e de tamanho (sm/xs)
+     são classes independentes pensadas para combinar (ex.: "eco-btn-primary
+     eco-btn-sm"). As classes de tamanho são declaradas por último de
+     propósito, para que o padding delas sempre vença o padding padrão
+     embutido em cada variante de cor. */
+  .eco-btn {
+    @apply inline-flex items-center justify-center gap-1.5 text-sm font-medium rounded-lg
+      px-4 py-2 transition-all duration-150 ease-out select-none
+      active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none disabled:active:scale-100;
+  }
+  .eco-btn-primary {
+    @apply eco-btn bg-green-700 text-white shadow-sm hover:bg-green-800 hover:shadow;
+  }
+  .eco-btn-secondary {
+    @apply eco-btn border border-stone-300 text-stone-600 bg-white hover:bg-stone-50 hover:border-stone-400;
+  }
+  .eco-btn-danger {
+    @apply eco-btn bg-red-600 text-white shadow-sm hover:bg-red-700 hover:shadow;
+  }
+  .eco-btn-dark {
+    @apply eco-btn bg-stone-800 text-white shadow-sm hover:bg-stone-700 hover:shadow;
+  }
+  .eco-btn-ghost {
+    @apply eco-btn text-stone-500 hover:bg-stone-100;
+  }
+  .eco-icon-btn {
+    @apply inline-flex items-center justify-center w-8 h-8 rounded-lg text-stone-400
+      transition-all duration-150 ease-out hover:bg-stone-100 hover:text-stone-700 active:scale-90;
+  }
+  .eco-icon-btn-danger {
+    @apply eco-icon-btn hover:bg-red-50 hover:text-red-600;
+  }
+
+  /* tamanhos — sempre depois das variantes de cor acima (ver nota) */
+  .eco-btn-sm {
+    @apply px-3 py-1.5 text-sm gap-1.5;
+  }
+  .eco-btn-xs {
+    @apply px-2.5 py-1 text-xs gap-1;
+  }
+
+  /* ---- cards ---- */
+  .eco-card {
+    @apply bg-white border border-stone-200 rounded-xl shadow-soft;
+  }
+  .eco-card-hover {
+    @apply transition-all duration-200 ease-out hover:shadow-elevated hover:-translate-y-0.5 hover:border-stone-300;
+  }
+
+  /* ---- tabelas ---- */
+  .eco-table-row {
+    @apply transition-colors duration-150 hover:bg-stone-50;
+  }
+
+  /* ---- badges ---- */
+  .eco-badge {
+    @apply inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full;
+  }
+
+  /* ---- skeleton ---- */
+  .eco-skeleton {
+    @apply relative overflow-hidden bg-stone-200/70 rounded-md;
+    background-image: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.7) 50%, rgba(255,255,255,0) 100%);
+    background-size: 200% 100%;
+  }
+}
+
+/* Entrada suave e escalonada de listas/cards */
+.eco-stagger > * {
+  animation: fadeInUp 0.32s cubic-bezier(0.16,1,0.3,1) both;
+}
+.eco-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.eco-stagger > *:nth-child(2) { animation-delay: 30ms; }
+.eco-stagger > *:nth-child(3) { animation-delay: 60ms; }
+.eco-stagger > *:nth-child(4) { animation-delay: 90ms; }
+.eco-stagger > *:nth-child(5) { animation-delay: 120ms; }
+.eco-stagger > *:nth-child(6) { animation-delay: 150ms; }
+.eco-stagger > *:nth-child(n+7) { animation-delay: 180ms; }
+
+/* Barra lateral: transição de largura suave */
+.eco-sidebar {
+  transition: width 0.22s cubic-bezier(0.16,1,0.3,1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
