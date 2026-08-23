@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   Package, Plus, Trash2, Loader2, AlertCircle,
-  ArrowLeft, Building2, HardHat, Mountain, Store,
+  ArrowLeft, HardHat, Mountain, Store,
   Upload, ArrowUpRight, ArrowDownRight, CheckCircle2, X, Pencil, Copy,
   Home, Users, Receipt, CalendarClock, Phone, FileText, Download,
 } from 'lucide-react';
+import { upperInput, normalizeProductName, normalizeUnit } from './textUtils';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -78,7 +79,7 @@ function parseImportado(texto) {
     // ignora possível linha de cabeçalho (primeira linha sem preço numérico)
     if (i === 0 && isNaN(preco)) return;
     if (!nomeRaw || isNaN(preco)) { invalidas++; return; }
-    itens.push({ nome: nomeRaw, preco, unidade: (unidadeRaw || 'un').trim() });
+    itens.push({ nome: normalizeProductName(nomeRaw), preco, unidade: normalizeUnit(unidadeRaw) || 'UN' });
   });
   return { itens, invalidas };
 }
@@ -145,12 +146,43 @@ function CustoObraApp() {
           window.storage.get('fornecedores', false).catch(() => null),
           window.storage.get('contas', false).catch(() => null),
         ]);
+
+        // Migração não destrutiva: padroniza nome/unidade de produtos e
+        // lançamentos já existentes para CAIXA ALTA, preservando id, preço,
+        // estoque/histórico e relacionamentos. Só regrava no banco se algo
+        // realmente mudou.
+        const produtosCarregados = p ? JSON.parse(p.value) : [];
+        const lancamentosCarregados = l ? JSON.parse(l.value) : [];
+
+        const produtosNormalizados = produtosCarregados.map((prod) => {
+          const nome = normalizeProductName(prod.nome);
+          const unidade = normalizeUnit(prod.unidade) || prod.unidade;
+          if (nome === prod.nome && unidade === prod.unidade) return prod;
+          return { ...prod, nome, unidade };
+        });
+        const produtosMudaram = produtosNormalizados.some((prod, idx) => prod !== produtosCarregados[idx]);
+
+        const lancamentosNormalizados = lancamentosCarregados.map((lanc) => {
+          const descricao = normalizeProductName(lanc.descricao);
+          const unidade = normalizeUnit(lanc.unidade) || lanc.unidade;
+          if (descricao === lanc.descricao && unidade === lanc.unidade) return lanc;
+          return { ...lanc, descricao, unidade };
+        });
+        const lancamentosMudaram = lancamentosNormalizados.some((lanc, idx) => lanc !== lancamentosCarregados[idx]);
+
         setObras(o ? JSON.parse(o.value) : []);
-        setProdutos(p ? JSON.parse(p.value) : []);
-        setLancamentos(l ? JSON.parse(l.value) : []);
+        setProdutos(produtosNormalizados);
+        setLancamentos(lancamentosNormalizados);
         setEtapas(et ? JSON.parse(et.value) : []);
         setFornecedores(fo ? JSON.parse(fo.value) : []);
         setContas(co ? JSON.parse(co.value) : []);
+
+        if (produtosMudaram) {
+          window.storage.set('produtos', JSON.stringify(produtosNormalizados), false).catch(() => {});
+        }
+        if (lancamentosMudaram) {
+          window.storage.set('lancamentos', JSON.stringify(lancamentosNormalizados), false).catch(() => {});
+        }
       } catch (e) {
         setErro('Não foi possível carregar os dados salvos.');
       } finally {
@@ -542,21 +574,23 @@ function CustoObraApp() {
 
   // ---- catálogo global de produtos da loja ----
   const [npNome, setNpNome] = useState('');
-  const [npUnidade, setNpUnidade] = useState('un');
+  const [npUnidade, setNpUnidade] = useState('UN');
   const [npPreco, setNpPreco] = useState('');
   const [npEditandoId, setNpEditandoId] = useState(null);
 
   function upsertProduto(lista, { nome, preco, unidade }, hoje) {
-    const idx = lista.findIndex((p) => p.nome.toLowerCase() === nome.toLowerCase());
+    const nomeNormalizado = normalizeProductName(nome);
+    const unidadeNormalizada = normalizeUnit(unidade);
+    const idx = lista.findIndex((p) => p.nome.toLowerCase() === nomeNormalizado.toLowerCase());
     if (idx >= 0) {
       const existente = lista[idx];
       const historico = [...(existente.historico || []), { preco: existente.preco, data: existente.atualizadoEm }];
       const copia = lista.slice();
-      copia[idx] = { ...existente, preco, unidade: unidade || existente.unidade, atualizadoEm: hoje, historico };
+      copia[idx] = { ...existente, preco, unidade: unidadeNormalizada || existente.unidade, atualizadoEm: hoje, historico };
       return copia;
     }
     return [...lista, {
-      id: crypto.randomUUID(), nome, unidade: unidade || 'un', preco,
+      id: crypto.randomUUID(), nome: nomeNormalizado, unidade: unidadeNormalizada || 'UN', preco,
       criadoEm: hoje, atualizadoEm: hoje, historico: [],
     }];
   }
@@ -571,13 +605,14 @@ function CustoObraApp() {
 
   function cancelarEdicaoProduto() {
     setNpEditandoId(null);
-    setNpNome(''); setNpUnidade('un'); setNpPreco('');
+    setNpNome(''); setNpUnidade('UN'); setNpPreco('');
   }
 
   async function cadastrarProduto(e) {
     if (e && e.preventDefault) e.preventDefault();
     setErro('');
-    const nome = npNome.trim();
+    const nome = normalizeProductName(npNome);
+    const unidade = normalizeUnit(npUnidade) || 'UN';
     const preco = parsePrecoBR(npPreco);
     if (!nome || isNaN(preco) || preco < 0) {
       setErro('Preencha o nome e um preço válido para o produto.');
@@ -597,7 +632,7 @@ function CustoObraApp() {
         ? [...(original.historico || []), { preco: original.preco, data: original.atualizadoEm }]
         : (original ? original.historico || [] : []);
       const ok = await salvarProdutos(produtos.map((p) => p.id === npEditandoId
-        ? { ...p, nome, unidade: npUnidade, preco, atualizadoEm: hoje, historico }
+        ? { ...p, nome, unidade, preco, atualizadoEm: hoje, historico }
         : p));
       if (ok) {
         setAviso(`"${nome}" atualizado.`);
@@ -606,7 +641,7 @@ function CustoObraApp() {
       return;
     }
 
-    const ok = await salvarProdutos(upsertProduto(produtos, { nome, preco, unidade: npUnidade }, hoje));
+    const ok = await salvarProdutos(upsertProduto(produtos, { nome, preco, unidade }, hoje));
     if (ok) {
       setAviso(`"${nome}" salvo no catálogo.`);
       setNpNome(''); setNpPreco('');
@@ -667,7 +702,7 @@ function CustoObraApp() {
   // ---- lançamento dentro de uma obra ----
   const [ldDescricao, setLdDescricao] = useState('');
   const [ldQuantidade, setLdQuantidade] = useState('1');
-  const [ldUnidade, setLdUnidade] = useState('un');
+  const [ldUnidade, setLdUnidade] = useState('UN');
   const [ldPreco, setLdPreco] = useState('');
   const [ldData, setLdData] = useState(todayISO());
   const [ldObservacao, setLdObservacao] = useState('');
@@ -677,12 +712,13 @@ function CustoObraApp() {
   const [buscaLancamento, setBuscaLancamento] = useState('');
 
   function resetFormLancamento() {
-    setLdDescricao(''); setLdQuantidade('1'); setLdUnidade('un');
+    setLdDescricao(''); setLdQuantidade('1'); setLdUnidade('UN');
     setLdPreco(''); setLdData(todayISO());
     setLdObservacao(''); setLdEtapaId(''); setLdFornecedor(''); setEditandoId(null);
   }
 
-  function aoDigitarProdutoLoja(nome) {
+  function aoDigitarProdutoLoja(valor) {
+    const nome = upperInput(valor);
     setLdDescricao(nome);
     const p = produtos.find((x) => x.nome.toLowerCase() === nome.trim().toLowerCase());
     if (p) { setLdPreco(String(p.preco)); setLdUnidade(p.unidade); }
@@ -707,7 +743,8 @@ function CustoObraApp() {
     setErro('');
     const quantidade = parsePrecoBR(ldQuantidade);
     const preco = parsePrecoBR(ldPreco);
-    const nome = ldDescricao.trim();
+    const nome = normalizeProductName(ldDescricao);
+    const unidade = normalizeUnit(ldUnidade) || 'UN';
 
     if (!nome) { setErro('Descreva o item.'); return; }
     if (isNaN(quantidade) || quantidade <= 0) { setErro('Informe uma quantidade válida.'); return; }
@@ -718,7 +755,7 @@ function CustoObraApp() {
 
     // categoria "produto da loja": salva/atualiza automaticamente no catálogo, como uma planilha
     if (categoriaAtiva === 'produto_loja') {
-      const novaListaProdutos = upsertProduto(produtos, { nome, preco, unidade: ldUnidade || 'un' }, hoje);
+      const novaListaProdutos = upsertProduto(produtos, { nome, preco, unidade }, hoje);
       const okProduto = await salvarProdutos(novaListaProdutos);
       if (!okProduto) return;
       const encontrado = novaListaProdutos.find((p) => p.nome.toLowerCase() === nome.toLowerCase());
@@ -736,7 +773,7 @@ function CustoObraApp() {
       categoria: categoriaAtiva,
       produtoId,
       descricao: nome,
-      unidade: ldUnidade || 'un',
+      unidade,
       quantidade, preco, total: quantidade * preco,
       data: hoje,
       observacao: ldObservacao.trim(),
@@ -775,9 +812,11 @@ function CustoObraApp() {
             onClick={() => { setView('home'); setObraAtivaId(null); }}
             className="flex items-center gap-2 flex-shrink-0"
           >
-            <span className="w-10 h-10 rounded-full bg-green-700 flex items-center justify-center flex-shrink-0">
-              <Building2 size={20} className="text-white" />
-            </span>
+            <img
+              src="/logo-casas-eco.jpeg"
+              alt="Casas Eco"
+              className="h-9 w-auto object-contain rounded flex-shrink-0"
+            />
             <span className="flex flex-col leading-tight border-l border-stone-200 pl-2 ml-1">
               <span className="font-bold text-green-800 text-sm tracking-tight">CASAS ECO</span>
               <span className="text-xs text-stone-400">Custo de Obra</span>
@@ -1071,7 +1110,7 @@ function CustoObraApp() {
                 <label className="text-xs text-stone-500 block mb-1">Produto</label>
                 <input
                   value={npNome}
-                  onChange={(e) => setNpNome(e.target.value)}
+                  onChange={(e) => setNpNome(upperInput(e.target.value))}
                   placeholder="Ex: Cimento CP-II 50kg"
                   list="lista-produtos-existentes"
                   className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
@@ -1082,7 +1121,7 @@ function CustoObraApp() {
               </div>
               <div className="w-full sm:w-28">
                 <label className="text-xs text-stone-500 block mb-1">Unidade</label>
-                <input value={npUnidade} onChange={(e) => setNpUnidade(e.target.value)} placeholder="un, saco, m³..."
+                <input value={npUnidade} onChange={(e) => setNpUnidade(upperInput(e.target.value))} placeholder="UN, SACO, M³..."
                   className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
               </div>
               <div className="w-full sm:w-32">
@@ -1575,7 +1614,7 @@ function CustoObraApp() {
                   <label className="text-xs text-stone-500 block mb-1">Descrição</label>
                   <input
                     value={ldDescricao}
-                    onChange={(e) => setLdDescricao(e.target.value)}
+                    onChange={(e) => setLdDescricao(upperInput(e.target.value))}
                     placeholder={categoriaAtiva === 'mao_de_obra' ? 'Ex: Pedreiro - diária' : 'Ex: Areia lavada'}
                     className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
                   />
@@ -1588,7 +1627,7 @@ function CustoObraApp() {
               </div>
               <div className="col-span-1">
                 <label className="text-xs text-stone-500 block mb-1">Unid.</label>
-                <input value={ldUnidade} onChange={(e) => setLdUnidade(e.target.value)} placeholder="un, m³..."
+                <input value={ldUnidade} onChange={(e) => setLdUnidade(upperInput(e.target.value))} placeholder="UN, M³..."
                   className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
               </div>
               <div className="col-span-1">
