@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
   Package, Plus, Trash2, Loader2, AlertCircle,
-  ArrowLeft, HardHat, Mountain, Store,
+  ArrowLeft,
   Upload, ArrowUpRight, ArrowDownRight, CheckCircle2, X, Pencil, Copy,
-  Home, Users, Receipt, CalendarClock, Phone, FileText, Download,
+  Home, Users, Receipt, CalendarClock, Phone, FileText, Download, LayoutDashboard,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit } from './textUtils';
+import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
+import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -40,32 +42,6 @@ export default function CustoObraAppBoundary() {
 }
 
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function formatDateBR(iso) {
-  if (!iso) return '';
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y}`;
-}
-
-function formatMoney(v) {
-  const n = Number(v) || 0;
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
-function parsePrecoBR(s) {
-  if (s === null || s === undefined) return NaN;
-  let t = String(s).trim().replace(/^R\$\s*/i, '');
-  if (t.includes(',') && t.includes('.')) {
-    t = t.replace(/\./g, '').replace(',', '.');
-  } else if (t.includes(',')) {
-    t = t.replace(',', '.');
-  }
-  return parseFloat(t);
-}
-
 function parseImportado(texto) {
   const linhas = texto.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const itens = [];
@@ -84,20 +60,9 @@ function parseImportado(texto) {
   return { itens, invalidas };
 }
 
-const CATEGORIAS = {
-  mao_de_obra: { label: 'Mão de obra', icon: HardHat, cls: 'amber' },
-  material_bruto: { label: 'Materiais Brutos', icon: Mountain, cls: 'orange' },
-  produto_loja: { label: 'Produtos da Loja', icon: Store, cls: 'blue' },
-};
-
-const CLS = {
-  amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', solid: 'bg-amber-600' },
-  orange: { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', solid: 'bg-orange-600' },
-  blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', solid: 'bg-blue-600' },
-};
-
 const NAV_ITEMS = [
   { key: 'home', label: 'Início', icon: Home },
+  { key: 'financeiro', label: 'Financeiro', icon: LayoutDashboard },
   { key: 'catalogo', label: 'Catálogo', icon: Package },
   { key: 'fornecedores', label: 'Fornecedores', icon: Users },
   { key: 'contas', label: 'Contas', icon: Receipt },
@@ -1018,6 +983,16 @@ function CustoObraApp() {
               </div>
             )}
           </div>
+        )}
+
+        {/* ---------------- DASHBOARD FINANCEIRO ---------------- */}
+        {view === 'financeiro' && (
+          <FinanceiroDashboard
+            obras={obras}
+            lancamentos={lancamentos}
+            fornecedores={fornecedores}
+            contas={contas}
+          />
         )}
 
         {/* ---------------- CATÁLOGO DE PRODUTOS (global) ---------------- */}

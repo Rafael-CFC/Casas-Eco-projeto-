@@ -1,0 +1,43 @@
+// Constantes e helpers de domínio compartilhados entre o app principal e o
+// Dashboard Financeiro. Mantidos aqui para ter uma única fonte de verdade
+// (mesmas categorias, mesmas cores, mesma formatação de data/moeda usadas em
+// todo o sistema).
+import { HardHat, Mountain, Store } from 'lucide-react';
+
+export function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function formatDateBR(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+export function formatMoney(v) {
+  const n = Number(v) || 0;
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+export function parsePrecoBR(s) {
+  if (s === null || s === undefined) return NaN;
+  let t = String(s).trim().replace(/^R\$\s*/i, '');
+  if (t.includes(',') && t.includes('.')) {
+    t = t.replace(/\./g, '').replace(',', '.');
+  } else if (t.includes(',')) {
+    t = t.replace(',', '.');
+  }
+  return parseFloat(t);
+}
+
+export const CATEGORIAS = {
+  mao_de_obra: { label: 'Mão de obra', icon: HardHat, cls: 'amber' },
+  material_bruto: { label: 'Materiais Brutos', icon: Mountain, cls: 'orange' },
+  produto_loja: { label: 'Produtos da Loja', icon: Store, cls: 'blue' },
+};
+
+export const CLS = {
+  amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', solid: 'bg-amber-600' },
+  orange: { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', solid: 'bg-orange-600' },
+  blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', solid: 'bg-blue-600' },
+};
