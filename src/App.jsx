@@ -14,6 +14,8 @@ import { DashboardSkeleton } from './ui/Skeleton';
 import FinalizarObraModal from './obra/FinalizarObraModal';
 import SucessoFinalizacaoModal from './obra/SucessoFinalizacaoModal';
 import ResumoFinalObra from './obra/ResumoFinalObra';
+import ProdutoSeletor from './produtos/ProdutoSeletor';
+import { catalogoPorCategoria } from './produtos/catalogoUtils';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -607,17 +609,6 @@ function CustoObraApp() {
     salvarLancamentos(lancamentos.filter((l) => l.id !== id));
   }
 
-  // ---- produtos ordenados por uso (mais lançados primeiro) ----
-  function produtosOrdenadosPorUso() {
-    const uso = {};
-    lancamentos.forEach((l) => { if (l.produtoId) uso[l.produtoId] = (uso[l.produtoId] || 0) + 1; });
-    return produtos.slice().sort((a, b) => {
-      const ua = uso[a.id] || 0, ub = uso[b.id] || 0;
-      if (ub !== ua) return ub - ua;
-      return a.nome.localeCompare(b.nome);
-    });
-  }
-
   // ---- catálogo global de produtos da loja ----
   const [npNome, setNpNome] = useState('');
   const [npUnidade, setNpUnidade] = useState('UN');
@@ -763,11 +754,18 @@ function CustoObraApp() {
     setLdObservacao(''); setLdEtapaId(''); setLdFornecedor(''); setEditandoId(null);
   }
 
-  function aoDigitarProdutoLoja(valor) {
+  function aoDigitarDescricao(valor) {
     const nome = upperInput(valor);
     setLdDescricao(nome);
-    const p = produtos.find((x) => x.nome.toLowerCase() === nome.trim().toLowerCase());
-    if (p) { setLdPreco(String(p.preco)); setLdUnidade(p.unidade); }
+    const catalogo = catalogoPorCategoria(categoriaAtiva, produtos, lancamentos);
+    const item = catalogo.find((it) => it.nome.toLowerCase() === nome.trim().toLowerCase());
+    if (item) { setLdPreco(String(item.preco)); setLdUnidade(item.unidade); }
+  }
+
+  function selecionarItemCatalogo(item) {
+    setLdDescricao(item.nome);
+    setLdUnidade(item.unidade);
+    setLdPreco(String(item.preco));
   }
 
   function editarLancamento(item) {
@@ -845,7 +843,7 @@ function CustoObraApp() {
 
   const obraAtiva = obras.find((o) => o.id === obraAtivaId);
   const obraConcluida = obraEstaConcluida(obraAtiva);
-  const produtosOrdenados = produtosOrdenadosPorUso();
+  const catalogoAtivo = catalogoPorCategoria(categoriaAtiva, produtos, lancamentos);
   const paginaAtual = (view === 'obra' || view === 'resumo') && obraAtiva
     ? {
         titulo: obraAtiva.nome,
@@ -1802,31 +1800,23 @@ function CustoObraApp() {
             )}
             {!obraConcluida && (
             <div className="eco-card p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 items-end">
-              {categoriaAtiva === 'produto_loja' ? (
-                <div className="col-span-2 sm:col-span-4 lg:col-span-2">
-                  <label className="text-xs text-stone-500 block mb-1">Produto</label>
-                  <input
-                    value={ldDescricao}
-                    onChange={(e) => aoDigitarProdutoLoja(e.target.value)}
-                    placeholder="Digite o nome — se já existir, o preço vem sozinho"
-                    list="lista-produtos-lancamento"
-                    className="eco-input"
-                  />
-                  <datalist id="lista-produtos-lancamento">
-                    {produtosOrdenados.map((p) => <option key={p.id} value={p.nome} />)}
-                  </datalist>
-                </div>
-              ) : (
-                <div className="col-span-2 sm:col-span-4 lg:col-span-2">
-                  <label className="text-xs text-stone-500 block mb-1">Descrição</label>
-                  <input
-                    value={ldDescricao}
-                    onChange={(e) => setLdDescricao(upperInput(e.target.value))}
-                    placeholder={categoriaAtiva === 'mao_de_obra' ? 'Ex: Pedreiro - diária' : 'Ex: Areia lavada'}
-                    className="eco-input"
-                  />
-                </div>
-              )}
+              <div className="col-span-2 sm:col-span-4 lg:col-span-2">
+                <label className="text-xs text-stone-500 block mb-1">
+                  {categoriaAtiva === 'produto_loja' ? 'Produto' : 'Descrição'}
+                </label>
+                <ProdutoSeletor
+                  value={ldDescricao}
+                  onChangeTexto={aoDigitarDescricao}
+                  onSelecionar={selecionarItemCatalogo}
+                  itens={catalogoAtivo}
+                  categoriaLabel={CATEGORIAS[categoriaAtiva].label}
+                  placeholder={
+                    categoriaAtiva === 'produto_loja'
+                      ? 'Digite ou escolha — se já existir, o preço vem sozinho'
+                      : categoriaAtiva === 'mao_de_obra' ? 'Ex: Pedreiro - diária' : 'Ex: Areia lavada'
+                  }
+                />
+              </div>
               <div className="col-span-1">
                 <label className="text-xs text-stone-500 block mb-1">Qtd.</label>
                 <input value={ldQuantidade} onChange={(e) => setLdQuantidade(e.target.value)} inputMode="decimal"

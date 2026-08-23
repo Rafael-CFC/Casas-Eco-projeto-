@@ -37,6 +37,10 @@ export default {
           '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
         },
+        sheetUp: {
+          '0%': { opacity: '0', transform: 'translateY(16px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         'fade-in': 'fadeIn 0.25s ease-out both',
@@ -46,6 +50,7 @@ export default {
         'toast-in': 'toastIn 0.22s cubic-bezier(0.16,1,0.3,1) both',
         'toast-out': 'toastOut 0.18s ease-in forwards',
         shimmer: 'shimmer 1.8s ease-in-out infinite',
+        'sheet-up': 'sheetUp 0.24s cubic-bezier(0.16,1,0.3,1) both',
       },
       transitionTimingFunction: {
         'out-soft': 'cubic-bezier(0.16,1,0.3,1)',
