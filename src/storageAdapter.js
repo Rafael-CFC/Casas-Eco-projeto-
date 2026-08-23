@@ -27,8 +27,8 @@ window.storage = {
       .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
 
     if (error) {
-      console.error('Erro ao salvar no Supabase:', error.message);
-      return null;
+      console.error('Erro ao salvar no Supabase:', error);
+      throw new Error(error.message || 'erro desconhecido do banco de dados');
     }
     return { key, value, shared: true };
   },

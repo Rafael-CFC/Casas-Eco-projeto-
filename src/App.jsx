@@ -169,13 +169,14 @@ function CustoObraApp() {
     setter(value);
     if (!window.storage) {
       setErro('Este ambiente não oferece armazenamento persistente — os dados não serão salvos entre sessões.');
-      return;
+      return false;
     }
     try {
-      const ok = await window.storage.set(key, JSON.stringify(value), false);
-      if (!ok) setErro('Não foi possível salvar. Tente novamente.');
+      await window.storage.set(key, JSON.stringify(value), false);
+      return true;
     } catch (e) {
       setErro(`Não foi possível salvar: ${e && e.message ? e.message : 'erro desconhecido'}`);
+      return false;
     }
   }
 
@@ -186,16 +187,18 @@ function CustoObraApp() {
   const salvarFornecedores = (l) => persist('fornecedores', l, setFornecedores);
   const salvarContas = (l) => persist('contas', l, setContas);
 
-  function criarObra(e) {
+  async function criarObra(e) {
     if (e && e.preventDefault) e.preventDefault();
     const nome = novaObraNome.trim();
     if (!nome) return;
     const orcamento = novaObraOrcamento.trim() ? parsePrecoBR(novaObraOrcamento) : null;
     const nova = { id: crypto.randomUUID(), nome, criadoEm: todayISO(), orcamento: isNaN(orcamento) ? null : orcamento };
-    salvarObras([...obras, nova]);
-    setAviso(`Obra "${nome}" criada.`);
-    setNovaObraNome('');
-    setNovaObraOrcamento('');
+    const ok = await salvarObras([...obras, nova]);
+    if (ok) {
+      setAviso(`Obra "${nome}" criada.`);
+      setNovaObraNome('');
+      setNovaObraOrcamento('');
+    }
   }
 
   function removerObra(id, nome) {
@@ -312,11 +315,11 @@ function CustoObraApp() {
   }
 
   function atualizarFornecedor(id, campos) {
-    salvarFornecedores(fornecedores.map((f) => f.id === id ? { ...f, ...campos } : f));
+    return salvarFornecedores(fornecedores.map((f) => f.id === id ? { ...f, ...campos } : f));
   }
 
   // ---- contas a pagar ----
-  function criarContas({ descricao, valor, vencimento, obraId, fornecedorNome, parcelas }) {
+  async function criarContas({ descricao, valor, vencimento, obraId, fornecedorNome, parcelas }) {
     const hoje = todayISO();
     const n = Math.max(1, parseInt(parcelas, 10) || 1);
     const grupoId = n > 1 ? crypto.randomUUID() : null;
@@ -336,11 +339,13 @@ function CustoObraApp() {
         criadoEm: hoje,
       });
     }
-    salvarContas([...contas, ...novas]);
+    const ok = await salvarContas([...contas, ...novas]);
+    if (!ok) return false;
     if (fornecedorNome && fornecedorNome.trim()) {
       salvarFornecedores(upsertFornecedor(fornecedores, fornecedorNome.trim()));
     }
     setAviso(n > 1 ? `${n} parcelas de "${descricao}" criadas.` : `Conta "${descricao}" criada.`);
+    return true;
   }
 
   function marcarContaPaga(id) {
@@ -370,22 +375,23 @@ function CustoObraApp() {
   const [fnTelefone, setFnTelefone] = useState('');
   const [fnCategoria, setFnCategoria] = useState('');
 
-  function cadastrarFornecedor() {
+  async function cadastrarFornecedor() {
     setErro('');
     const nome = fnNome.trim();
     if (!nome) { setErro('Informe o nome do fornecedor.'); return; }
     const existente = fornecedores.find((f) => f.nome.toLowerCase() === nome.toLowerCase());
+    let ok;
     if (existente) {
-      atualizarFornecedor(existente.id, { telefone: fnTelefone.trim(), categoria: fnCategoria.trim() });
-      setAviso(`"${nome}" atualizado.`);
+      ok = await atualizarFornecedor(existente.id, { telefone: fnTelefone.trim(), categoria: fnCategoria.trim() });
+      if (ok) setAviso(`"${nome}" atualizado.`);
     } else {
-      salvarFornecedores([...fornecedores, {
+      ok = await salvarFornecedores([...fornecedores, {
         id: crypto.randomUUID(), nome, telefone: fnTelefone.trim(), categoria: fnCategoria.trim(),
         observacoes: '', criadoEm: todayISO(),
       }]);
-      setAviso(`"${nome}" cadastrado.`);
+      if (ok) setAviso(`"${nome}" cadastrado.`);
     }
-    setFnNome(''); setFnTelefone(''); setFnCategoria('');
+    if (ok) { setFnNome(''); setFnTelefone(''); setFnCategoria(''); }
   }
 
   // ---- formulário: nova conta a pagar ----
@@ -396,19 +402,21 @@ function CustoObraApp() {
   const [ctFornecedor, setCtFornecedor] = useState('');
   const [ctParcelas, setCtParcelas] = useState('1');
 
-  function aoCriarConta() {
+  async function aoCriarConta() {
     setErro('');
     const descricao = ctDescricao.trim();
     const valor = parsePrecoBR(ctValor);
     if (!descricao) { setErro('Descreva a conta.'); return; }
     if (isNaN(valor) || valor <= 0) { setErro('Informe um valor válido.'); return; }
     if (!ctVencimento) { setErro('Informe a data de vencimento.'); return; }
-    criarContas({
+    const ok = await criarContas({
       descricao, valor, vencimento: ctVencimento,
       obraId: ctObraId || null, fornecedorNome: ctFornecedor.trim(), parcelas: ctParcelas,
     });
-    setCtDescricao(''); setCtValor(''); setCtVencimento(todayISO());
-    setCtObraId(''); setCtFornecedor(''); setCtParcelas('1');
+    if (ok) {
+      setCtDescricao(''); setCtValor(''); setCtVencimento(todayISO());
+      setCtObraId(''); setCtFornecedor(''); setCtParcelas('1');
+    }
   }
 
   function baixarCSV(nomeArquivo, linhas) {
@@ -566,7 +574,7 @@ function CustoObraApp() {
     setNpNome(''); setNpUnidade('un'); setNpPreco('');
   }
 
-  function cadastrarProduto(e) {
+  async function cadastrarProduto(e) {
     if (e && e.preventDefault) e.preventDefault();
     setErro('');
     const nome = npNome.trim();
@@ -588,17 +596,21 @@ function CustoObraApp() {
       const historico = original && original.preco !== preco
         ? [...(original.historico || []), { preco: original.preco, data: original.atualizadoEm }]
         : (original ? original.historico || [] : []);
-      salvarProdutos(produtos.map((p) => p.id === npEditandoId
+      const ok = await salvarProdutos(produtos.map((p) => p.id === npEditandoId
         ? { ...p, nome, unidade: npUnidade, preco, atualizadoEm: hoje, historico }
         : p));
-      setAviso(`"${nome}" atualizado.`);
-      cancelarEdicaoProduto();
+      if (ok) {
+        setAviso(`"${nome}" atualizado.`);
+        cancelarEdicaoProduto();
+      }
       return;
     }
 
-    salvarProdutos(upsertProduto(produtos, { nome, preco, unidade: npUnidade }, hoje));
-    setAviso(`"${nome}" salvo no catálogo.`);
-    setNpNome(''); setNpPreco('');
+    const ok = await salvarProdutos(upsertProduto(produtos, { nome, preco, unidade: npUnidade }, hoje));
+    if (ok) {
+      setAviso(`"${nome}" salvo no catálogo.`);
+      setNpNome(''); setNpPreco('');
+    }
   }
 
   function removerProduto(id, nome) {
@@ -690,7 +702,7 @@ function CustoObraApp() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function lancar(e) {
+  async function lancar(e) {
     if (e && e.preventDefault) e.preventDefault();
     setErro('');
     const quantidade = parsePrecoBR(ldQuantidade);
@@ -707,7 +719,8 @@ function CustoObraApp() {
     // categoria "produto da loja": salva/atualiza automaticamente no catálogo, como uma planilha
     if (categoriaAtiva === 'produto_loja') {
       const novaListaProdutos = upsertProduto(produtos, { nome, preco, unidade: ldUnidade || 'un' }, hoje);
-      salvarProdutos(novaListaProdutos);
+      const okProduto = await salvarProdutos(novaListaProdutos);
+      if (!okProduto) return;
       const encontrado = novaListaProdutos.find((p) => p.nome.toLowerCase() === nome.toLowerCase());
       produtoId = encontrado ? encontrado.id : null;
     }
@@ -731,15 +744,16 @@ function CustoObraApp() {
       fornecedorNome,
     };
 
+    let ok;
     if (editandoId) {
-      salvarLancamentos(lancamentos.map((l) => l.id === editandoId ? item : l));
-      setAviso(`"${item.descricao}" atualizado.`);
+      ok = await salvarLancamentos(lancamentos.map((l) => l.id === editandoId ? item : l));
+      if (ok) setAviso(`"${item.descricao}" atualizado.`);
     } else {
-      salvarLancamentos([item, ...lancamentos]);
-      setAviso(`"${item.descricao}" lançado.`);
+      ok = await salvarLancamentos([item, ...lancamentos]);
+      if (ok) setAviso(`"${item.descricao}" lançado.`);
     }
 
-    resetFormLancamento();
+    if (ok) resetFormLancamento();
   }
 
   if (loading) {
@@ -1541,9 +1555,9 @@ function CustoObraApp() {
               )}
             </div>
 
-            <div className="bg-white border border-stone-200 rounded-lg p-4 flex flex-col sm:flex-row flex-wrap gap-3 items-end">
+            <div className="bg-white border border-stone-200 rounded-lg p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 items-end">
               {categoriaAtiva === 'produto_loja' ? (
-                <div className="w-full sm:flex-1 min-w-0">
+                <div className="col-span-2 sm:col-span-4 lg:col-span-2">
                   <label className="text-xs text-stone-500 block mb-1">Produto</label>
                   <input
                     value={ldDescricao}
@@ -1557,7 +1571,7 @@ function CustoObraApp() {
                   </datalist>
                 </div>
               ) : (
-                <div className="w-full sm:flex-1 min-w-0">
+                <div className="col-span-2 sm:col-span-4 lg:col-span-2">
                   <label className="text-xs text-stone-500 block mb-1">Descrição</label>
                   <input
                     value={ldDescricao}
@@ -1567,29 +1581,29 @@ function CustoObraApp() {
                   />
                 </div>
               )}
-              <div className="w-20">
+              <div className="col-span-1">
                 <label className="text-xs text-stone-500 block mb-1">Qtd.</label>
                 <input value={ldQuantidade} onChange={(e) => setLdQuantidade(e.target.value)} inputMode="decimal"
                   className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
               </div>
-              <div className="w-24">
+              <div className="col-span-1">
                 <label className="text-xs text-stone-500 block mb-1">Unid.</label>
                 <input value={ldUnidade} onChange={(e) => setLdUnidade(e.target.value)} placeholder="un, m³..."
                   className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
               </div>
-              <div className="w-28">
+              <div className="col-span-1">
                 <label className="text-xs text-stone-500 block mb-1">Valor (R$)</label>
                 <input value={ldPreco} onChange={(e) => setLdPreco(e.target.value)} placeholder="0,00" inputMode="decimal"
                   className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
               </div>
-              <div className="w-36">
+              <div className="col-span-1">
                 <label className="text-xs text-stone-500 block mb-1">Data</label>
                 <input type="date" value={ldData} onChange={(e) => setLdData(e.target.value)}
                   className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
               </div>
               {etapas.filter((et) => et.obraId === obraAtiva.id).length > 0 && (
-                <div className="w-full sm:w-40">
-                  <label className="text-xs text-stone-500 block mb-1">Etapa (opcional)</label>
+                <div className="col-span-1">
+                  <label className="text-xs text-stone-500 block mb-1">Etapa (opc.)</label>
                   <select value={ldEtapaId} onChange={(e) => setLdEtapaId(e.target.value)}
                     className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400">
                     <option value="">Nenhuma</option>
@@ -1599,7 +1613,7 @@ function CustoObraApp() {
                   </select>
                 </div>
               )}
-              <div className="w-full sm:w-44">
+              <div className="col-span-2 sm:col-span-2 lg:col-span-2">
                 <label className="text-xs text-stone-500 block mb-1">Fornecedor (opcional)</label>
                 <input value={ldFornecedor} onChange={(e) => setLdFornecedor(e.target.value)} placeholder="Ex: Depósito São José"
                   list="lista-fornecedores-lancamento"
@@ -1608,19 +1622,21 @@ function CustoObraApp() {
                   {fornecedores.map((f) => <option key={f.id} value={f.nome} />)}
                 </datalist>
               </div>
-              <div className="w-full sm:flex-1 min-w-0">
+              <div className="col-span-2 sm:col-span-2 lg:col-span-2">
                 <label className="text-xs text-stone-500 block mb-1">Observação (opcional)</label>
                 <input value={ldObservacao} onChange={(e) => setLdObservacao(e.target.value)} placeholder="Ex: comprado em outra loja"
                   className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
               </div>
-              <button type="button" onClick={lancar} className={`w-full sm:w-auto text-white text-sm px-4 py-2 rounded flex items-center justify-center gap-1.5 ${CLS[CATEGORIAS[categoriaAtiva].cls].solid} hover:opacity-90`}>
-                <Plus size={15} /> {editandoId ? 'Salvar edição' : 'Lançar'}
-              </button>
-              {editandoId && (
-                <button type="button" onClick={resetFormLancamento} className="w-full sm:w-auto text-sm px-4 py-2 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">
-                  Cancelar
+              <div className="col-span-2 sm:col-span-4 lg:col-span-2 flex gap-2">
+                <button type="button" onClick={lancar} className={`flex-1 text-white text-sm px-4 py-2 rounded flex items-center justify-center gap-1.5 ${CLS[CATEGORIAS[categoriaAtiva].cls].solid} hover:opacity-90`}>
+                  <Plus size={15} /> {editandoId ? 'Salvar edição' : 'Lançar'}
                 </button>
-              )}
+                {editandoId && (
+                  <button type="button" onClick={resetFormLancamento} className="flex-1 text-sm px-4 py-2 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">
+                    Cancelar
+                  </button>
+                )}
+              </div>
             </div>
             {categoriaAtiva === 'produto_loja' && produtos.length === 0 && (
               <p className="text-xs text-stone-400 -mt-3">Ainda não tem produto cadastrado — pode digitar o nome, a unidade e o preço aqui mesmo que ele já entra no catálogo sozinho.</p>
