@@ -42,12 +42,11 @@ export default function Login({ onLogin }) {
 
       <form onSubmit={entrar} className="relative z-10 bg-white/95 backdrop-blur-sm border border-white/20 rounded-lg p-6 w-full max-w-sm shadow-2xl">
         <div className="flex items-center gap-2 mb-6">
-          <span className="w-10 h-10 rounded-full bg-green-700 flex items-center justify-center flex-shrink-0">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <polyline points="9 22 9 12 15 12 15 22" />
-            </svg>
-          </span>
+          <img
+            src="/logo-casas-eco.jpeg"
+            alt="Casas Eco"
+            className="h-12 w-auto object-contain rounded flex-shrink-0"
+          />
           <div>
             <p className="font-bold text-green-800 text-sm tracking-tight">CASAS ECO</p>
             <p className="text-xs text-stone-400">Custo de Obra</p>

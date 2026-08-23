@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Package, Plus, Trash2, Loader2, AlertCircle,
-  ArrowLeft, Building2, HardHat, Mountain, Store,
+  ArrowLeft, HardHat, Mountain, Store,
   Upload, ArrowUpRight, ArrowDownRight, CheckCircle2, X, Pencil, Copy,
   Home, Users, Receipt, CalendarClock, Phone, FileText, Download,
 } from 'lucide-react';
@@ -812,9 +812,11 @@ function CustoObraApp() {
             onClick={() => { setView('home'); setObraAtivaId(null); }}
             className="flex items-center gap-2 flex-shrink-0"
           >
-            <span className="w-10 h-10 rounded-full bg-green-700 flex items-center justify-center flex-shrink-0">
-              <Building2 size={20} className="text-white" />
-            </span>
+            <img
+              src="/logo-casas-eco.jpeg"
+              alt="Casas Eco"
+              className="h-9 w-auto object-contain rounded flex-shrink-0"
+            />
             <span className="flex flex-col leading-tight border-l border-stone-200 pl-2 ml-1">
               <span className="font-bold text-green-800 text-sm tracking-tight">CASAS ECO</span>
               <span className="text-xs text-stone-400">Custo de Obra</span>
