@@ -1,26 +1,25 @@
 import React, { useState } from 'react';
-import { supabase } from './supabaseClient';
+
+// Troque a senha aqui quando quiser.
+const SENHA_DO_SITE = '1234';
 
 export default function Login({ onLogin }) {
-  const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
-  const [carregando, setCarregando] = useState(false);
 
-  async function entrar(e) {
+  function entrar(e) {
     e.preventDefault();
-    setErro('');
-    setCarregando(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password: senha,
-    });
-    setCarregando(false);
-    if (error) {
-      setErro('E-mail ou senha incorretos.');
-      return;
+    if (senha === SENHA_DO_SITE) {
+      try {
+        localStorage.setItem('casaseco-autenticado', 'sim');
+      } catch (err) {
+        // se o navegador bloquear localStorage, só segue sem lembrar
+      }
+      onLogin();
+    } else {
+      setErro('Senha incorreta.');
+      setSenha('');
     }
-    onLogin(data.session);
   }
 
   return (
@@ -45,31 +44,21 @@ export default function Login({ onLogin }) {
           </div>
         )}
 
-        <label className="text-xs text-stone-500 block mb-1">E-mail</label>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          autoFocus
-          className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-green-400"
-        />
-
-        <label className="text-xs text-stone-500 block mb-1">Senha</label>
+        <label className="text-xs text-stone-500 block mb-1">Senha de acesso</label>
         <input
           type="password"
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
           required
+          autoFocus
           className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-green-400"
         />
 
         <button
           type="submit"
-          disabled={carregando}
-          className="w-full bg-green-700 text-white text-sm py-2 rounded hover:bg-green-800 disabled:opacity-60"
+          className="w-full bg-green-700 text-white text-sm py-2 rounded hover:bg-green-800"
         >
-          {carregando ? 'Entrando...' : 'Entrar'}
+          Entrar
         </button>
       </form>
     </div>
