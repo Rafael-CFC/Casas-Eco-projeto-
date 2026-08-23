@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Package, Plus, Trash2, Loader2, AlertCircle,
+  Package, Plus, Trash2, AlertCircle,
   ArrowLeft,
   Upload, ArrowUpRight, ArrowDownRight, CheckCircle2, X, Pencil, Copy,
-  Home, Users, Receipt, CalendarClock, Phone, FileText, Download, LayoutDashboard,
+  Home, Users, Receipt, FileText, Download, LayoutDashboard,
+  ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
 import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
+import ToastStack from './ui/Toast';
+import { DashboardSkeleton } from './ui/Skeleton';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -69,6 +72,15 @@ const NAV_ITEMS = [
   { key: 'relatorios', label: 'Relatórios', icon: FileText },
 ];
 
+const PAGINA_META = {
+  home: { titulo: 'Início', subtitulo: 'Visão geral de todas as obras' },
+  financeiro: { titulo: 'Financeiro', subtitulo: 'Indicadores, gráficos e alertas de custo' },
+  catalogo: { titulo: 'Catálogo', subtitulo: 'Produtos e preços cadastrados' },
+  fornecedores: { titulo: 'Fornecedores', subtitulo: 'Cadastro e histórico de compras' },
+  contas: { titulo: 'Contas a pagar', subtitulo: 'Vencimentos e parcelas' },
+  relatorios: { titulo: 'Relatórios', subtitulo: 'Exportações e resumos gerais' },
+};
+
 function CustoObraApp() {
   const [obras, setObras] = useState([]);
   const [produtos, setProdutos] = useState([]);
@@ -87,6 +99,13 @@ function CustoObraApp() {
   function perguntar(mensagem, valorInicial, onConfirmar) {
     setDialogo({ tipo: 'prompt', mensagem, valor: valorInicial || '', onConfirmar });
   }
+
+  const [sidebarColapsada, setSidebarColapsada] = useState(() => {
+    try { return localStorage.getItem('casaseco-sidebar-colapsada') === '1'; } catch (e) { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('casaseco-sidebar-colapsada', sidebarColapsada ? '1' : '0'); } catch (e) { /* ignora */ }
+  }, [sidebarColapsada]);
 
   const [view, setView] = useState('home');
   const [obraAtivaId, setObraAtivaId] = useState(null);
@@ -161,6 +180,12 @@ function CustoObraApp() {
     const t = setTimeout(() => setAviso(''), 3500);
     return () => clearTimeout(t);
   }, [aviso]);
+
+  useEffect(() => {
+    if (!erro) return;
+    const t = setTimeout(() => setErro(''), 5500);
+    return () => clearTimeout(t);
+  }, [erro]);
 
   async function persist(key, value, setter) {
     setter(value);
@@ -759,68 +784,80 @@ function CustoObraApp() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-emerald-50">
-        <Loader2 className="animate-spin text-green-700" size={28} />
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   const obraAtiva = obras.find((o) => o.id === obraAtivaId);
   const produtosOrdenados = produtosOrdenadosPorUso();
+  const paginaAtual = view === 'obra' && obraAtiva
+    ? { titulo: obraAtiva.nome, subtitulo: `Desde ${formatDateBR(obraAtiva.criadoEm)}` }
+    : (PAGINA_META[view] || PAGINA_META.home);
 
   return (
-    <div className="min-h-screen bg-emerald-50 text-stone-800">
-      <header className="border-b border-green-100 bg-white sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-2.5 flex items-center justify-between gap-2">
-          <button
-            onClick={() => { setView('home'); setObraAtivaId(null); }}
-            className="flex items-center gap-2 flex-shrink-0"
-          >
-            <img
-              src="/logo-casas-eco.jpeg"
-              alt="Casas Eco"
-              className="h-9 w-auto object-contain rounded flex-shrink-0"
-            />
-            <span className="flex flex-col leading-tight border-l border-stone-200 pl-2 ml-1">
+    <div className="min-h-screen bg-stone-50 text-stone-800 flex">
+      {/* ---- barra lateral (desktop) ---- */}
+      <aside className={`hidden sm:flex flex-col eco-sidebar bg-white border-r border-stone-200 flex-shrink-0 ${sidebarColapsada ? 'w-[76px]' : 'w-64'}`}>
+        <button
+          onClick={() => { setView('home'); setObraAtivaId(null); }}
+          className="h-16 flex items-center gap-2.5 px-4 border-b border-stone-100 overflow-hidden flex-shrink-0"
+        >
+          <img src="/logo-casas-eco.jpeg" alt="Casas Eco" className="h-8 w-8 object-contain rounded flex-shrink-0" />
+          {!sidebarColapsada && (
+            <span className="flex flex-col leading-tight text-left overflow-hidden whitespace-nowrap">
               <span className="font-bold text-green-800 text-sm tracking-tight">CASAS ECO</span>
               <span className="text-xs text-stone-400">Custo de Obra</span>
             </span>
+          )}
+        </button>
+
+        <nav className="flex-1 overflow-y-auto py-3 px-2.5 space-y-0.5">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const ativo = view === item.key || (item.key === 'home' && view === 'obra');
+            return (
+              <button
+                key={item.key}
+                onClick={() => { setView(item.key); if (item.key === 'home') setObraAtivaId(null); }}
+                title={sidebarColapsada ? item.label : undefined}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 ${
+                  sidebarColapsada ? 'justify-center' : ''
+                } ${ativo ? 'bg-green-50 text-green-700' : 'text-stone-500 hover:bg-stone-100 hover:text-stone-800'}`}
+              >
+                <Icon size={18} className="flex-shrink-0" />
+                {!sidebarColapsada && <span className="truncate">{item.label}</span>}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="p-2.5 border-t border-stone-100 space-y-1">
+          {!sidebarColapsada && (
+            <div className="flex items-center gap-1.5 text-xs px-2 py-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${window.storage ? 'bg-green-500' : 'bg-red-500'}`}></span>
+              <span className={window.storage ? 'text-green-700' : 'text-red-500'}>
+                {window.storage ? 'Salvamento ativo' : 'Salvamento indisponível'}
+              </span>
+            </div>
+          )}
+          <button
+            onClick={() => setSidebarColapsada((v) => !v)}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors duration-150"
+          >
+            {sidebarColapsada ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
           </button>
-          <div className="hidden sm:flex items-center gap-2">
-            <span className={`flex items-center gap-1 text-xs mr-1 ${window.storage ? 'text-green-600' : 'text-red-500'}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${window.storage ? 'bg-green-500' : 'bg-red-500'}`}></span>
-              {window.storage ? 'Salvamento ativo' : 'Salvamento indisponível'}
-            </span>
-            {NAV_ITEMS.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.key}
-                  onClick={() => setView(item.key)}
-                  className={`text-sm px-3 py-1.5 rounded border flex items-center gap-1.5 ${
-                    view === item.key ? 'bg-green-700 text-white border-green-700' : 'border-stone-300 text-stone-600 hover:bg-stone-100'
-                  }`}
-                >
-                  <Icon size={14} /> {item.label}
-                </button>
-              );
-            })}
-          </div>
-          <span className="sm:hidden inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: window.storage ? '#22c55e' : '#ef4444' }}></span>
         </div>
-      </header>
+      </aside>
 
       {/* barra de navegação fixa embaixo, só no celular */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 flex z-20">
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-stone-200 flex z-20">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
-          const ativo = view === item.key;
+          const ativo = view === item.key || (item.key === 'home' && view === 'obra');
           return (
             <button
               key={item.key}
               onClick={() => { setView(item.key); if (item.key === 'home') setObraAtivaId(null); }}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-xs ${ativo ? 'text-green-700' : 'text-stone-400'}`}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-xs transition-colors duration-150 ${ativo ? 'text-green-700' : 'text-stone-400'}`}
             >
               <Icon size={18} />
               {item.label}
@@ -829,22 +866,24 @@ function CustoObraApp() {
         })}
       </nav>
 
-      {aviso && (
-        <div className="max-w-5xl mx-auto px-4 pt-3">
-          <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 text-sm px-3 py-2 rounded">
-            <CheckCircle2 size={16} /> {aviso}
+      {/* ---- coluna principal ---- */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-stone-200 px-4 sm:px-6 py-3 flex items-center gap-3">
+          <button
+            onClick={() => { setView('home'); setObraAtivaId(null); }}
+            className="sm:hidden flex-shrink-0"
+          >
+            <img src="/logo-casas-eco.jpeg" alt="Casas Eco" className="h-8 w-8 object-contain rounded" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-base sm:text-lg font-semibold text-stone-900 truncate">{paginaAtual.titulo}</h1>
+            <p className="text-xs text-stone-400 truncate hidden sm:block">{paginaAtual.subtitulo}</p>
           </div>
-        </div>
-      )}
+          <span className="sm:hidden inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: window.storage ? '#22c55e' : '#ef4444' }}></span>
+        </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-6 pb-24 sm:pb-6">
-        {erro && (
-          <div className="mb-4 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded">
-            <AlertCircle size={16} /> {erro}
-          </div>
-        )}
-
-        {/* ---------------- HOME: lista de obras ---------------- */}
+        <main key={view} className="flex-1 w-full max-w-5xl mx-auto px-4 py-6 pb-24 sm:pb-6 animate-fade-in-up">
+          {/* ---------------- HOME: lista de obras ---------------- */}
         {view === 'home' && (
           <div className="space-y-6">
             {obras.length > 0 && (() => {
@@ -858,46 +897,46 @@ function CustoObraApp() {
               const contasProx7 = contas.filter((c) => c.status !== 'pago' && c.vencimento >= hoje && c.vencimento <= em7ISO);
               return (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="bg-white border border-stone-200 rounded-lg p-3">
+                  <div className="eco-stagger grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="eco-card p-3">
                       <p className="text-xs text-stone-500">Orçamento total</p>
                       <p className="text-lg font-semibold text-stone-900">{totalOrcado > 0 ? formatMoney(totalOrcado) : '—'}</p>
                     </div>
-                    <div className="bg-white border border-stone-200 rounded-lg p-3">
+                    <div className="eco-card p-3">
                       <p className="text-xs text-stone-500">Gasto total</p>
                       <p className="text-lg font-semibold text-green-800">{formatMoney(totalGastoGeral)}</p>
                     </div>
-                    <div className="bg-white border border-stone-200 rounded-lg p-3">
+                    <div className="eco-card p-3">
                       <p className="text-xs text-stone-500">Saldo</p>
                       <p className={`text-lg font-semibold ${totalOrcado - totalGastoGeral < 0 ? 'text-red-600' : 'text-stone-900'}`}>
                         {totalOrcado > 0 ? formatMoney(totalOrcado - totalGastoGeral) : '—'}
                       </p>
                     </div>
-                    <div className="bg-white border border-stone-200 rounded-lg p-3">
+                    <div className="eco-card p-3">
                       <p className="text-xs text-stone-500">Obras ativas</p>
                       <p className="text-lg font-semibold text-stone-900">{obras.length}</p>
                     </div>
-                    <div className="bg-white border border-stone-200 rounded-lg p-3">
+                    <div className="eco-card p-3">
                       <p className="text-xs text-stone-500">Gasto no mês</p>
                       <p className="text-lg font-semibold text-stone-900">{formatMoney(gastosNoPeriodo(30))}</p>
                     </div>
-                    <div className="bg-white border border-stone-200 rounded-lg p-3">
+                    <div className="eco-card p-3">
                       <p className="text-xs text-stone-500">Gasto na semana</p>
                       <p className="text-lg font-semibold text-stone-900">{formatMoney(gastosNoPeriodo(7))}</p>
                     </div>
-                    <div className="bg-white border border-stone-200 rounded-lg p-3">
+                    <div className="eco-card p-3">
                       <p className="text-xs text-stone-500">Contas vencidas</p>
                       <p className={`text-lg font-semibold ${contasVencidas.length > 0 ? 'text-red-600' : 'text-stone-900'}`}>{contasVencidas.length}</p>
                     </div>
-                    <div className="bg-white border border-stone-200 rounded-lg p-3">
+                    <div className="eco-card p-3">
                       <p className="text-xs text-stone-500">Contas em 7 dias</p>
                       <p className="text-lg font-semibold text-stone-900">{contasProx7.length}</p>
                     </div>
                   </div>
                   {alertas.length > 0 && (
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 eco-stagger">
                       {alertas.map((a, i) => (
-                        <div key={i} className={`text-sm px-3 py-2 rounded border flex items-center gap-2 ${
+                        <div key={i} className={`text-sm px-3 py-2 rounded-lg border flex items-center gap-2 ${
                           a.tipo === 'red' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-700'
                         }`}>
                           <AlertCircle size={14} className="flex-shrink-0" /> {a.texto}
@@ -909,14 +948,14 @@ function CustoObraApp() {
               );
             })()}
 
-            <div className="bg-white border border-stone-200 rounded-lg p-4 flex flex-col sm:flex-row flex-wrap gap-3 items-end">
+            <div className="eco-card p-4 flex flex-col sm:flex-row flex-wrap gap-3 items-end">
               <div className="w-full sm:flex-1 min-w-0">
                 <label className="text-xs text-stone-500 block mb-1">Nova obra</label>
                 <input
                   value={novaObraNome}
                   onChange={(e) => setNovaObraNome(e.target.value)}
                   placeholder="Ex: Residencial Vista Alegre"
-                  className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                  className="eco-input"
                 />
               </div>
               <div className="w-full sm:w-40">
@@ -926,10 +965,10 @@ function CustoObraApp() {
                   onChange={(e) => setNovaObraOrcamento(e.target.value)}
                   placeholder="0,00"
                   inputMode="decimal"
-                  className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                  className="eco-input"
                 />
               </div>
-              <button type="button" onClick={criarObra} className="w-full sm:w-auto bg-green-700 text-white text-sm px-4 py-2 rounded hover:bg-green-800 flex items-center justify-center gap-1.5">
+              <button type="button" onClick={criarObra} className="eco-btn-primary w-full sm:w-auto">
                 <Plus size={15} /> Criar obra
               </button>
             </div>
@@ -937,12 +976,12 @@ function CustoObraApp() {
             {obras.length === 0 ? (
               <p className="text-center text-stone-400 py-10">Nenhuma obra cadastrada. Crie a primeira acima.</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="eco-stagger grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {obras.map((o) => {
                   const gasto = totalObra(o.id);
                   const pct = o.orcamento ? Math.min(100, (gasto / o.orcamento) * 100) : null;
                   return (
-                    <div key={o.id} className="bg-white border border-stone-200 rounded-lg p-4 hover:border-green-300 transition-colors">
+                    <div key={o.id} className="eco-card eco-card-hover p-4">
                       <button onClick={() => abrirObra(o.id)} className="w-full text-left">
                         <p className="font-semibold text-stone-900">{o.nome}</p>
                         <p className="text-xs text-stone-400 mb-3">desde {formatDateBR(o.criadoEm)}</p>
@@ -962,7 +1001,7 @@ function CustoObraApp() {
                             const Icon = cat.icon;
                             const c = CLS[cat.cls];
                             return (
-                              <span key={key} className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${c.bg} ${c.text} border ${c.border}`}>
+                              <span key={key} className={`eco-badge ${c.bg} ${c.text} border ${c.border}`}>
                                 <Icon size={12} /> {formatMoney(totalObraCategoria(o.id, key))}
                               </span>
                             );
@@ -970,10 +1009,10 @@ function CustoObraApp() {
                         </div>
                       </button>
                       <div className="flex items-center gap-3 mt-3">
-                        <button onClick={() => definirOrcamento(o.id)} className="text-xs text-stone-400 hover:text-green-700 flex items-center gap-1">
+                        <button onClick={() => definirOrcamento(o.id)} className="text-xs text-stone-400 hover:text-green-700 flex items-center gap-1 transition-colors">
                           <Pencil size={12} /> {o.orcamento ? 'Editar orçamento' : 'Definir orçamento'}
                         </button>
-                        <button onClick={() => removerObra(o.id, o.nome)} className="text-xs text-stone-400 hover:text-red-600 flex items-center gap-1">
+                        <button onClick={() => removerObra(o.id, o.nome)} className="text-xs text-stone-400 hover:text-red-600 flex items-center gap-1 transition-colors">
                           <Trash2 size={12} /> Remover obra
                         </button>
                       </div>
@@ -998,14 +1037,14 @@ function CustoObraApp() {
         {/* ---------------- CATÁLOGO DE PRODUTOS (global) ---------------- */}
         {view === 'catalogo' && (
           <div className="space-y-6">
-            <button onClick={() => setView('home')} className="text-sm text-stone-500 hover:text-stone-800 flex items-center gap-1">
+            <button onClick={() => setView('home')} className="text-sm text-stone-500 hover:text-stone-800 flex items-center gap-1 transition-colors">
               <ArrowLeft size={14} /> Voltar
             </button>
 
-            <div className="bg-white border-2 border-green-200 rounded-lg p-4">
+            <div className="bg-white border-2 border-green-200 rounded-xl shadow-soft p-4">
               <button
                 onClick={() => setImportAberto((v) => !v)}
-                className="text-sm font-semibold text-white bg-green-700 hover:bg-green-800 px-3 py-2 rounded flex items-center gap-1.5"
+                className="eco-btn-primary font-semibold"
               >
                 <Upload size={15} /> Importar produtos do PDV
               </button>
@@ -1016,7 +1055,7 @@ function CustoObraApp() {
                     Exporte a lista do seu sistema PDV como CSV ou texto (uma linha por produto: <span className="font-mono">nome, preço</span>, opcionalmente uma 3ª coluna com a unidade) e envie o arquivo, ou cole o conteúdo abaixo.
                   </p>
                   <div className="flex flex-wrap items-center gap-3">
-                    <label className="text-sm px-3 py-1.5 rounded border border-stone-300 hover:bg-stone-50 cursor-pointer flex items-center gap-1.5">
+                    <label className="eco-btn-secondary eco-btn-sm cursor-pointer">
                       <Upload size={14} /> Escolher arquivo
                       <input type="file" accept=".csv,.txt" onChange={handleArquivoImport} className="hidden" />
                     </label>
@@ -1027,20 +1066,20 @@ function CustoObraApp() {
                     onChange={(e) => setImportTexto(e.target.value)}
                     rows={5}
                     placeholder={'Cimento CP-II 50kg, 34.90, saco\nAreia média, 65.00, m³\nVergalhão 3/8, 28.50, un'}
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-400"
+                    className="eco-input font-mono"
                   />
                   <div className="flex gap-2">
                     <button
                       onClick={analisarImportacao}
                       disabled={!importTexto.trim()}
-                      className="bg-stone-800 text-white text-sm px-3 py-1.5 rounded hover:bg-stone-700 disabled:opacity-40"
+                      className="eco-btn-dark eco-btn-sm"
                     >
                       Analisar
                     </button>
                     {importPreview && (
                       <button
                         onClick={() => { setImportPreview(null); setImportTexto(''); setImportAberto(false); }}
-                        className="text-sm px-3 py-1.5 rounded border border-stone-300 text-stone-600 hover:bg-stone-50 flex items-center gap-1"
+                        className="eco-btn-secondary eco-btn-sm"
                       >
                         <X size={14} /> Cancelar
                       </button>
@@ -1070,7 +1109,7 @@ function CustoObraApp() {
                       </div>
                       <button
                         onClick={confirmarImportacao}
-                        className="bg-green-700 text-white text-sm px-3 py-1.5 rounded hover:bg-green-800 flex items-center gap-1.5"
+                        className="eco-btn-primary eco-btn-sm"
                       >
                         <CheckCircle2 size={14} /> Confirmar importação
                       </button>
@@ -1080,7 +1119,7 @@ function CustoObraApp() {
               )}
             </div>
 
-            <div className="bg-white border border-stone-200 rounded-lg p-4 flex flex-col sm:flex-row flex-wrap gap-3 items-end">
+            <div className="eco-card p-4 flex flex-col sm:flex-row flex-wrap gap-3 items-end">
               <div className="w-full sm:flex-1 min-w-0">
                 <label className="text-xs text-stone-500 block mb-1">Produto</label>
                 <input
@@ -1088,7 +1127,7 @@ function CustoObraApp() {
                   onChange={(e) => setNpNome(upperInput(e.target.value))}
                   placeholder="Ex: Cimento CP-II 50kg"
                   list="lista-produtos-existentes"
-                  className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                  className="eco-input"
                 />
                 <datalist id="lista-produtos-existentes">
                   {produtos.map((p) => <option key={p.id} value={p.nome} />)}
@@ -1097,26 +1136,27 @@ function CustoObraApp() {
               <div className="w-full sm:w-28">
                 <label className="text-xs text-stone-500 block mb-1">Unidade</label>
                 <input value={npUnidade} onChange={(e) => setNpUnidade(upperInput(e.target.value))} placeholder="UN, SACO, M³..."
-                  className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                  className="eco-input" />
               </div>
               <div className="w-full sm:w-32">
                 <label className="text-xs text-stone-500 block mb-1">Preço (R$)</label>
                 <input value={npPreco} onChange={(e) => setNpPreco(e.target.value)} placeholder="0,00" inputMode="decimal"
-                  className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                  className="eco-input" />
               </div>
-              <button type="button" onClick={cadastrarProduto} className="w-full sm:w-auto bg-green-700 text-white text-sm px-4 py-2 rounded hover:bg-green-800 flex items-center justify-center gap-1.5">
+              <button type="button" onClick={cadastrarProduto} className="eco-btn-primary w-full sm:w-auto">
                 <Plus size={15} /> {npEditandoId ? 'Salvar edição' : 'Salvar'}
               </button>
               {npEditandoId && (
-                <button type="button" onClick={cancelarEdicaoProduto} className="w-full sm:w-auto text-sm px-4 py-2 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">
+                <button type="button" onClick={cancelarEdicaoProduto} className="eco-btn-secondary w-full sm:w-auto">
                   Cancelar
                 </button>
               )}
             </div>
 
-            <div className="bg-white border border-stone-200 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-stone-100 text-stone-500 text-xs uppercase">
+            <div className="eco-card overflow-hidden">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[560px]">
+                <thead className="bg-stone-50 text-stone-500 text-xs uppercase tracking-wide font-semibold">
                   <tr>
                     <th className="text-left px-3 py-2">Produto</th>
                     <th className="text-left px-3 py-2">Unidade</th>
@@ -1133,7 +1173,7 @@ function CustoObraApp() {
                     const anterior = p.historico && p.historico.length > 0 ? p.historico[p.historico.length - 1] : null;
                     const variacao = anterior && anterior.preco > 0 ? ((p.preco - anterior.preco) / anterior.preco) * 100 : null;
                     return (
-                      <tr key={p.id} className="border-t border-stone-100">
+                      <tr key={p.id} className="border-t border-stone-100 eco-table-row">
                         <td className="px-3 py-2">{p.nome}</td>
                         <td className="px-3 py-2 text-stone-500">{p.unidade}</td>
                         <td className="px-3 py-2 text-right">
@@ -1147,10 +1187,10 @@ function CustoObraApp() {
                         </td>
                         <td className="px-3 py-2 text-stone-500">{formatDateBR(p.atualizadoEm)}</td>
                         <td className="px-3 py-2 text-right whitespace-nowrap">
-                          <button onClick={() => editarProduto(p)} className="text-stone-400 hover:text-green-700 mr-2" title="Editar produto">
+                          <button onClick={() => editarProduto(p)} className="eco-icon-btn mr-1" title="Editar produto">
                             <Pencil size={15} />
                           </button>
-                          <button onClick={() => removerProduto(p.id, p.nome)} className="text-stone-400 hover:text-red-600" title="Remover produto">
+                          <button onClick={() => removerProduto(p.id, p.nome)} className="eco-icon-btn-danger" title="Remover produto">
                             <Trash2 size={15} />
                           </button>
                         </td>
@@ -1159,6 +1199,7 @@ function CustoObraApp() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         )}
@@ -1168,12 +1209,12 @@ function CustoObraApp() {
           const nomeExistente = fornecedores.find((f) => f.nome.toLowerCase() === fnNome.trim().toLowerCase());
           return (
             <div className="space-y-6">
-              <div className="bg-white border border-stone-200 rounded-lg p-4 flex flex-col sm:flex-row flex-wrap gap-3 items-end">
+              <div className="eco-card p-4 flex flex-col sm:flex-row flex-wrap gap-3 items-end">
                 <div className="w-full sm:flex-1 min-w-0">
                   <label className="text-xs text-stone-500 block mb-1">Fornecedor</label>
                   <input value={fnNome} onChange={(e) => setFnNome(e.target.value)} placeholder="Ex: Depósito São José"
                     list="lista-fornecedores-cadastro"
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                    className="eco-input" />
                   <datalist id="lista-fornecedores-cadastro">
                     {fornecedores.map((f) => <option key={f.id} value={f.nome} />)}
                   </datalist>
@@ -1181,14 +1222,14 @@ function CustoObraApp() {
                 <div className="w-full sm:w-40">
                   <label className="text-xs text-stone-500 block mb-1">Telefone</label>
                   <input value={fnTelefone} onChange={(e) => setFnTelefone(e.target.value)} placeholder="(00) 00000-0000"
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                    className="eco-input" />
                 </div>
                 <div className="w-full sm:w-40">
                   <label className="text-xs text-stone-500 block mb-1">Categoria</label>
                   <input value={fnCategoria} onChange={(e) => setFnCategoria(e.target.value)} placeholder="Ex: Materiais"
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                    className="eco-input" />
                 </div>
-                <button type="button" onClick={cadastrarFornecedor} className="w-full sm:w-auto bg-green-700 text-white text-sm px-4 py-2 rounded hover:bg-green-800 flex items-center justify-center gap-1.5">
+                <button type="button" onClick={cadastrarFornecedor} className="eco-btn-primary w-full sm:w-auto">
                   <Plus size={15} /> {nomeExistente ? 'Atualizar' : 'Salvar'}
                 </button>
               </div>
@@ -1196,11 +1237,11 @@ function CustoObraApp() {
               {fornecedores.length === 0 ? (
                 <p className="text-center text-stone-400 py-10">Nenhum fornecedor cadastrado ainda. Eles também entram aqui sozinhos quando você digita o nome num lançamento.</p>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="eco-stagger grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {fornecedores.slice().sort((a, b) => a.nome.localeCompare(b.nome)).map((f) => {
                     const stats = estatisticasFornecedor(f.nome);
                     return (
-                      <div key={f.id} className="bg-white border border-stone-200 rounded-lg p-4">
+                      <div key={f.id} className="eco-card p-4 transition-colors duration-150 hover:border-stone-300">
                         <div className="flex items-start justify-between">
                           <div>
                             <p className="font-semibold text-stone-900">{f.nome}</p>
@@ -1211,7 +1252,7 @@ function CustoObraApp() {
                               </p>
                             )}
                           </div>
-                          <button onClick={() => removerFornecedor(f.id, f.nome)} className="text-stone-400 hover:text-red-600" title="Remover fornecedor">
+                          <button onClick={() => removerFornecedor(f.id, f.nome)} className="eco-icon-btn-danger" title="Remover fornecedor">
                             <Trash2 size={14} />
                           </button>
                         </div>
@@ -1258,26 +1299,26 @@ function CustoObraApp() {
 
           return (
             <div className="space-y-6">
-              <div className="bg-white border border-stone-200 rounded-lg p-4 flex flex-col sm:flex-row flex-wrap gap-3 items-end">
-                <div className="w-full sm:flex-1 min-w-0">
+              <div className="eco-card p-4 flex flex-col sm:flex-row flex-wrap gap-3 items-end">
+                <div className="w-full sm:flex-1 sm:min-w-[220px]">
                   <label className="text-xs text-stone-500 block mb-1">Descrição</label>
                   <input value={ctDescricao} onChange={(e) => setCtDescricao(e.target.value)} placeholder="Ex: Aluguel do andaime"
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                    className="eco-input" />
                 </div>
                 <div className="w-full sm:w-32">
                   <label className="text-xs text-stone-500 block mb-1">Valor total (R$)</label>
                   <input value={ctValor} onChange={(e) => setCtValor(e.target.value)} placeholder="0,00" inputMode="decimal"
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                    className="eco-input" />
                 </div>
                 <div className="w-full sm:w-40">
                   <label className="text-xs text-stone-500 block mb-1">1º vencimento</label>
                   <input type="date" value={ctVencimento} onChange={(e) => setCtVencimento(e.target.value)}
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                    className="eco-input" />
                 </div>
                 <div className="w-full sm:w-40">
                   <label className="text-xs text-stone-500 block mb-1">Obra (opcional)</label>
                   <select value={ctObraId} onChange={(e) => setCtObraId(e.target.value)}
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400">
+                    className="eco-input">
                     <option value="">Nenhuma</option>
                     {obras.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}
                   </select>
@@ -1286,7 +1327,7 @@ function CustoObraApp() {
                   <label className="text-xs text-stone-500 block mb-1">Fornecedor (opcional)</label>
                   <input value={ctFornecedor} onChange={(e) => setCtFornecedor(e.target.value)} placeholder="Nome"
                     list="lista-fornecedores-conta"
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                    className="eco-input" />
                   <datalist id="lista-fornecedores-conta">
                     {fornecedores.map((f) => <option key={f.id} value={f.nome} />)}
                   </datalist>
@@ -1294,9 +1335,9 @@ function CustoObraApp() {
                 <div className="w-full sm:w-28">
                   <label className="text-xs text-stone-500 block mb-1">Parcelas</label>
                   <input value={ctParcelas} onChange={(e) => setCtParcelas(e.target.value)} placeholder="1" inputMode="numeric"
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                    className="eco-input" />
                 </div>
-                <button type="button" onClick={aoCriarConta} className="w-full sm:w-auto bg-green-700 text-white text-sm px-4 py-2 rounded hover:bg-green-800 flex items-center justify-center gap-1.5">
+                <button type="button" onClick={aoCriarConta} className="eco-btn-primary w-full sm:w-auto">
                   <Plus size={15} /> Criar conta
                 </button>
               </div>
@@ -1329,10 +1370,10 @@ function CustoObraApp() {
                               </div>
                               <div className="flex items-center gap-3 flex-shrink-0">
                                 <span className="text-sm font-medium">{formatMoney(c.valor)}</span>
-                                <button onClick={() => marcarContaPaga(c.id)} className={`text-xs px-2 py-1 rounded border ${c.status === 'pago' ? 'border-stone-300 text-stone-500' : 'border-green-300 text-green-700 hover:bg-green-50'}`}>
+                                <button onClick={() => marcarContaPaga(c.id)} className={`text-xs px-2 py-1 rounded-lg border transition-colors duration-150 active:scale-[0.97] ${c.status === 'pago' ? 'border-stone-300 text-stone-500' : 'border-green-300 text-green-700 hover:bg-green-50'}`}>
                                   {c.status === 'pago' ? 'Reabrir' : 'Marcar paga'}
                                 </button>
-                                <button onClick={() => removerConta(c.id, c.descricao)} className="text-stone-400 hover:text-red-600">
+                                <button onClick={() => removerConta(c.id, c.descricao)} className="eco-icon-btn-danger">
                                   <Trash2 size={14} />
                                 </button>
                               </div>
@@ -1355,13 +1396,13 @@ function CustoObraApp() {
           const totalGeral = lancamentos.reduce((a, l) => a + l.total, 0);
           return (
             <div className="space-y-6">
-              <div className="bg-white border border-stone-200 rounded-lg p-4">
+              <div className="eco-card p-4">
                 <p className="text-sm font-semibold text-stone-700 mb-3">Exportar dados</p>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={exportarTudoCSV} className="text-sm px-3 py-1.5 rounded border border-stone-300 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5">
+                  <button onClick={exportarTudoCSV} className="eco-btn-secondary eco-btn-sm">
                     <Download size={14} /> Extrato completo (CSV)
                   </button>
-                  <button onClick={exportarContasCSV} className="text-sm px-3 py-1.5 rounded border border-stone-300 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5">
+                  <button onClick={exportarContasCSV} className="eco-btn-secondary eco-btn-sm">
                     <Download size={14} /> Contas a pagar (CSV)
                   </button>
                 </div>
@@ -1370,7 +1411,7 @@ function CustoObraApp() {
                     <p className="text-xs text-stone-500 mt-4 mb-2">Exportar uma obra específica:</p>
                     <div className="flex flex-wrap gap-2">
                       {obras.map((o) => (
-                        <button key={o.id} onClick={() => exportarObraCSV(o)} className="text-xs px-2.5 py-1 rounded border border-stone-300 text-stone-600 hover:bg-stone-50 flex items-center gap-1">
+                        <button key={o.id} onClick={() => exportarObraCSV(o)} className="eco-btn-secondary eco-btn-xs">
                           <Download size={12} /> {o.nome}
                         </button>
                       ))}
@@ -1380,8 +1421,8 @@ function CustoObraApp() {
                 <p className="text-xs text-stone-400 mt-3">Os arquivos CSV abrem direto no Excel, Google Sheets ou similar.</p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-white border border-stone-200 rounded-lg p-4">
+              <div className="eco-stagger grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="eco-card p-4">
                   <p className="text-sm font-semibold text-stone-700 mb-3">Gastos por categoria</p>
                   {porCategoria.length === 0 ? (
                     <p className="text-xs text-stone-400">Sem lançamentos ainda.</p>
@@ -1402,7 +1443,7 @@ function CustoObraApp() {
                   )}
                 </div>
 
-                <div className="bg-white border border-stone-200 rounded-lg p-4">
+                <div className="eco-card p-4">
                   <p className="text-sm font-semibold text-stone-700 mb-3">Gastos por fornecedor</p>
                   {porFornecedor.length === 0 ? (
                     <p className="text-xs text-stone-400">Nenhum lançamento com fornecedor informado ainda.</p>
@@ -1425,7 +1466,7 @@ function CustoObraApp() {
         {/* ---------------- DETALHE DA OBRA ---------------- */}
         {view === 'obra' && obraAtiva && (
           <div className="space-y-6">
-            <button onClick={() => { setView('home'); setObraAtivaId(null); }} className="text-sm text-stone-500 hover:text-stone-800 flex items-center gap-1">
+            <button onClick={() => { setView('home'); setObraAtivaId(null); }} className="text-sm text-stone-500 hover:text-stone-800 flex items-center gap-1 transition-colors">
               <ArrowLeft size={14} /> Todas as obras
             </button>
 
@@ -1435,10 +1476,10 @@ function CustoObraApp() {
                 <p className="text-xs text-stone-400">desde {formatDateBR(obraAtiva.criadoEm)}</p>
               </div>
               <div className="flex items-center gap-3">
-                <button onClick={() => exportarObraCSV(obraAtiva)} className="text-sm px-3 py-1.5 rounded border border-stone-300 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5">
+                <button onClick={() => exportarObraCSV(obraAtiva)} className="eco-btn-secondary eco-btn-sm">
                   <Download size={14} /> CSV
                 </button>
-                <button onClick={() => copiarResumoObra(obraAtiva)} className="text-sm px-3 py-1.5 rounded border border-stone-300 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5">
+                <button onClick={() => copiarResumoObra(obraAtiva)} className="eco-btn-secondary eco-btn-sm">
                   <Copy size={14} /> Copiar resumo
                 </button>
                 <div className="text-right">
@@ -1449,7 +1490,7 @@ function CustoObraApp() {
             </div>
 
             {obraAtiva.orcamento ? (
-              <div className="bg-white border border-stone-200 rounded-lg p-3">
+              <div className="eco-card p-3">
                 <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden">
                   <div
                     className={`h-full ${totalObra(obraAtiva.id) >= obraAtiva.orcamento ? 'bg-red-500' : 'bg-green-500'}`}
@@ -1467,12 +1508,12 @@ function CustoObraApp() {
                 </p>
               </div>
             ) : (
-              <button onClick={() => definirOrcamento(obraAtiva.id)} className="text-xs text-stone-400 hover:text-green-700 flex items-center gap-1">
+              <button onClick={() => definirOrcamento(obraAtiva.id)} className="text-xs text-stone-400 hover:text-green-700 flex items-center gap-1 transition-colors">
                 <Pencil size={12} /> Definir orçamento para esta obra
               </button>
             )}
 
-            <nav className="flex gap-2">
+            <nav className="grid grid-cols-3 gap-2">
               {Object.entries(CATEGORIAS).map(([key, cat]) => {
                 const Icon = cat.icon;
                 const c = CLS[cat.cls];
@@ -1481,12 +1522,14 @@ function CustoObraApp() {
                   <button
                     key={key}
                     onClick={() => { setCategoriaAtiva(key); resetFormLancamento(); }}
-                    className={`flex-1 text-sm px-3 py-2 rounded-lg border flex items-center justify-center gap-1.5 ${
+                    className={`min-w-0 text-xs sm:text-sm px-2 sm:px-3 py-2 rounded-lg border flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 text-center transition-colors duration-150 ${
                       ativo ? `${c.solid} text-white border-transparent` : `bg-white ${c.text} ${c.border}`
                     }`}
                   >
-                    <Icon size={15} /> {cat.label}
-                    <span className="ml-1 opacity-80">{formatMoney(totalObraCategoria(obraAtiva.id, key))}</span>
+                    <span className="flex items-center gap-1 min-w-0">
+                      <Icon size={15} className="flex-shrink-0" /> <span className="truncate">{cat.label}</span>
+                    </span>
+                    <span className="opacity-80 sm:ml-1 truncate">{formatMoney(totalObraCategoria(obraAtiva.id, key))}</span>
                   </button>
                 );
               })}
@@ -1496,7 +1539,7 @@ function CustoObraApp() {
               const orcCat = obraAtiva.orcamentoCategorias ? obraAtiva.orcamentoCategorias[categoriaAtiva] : null;
               const gastoCat = totalObraCategoria(obraAtiva.id, categoriaAtiva);
               return (
-                <div className="bg-white border border-stone-200 rounded-lg p-3">
+                <div className="eco-card p-3">
                   {orcCat ? (
                     <>
                       <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden">
@@ -1512,7 +1555,7 @@ function CustoObraApp() {
                       </p>
                     </>
                   ) : (
-                    <button onClick={() => definirOrcamentoCategoria(obraAtiva.id, categoriaAtiva)} className="text-xs text-stone-400 hover:text-green-700 flex items-center gap-1">
+                    <button onClick={() => definirOrcamentoCategoria(obraAtiva.id, categoriaAtiva)} className="text-xs text-stone-400 hover:text-green-700 flex items-center gap-1 transition-colors">
                       <Pencil size={12} /> Definir orçamento para {CATEGORIAS[categoriaAtiva].label}
                     </button>
                   )}
@@ -1521,20 +1564,20 @@ function CustoObraApp() {
             })()}
 
             {/* ---- Etapas da obra ---- */}
-            <div className="bg-white border border-stone-200 rounded-lg p-4">
+            <div className="eco-card p-4">
               <p className="text-sm font-semibold text-stone-700 mb-3">Etapas da obra</p>
               <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-end mb-4">
                 <div className="w-full sm:flex-1 min-w-0">
                   <label className="text-xs text-stone-500 block mb-1">Nome da etapa</label>
                   <input value={novaEtapaNome} onChange={(e) => setNovaEtapaNome(e.target.value)} placeholder="Ex: Fundação, Alvenaria, Cobertura..."
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                    className="eco-input" />
                 </div>
                 <div className="w-full sm:w-40">
                   <label className="text-xs text-stone-500 block mb-1">Orçamento (opcional)</label>
                   <input value={novaEtapaOrcamento} onChange={(e) => setNovaEtapaOrcamento(e.target.value)} placeholder="0,00" inputMode="decimal"
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                    className="eco-input" />
                 </div>
-                <button type="button" onClick={() => criarEtapa(obraAtiva.id)} className="w-full sm:w-auto bg-stone-800 text-white text-sm px-4 py-2 rounded hover:bg-stone-700 flex items-center justify-center gap-1.5">
+                <button type="button" onClick={() => criarEtapa(obraAtiva.id)} className="eco-btn-dark w-full sm:w-auto">
                   <Plus size={15} /> Adicionar etapa
                 </button>
               </div>
@@ -1547,12 +1590,12 @@ function CustoObraApp() {
                     const gasto = totalEtapa(et.id);
                     const pct = et.orcamento ? Math.min(100, (gasto / et.orcamento) * 100) : null;
                     return (
-                      <div key={et.id} className="border border-stone-100 rounded p-2.5">
+                      <div key={et.id} className="border border-stone-100 rounded-lg p-2.5 transition-colors duration-150 hover:border-stone-200">
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-medium text-stone-800">{et.nome}</p>
                           <div className="flex items-center gap-2">
                             <p className="text-sm text-stone-600">{formatMoney(gasto)}{et.orcamento ? ` / ${formatMoney(et.orcamento)}` : ''}</p>
-                            <button onClick={() => removerEtapa(et.id, et.nome)} className="text-stone-400 hover:text-red-600">
+                            <button onClick={() => removerEtapa(et.id, et.nome)} className="eco-icon-btn-danger">
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -1569,7 +1612,7 @@ function CustoObraApp() {
               )}
             </div>
 
-            <div className="bg-white border border-stone-200 rounded-lg p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 items-end">
+            <div className="eco-card p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 items-end">
               {categoriaAtiva === 'produto_loja' ? (
                 <div className="col-span-2 sm:col-span-4 lg:col-span-2">
                   <label className="text-xs text-stone-500 block mb-1">Produto</label>
@@ -1578,7 +1621,7 @@ function CustoObraApp() {
                     onChange={(e) => aoDigitarProdutoLoja(e.target.value)}
                     placeholder="Digite o nome — se já existir, o preço vem sozinho"
                     list="lista-produtos-lancamento"
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                    className="eco-input"
                   />
                   <datalist id="lista-produtos-lancamento">
                     {produtosOrdenados.map((p) => <option key={p.id} value={p.nome} />)}
@@ -1591,35 +1634,35 @@ function CustoObraApp() {
                     value={ldDescricao}
                     onChange={(e) => setLdDescricao(upperInput(e.target.value))}
                     placeholder={categoriaAtiva === 'mao_de_obra' ? 'Ex: Pedreiro - diária' : 'Ex: Areia lavada'}
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                    className="eco-input"
                   />
                 </div>
               )}
               <div className="col-span-1">
                 <label className="text-xs text-stone-500 block mb-1">Qtd.</label>
                 <input value={ldQuantidade} onChange={(e) => setLdQuantidade(e.target.value)} inputMode="decimal"
-                  className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                  className="eco-input" />
               </div>
               <div className="col-span-1">
                 <label className="text-xs text-stone-500 block mb-1">Unid.</label>
                 <input value={ldUnidade} onChange={(e) => setLdUnidade(upperInput(e.target.value))} placeholder="UN, M³..."
-                  className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                  className="eco-input" />
               </div>
               <div className="col-span-1">
                 <label className="text-xs text-stone-500 block mb-1">Valor (R$)</label>
                 <input value={ldPreco} onChange={(e) => setLdPreco(e.target.value)} placeholder="0,00" inputMode="decimal"
-                  className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                  className="eco-input" />
               </div>
               <div className="col-span-1">
                 <label className="text-xs text-stone-500 block mb-1">Data</label>
                 <input type="date" value={ldData} onChange={(e) => setLdData(e.target.value)}
-                  className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                  className="eco-input" />
               </div>
               {etapas.filter((et) => et.obraId === obraAtiva.id).length > 0 && (
                 <div className="col-span-1">
                   <label className="text-xs text-stone-500 block mb-1">Etapa (opc.)</label>
                   <select value={ldEtapaId} onChange={(e) => setLdEtapaId(e.target.value)}
-                    className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400">
+                    className="eco-input">
                     <option value="">Nenhuma</option>
                     {etapas.filter((et) => et.obraId === obraAtiva.id).map((et) => (
                       <option key={et.id} value={et.id}>{et.nome}</option>
@@ -1631,7 +1674,7 @@ function CustoObraApp() {
                 <label className="text-xs text-stone-500 block mb-1">Fornecedor (opcional)</label>
                 <input value={ldFornecedor} onChange={(e) => setLdFornecedor(e.target.value)} placeholder="Ex: Depósito São José"
                   list="lista-fornecedores-lancamento"
-                  className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                  className="eco-input" />
                 <datalist id="lista-fornecedores-lancamento">
                   {fornecedores.map((f) => <option key={f.id} value={f.nome} />)}
                 </datalist>
@@ -1639,14 +1682,14 @@ function CustoObraApp() {
               <div className="col-span-2 sm:col-span-2 lg:col-span-2">
                 <label className="text-xs text-stone-500 block mb-1">Observação (opcional)</label>
                 <input value={ldObservacao} onChange={(e) => setLdObservacao(e.target.value)} placeholder="Ex: comprado em outra loja"
-                  className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                  className="eco-input" />
               </div>
               <div className="col-span-2 sm:col-span-4 lg:col-span-2 flex gap-2">
-                <button type="button" onClick={lancar} className={`flex-1 text-white text-sm px-4 py-2 rounded flex items-center justify-center gap-1.5 ${CLS[CATEGORIAS[categoriaAtiva].cls].solid} hover:opacity-90`}>
+                <button type="button" onClick={lancar} className={`flex-1 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-[0.97] ${CLS[CATEGORIAS[categoriaAtiva].cls].solid} hover:opacity-90`}>
                   <Plus size={15} /> {editandoId ? 'Salvar edição' : 'Lançar'}
                 </button>
                 {editandoId && (
-                  <button type="button" onClick={resetFormLancamento} className="flex-1 text-sm px-4 py-2 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">
+                  <button type="button" onClick={resetFormLancamento} className="eco-btn-secondary flex-1">
                     Cancelar
                   </button>
                 )}
@@ -1667,17 +1710,18 @@ function CustoObraApp() {
                     || (l.observacao || '').toLowerCase().includes(q);
                 });
               return (
-                <div className="bg-white border border-stone-200 rounded-lg overflow-hidden">
+                <div className="eco-card overflow-hidden">
                   <div className="p-2 border-b border-stone-100">
                     <input
                       value={buscaLancamento}
                       onChange={(e) => setBuscaLancamento(e.target.value)}
                       placeholder="Buscar por descrição, fornecedor ou observação..."
-                      className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                      className="eco-input"
                     />
                   </div>
-                  <table className="w-full text-sm">
-                    <thead className="bg-stone-100 text-stone-500 text-xs uppercase">
+                  <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[600px]">
+                    <thead className="bg-stone-50 text-stone-500 text-xs uppercase tracking-wide font-semibold">
                       <tr>
                         <th className="text-left px-3 py-2">Data</th>
                         <th className="text-left px-3 py-2">Descrição</th>
@@ -1694,7 +1738,7 @@ function CustoObraApp() {
                         </td></tr>
                       )}
                       {listaFiltrada.map((l) => (
-                        <tr key={l.id} className="border-t border-stone-100">
+                        <tr key={l.id} className="border-t border-stone-100 eco-table-row">
                           <td className="px-3 py-2 text-stone-500">{formatDateBR(l.data)}</td>
                           <td className="px-3 py-2">
                             {l.descricao}
@@ -1709,10 +1753,10 @@ function CustoObraApp() {
                           <td className="px-3 py-2 text-right">{formatMoney(l.preco)}</td>
                           <td className="px-3 py-2 text-right font-medium">{formatMoney(l.total)}</td>
                           <td className="px-3 py-2 text-right whitespace-nowrap">
-                            <button onClick={() => editarLancamento(l)} className="text-stone-400 hover:text-green-700 mr-2" title="Editar">
+                            <button onClick={() => editarLancamento(l)} className="eco-icon-btn mr-1" title="Editar">
                               <Pencil size={15} />
                             </button>
-                            <button onClick={() => removerLancamento(l.id)} className="text-stone-400 hover:text-red-600" title="Remover">
+                            <button onClick={() => removerLancamento(l.id)} className="eco-icon-btn-danger" title="Remover">
                               <Trash2 size={15} />
                             </button>
                           </td>
@@ -1720,16 +1764,18 @@ function CustoObraApp() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               );
             })()}
           </div>
         )}
-      </main>
+        </main>
+      </div>
 
       {dialogo && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-5 w-full max-w-sm">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-popover p-5 w-full max-w-sm animate-scale-in">
             <p className="text-sm text-stone-700 mb-4">{dialogo.mensagem}</p>
             {dialogo.tipo === 'prompt' && (
               <input
@@ -1739,11 +1785,11 @@ function CustoObraApp() {
                 onKeyDown={(e) => { if (e.key === 'Enter') { dialogo.onConfirmar(dialogo.valor); setDialogo(null); } }}
                 placeholder="0,00"
                 inputMode="decimal"
-                className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-green-400"
+                className="eco-input mb-4"
               />
             )}
             <div className="flex justify-end gap-2">
-              <button onClick={() => setDialogo(null)} className="text-sm px-3 py-1.5 rounded border border-stone-300 text-stone-600 hover:bg-stone-50">
+              <button onClick={() => setDialogo(null)} className="eco-btn-secondary eco-btn-sm">
                 Cancelar
               </button>
               <button
@@ -1752,7 +1798,7 @@ function CustoObraApp() {
                   else dialogo.onConfirmar();
                   setDialogo(null);
                 }}
-                className="text-sm px-3 py-1.5 rounded bg-green-700 text-white hover:bg-green-800"
+                className="eco-btn-primary eco-btn-sm"
               >
                 {dialogo.tipo === 'prompt' ? 'Salvar' : 'Confirmar'}
               </button>
@@ -1760,6 +1806,13 @@ function CustoObraApp() {
           </div>
         </div>
       )}
+
+      <ToastStack
+        aviso={aviso}
+        erro={erro}
+        onFecharAviso={() => setAviso('')}
+        onFecharErro={() => setErro('')}
+      />
     </div>
   );
 }

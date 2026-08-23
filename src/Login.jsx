@@ -40,7 +40,7 @@ export default function Login({ onLogin }) {
         }
       `}</style>
 
-      <form onSubmit={entrar} className="relative z-10 bg-white/95 backdrop-blur-sm border border-white/20 rounded-lg p-6 w-full max-w-sm shadow-2xl">
+      <form onSubmit={entrar} className="relative z-10 bg-white/95 backdrop-blur-sm border border-white/20 rounded-xl p-6 w-full max-w-sm shadow-popover animate-scale-in">
         <div className="flex items-center gap-2 mb-6">
           <img
             src="/logo-casas-eco.jpeg"
@@ -54,25 +54,22 @@ export default function Login({ onLogin }) {
         </div>
 
         {erro && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded mb-3">
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg mb-3 animate-fade-in-up">
             {erro}
           </div>
         )}
 
-        <label className="text-xs text-stone-500 block mb-1">Senha de acesso</label>
+        <label className="eco-label">Senha de acesso</label>
         <input
           type="password"
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
           required
           autoFocus
-          className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-green-400"
+          className="eco-input mb-4"
         />
 
-        <button
-          type="submit"
-          className="w-full bg-green-700 text-white text-sm py-2 rounded hover:bg-green-800"
-        >
+        <button type="submit" className="eco-btn-primary w-full">
           Entrar
         </button>
       </form>

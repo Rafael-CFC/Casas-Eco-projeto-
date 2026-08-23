@@ -8,6 +8,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
 import { formatMoney, formatDateBR, todayISO, CATEGORIAS, CLS } from '../domain';
+import useCountUp from '../ui/useCountUp';
 import {
   PERIODOS, getPeriodoRange, filtrarLancamentos, filtrarContas, somarTotal,
   agruparPorObra, agruparPorCategoria, agruparPorFornecedor, evoluirPorPeriodo,
@@ -25,19 +26,21 @@ function formatPct(v) {
   return `${arredondado.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
 }
 
-function StatCard({ label, valor, sub, icon: Icon, tone = 'default' }) {
+function StatCard({ label, valor, numero, formatar, sub, icon: Icon, tone = 'default' }) {
   const tones = {
     default: 'text-stone-900',
     good: 'text-green-700',
     bad: 'text-red-600',
   };
+  const contado = useCountUp(numero != null ? numero : 0, { formatar });
+  const exibido = numero != null ? contado : valor;
   return (
-    <div className="bg-white border border-stone-200 rounded-lg p-4">
+    <div className="eco-card eco-card-hover p-4">
       <div className="flex items-center justify-between mb-1.5">
         <p className="text-xs font-medium text-stone-500">{label}</p>
         {Icon && <Icon size={15} className="text-stone-300 flex-shrink-0" />}
       </div>
-      <p className={`text-xl sm:text-2xl font-semibold tracking-tight ${tones[tone]}`}>{valor}</p>
+      <p className={`text-xl sm:text-2xl font-semibold tracking-tight ${tones[tone]}`}>{exibido}</p>
       {sub && <p className="text-xs text-stone-400 mt-1">{sub}</p>}
     </div>
   );
@@ -60,7 +63,7 @@ function CustomTooltip({ active, payload, label, formatter }) {
 
 function SectionCard({ title, subtitle, children, right }) {
   return (
-    <div className="bg-white border border-stone-200 rounded-lg p-4">
+    <div className="eco-card p-4">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
         <div>
           <p className="text-sm font-semibold text-stone-700">{title}</p>
@@ -223,7 +226,7 @@ function AlertaItem({ alerta }) {
   };
   const { bg, Icon } = estilos[alerta.tipo] || estilos.warning;
   return (
-    <div className={`text-sm px-3 py-2 rounded border flex items-start gap-2 ${bg}`}>
+    <div className={`text-sm px-3 py-2 rounded-lg border flex items-start gap-2 ${bg}`}>
       <Icon size={15} className="flex-shrink-0 mt-0.5" />
       <span>{alerta.texto}</span>
     </div>
@@ -394,13 +397,8 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-stone-900">Dashboard Financeiro</h2>
-        <p className="text-xs text-stone-400">Visão consolidada dos custos de todas as obras — ou de uma obra específica</p>
-      </div>
-
       {/* ---- filtros ---- */}
-      <div className="bg-white border border-stone-200 rounded-lg p-4">
+      <div className="eco-card p-4">
         <div className="flex items-center gap-1.5 text-xs font-medium text-stone-500 mb-3">
           <Filter size={13} /> Filtros
         </div>
@@ -408,7 +406,7 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
           <div>
             <label className="text-xs text-stone-500 block mb-1">Obra</label>
             <select value={obraId} onChange={(e) => setObraId(e.target.value)}
-              className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400">
+              className="eco-input">
               <option value="todas">Todas as obras</option>
               {obras.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}
             </select>
@@ -416,14 +414,14 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
           <div>
             <label className="text-xs text-stone-500 block mb-1">Período</label>
             <select value={periodo} onChange={(e) => setPeriodo(e.target.value)}
-              className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400">
+              className="eco-input">
               {PERIODOS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
             </select>
           </div>
           <div>
             <label className="text-xs text-stone-500 block mb-1">Categoria</label>
             <select value={categoria} onChange={(e) => setCategoria(e.target.value)}
-              className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400">
+              className="eco-input">
               <option value="todas">Todas as categorias</option>
               {Object.entries(CATEGORIAS).map(([key, c]) => <option key={key} value={key}>{c.label}</option>)}
             </select>
@@ -431,7 +429,7 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
           <div>
             <label className="text-xs text-stone-500 block mb-1">Fornecedor</label>
             <select value={fornecedor} onChange={(e) => setFornecedor(e.target.value)}
-              className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400">
+              className="eco-input">
               <option value="todos">Todos os fornecedores</option>
               {nomeFornecedores.map((f) => <option key={f.id} value={f.nome}>{f.nome}</option>)}
             </select>
@@ -440,7 +438,7 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
             <div>
               <label className="text-xs text-stone-500 block mb-1">Status (contas)</label>
               <select value={status} onChange={(e) => setStatus(e.target.value)}
-                className="w-full border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400">
+                className="eco-input">
                 <option value="todas">Todas</option>
                 <option value="pago">Pagas</option>
                 <option value="pendente">Pendentes</option>
@@ -452,7 +450,7 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
             <button
               onClick={limparFiltros}
               disabled={!temFiltrosAtivos}
-              className="w-full text-sm px-3 py-1.5 rounded border border-stone-300 text-stone-600 hover:bg-stone-50 disabled:opacity-40 flex items-center justify-center gap-1.5"
+              className="eco-btn-secondary eco-btn-sm w-full"
             >
               <X size={14} /> Limpar filtros
             </button>
@@ -463,49 +461,54 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
             <div>
               <label className="text-xs text-stone-500 block mb-1">De</label>
               <input type="date" value={dataInicioPersonalizada} onChange={(e) => setDataInicioPersonalizada(e.target.value)}
-                className="border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                className="eco-input" />
             </div>
             <div>
               <label className="text-xs text-stone-500 block mb-1">Até</label>
               <input type="date" value={dataFimPersonalizada} onChange={(e) => setDataFimPersonalizada(e.target.value)}
-                className="border border-stone-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                className="eco-input" />
             </div>
           </div>
         )}
       </div>
 
       {/* ---- cards de indicadores ---- */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Custo total" valor={formatMoney(custoTotal)} sub={obraSelecionada ? obraSelecionada.nome : 'Todas as obras · desde o início'} icon={Wallet} />
-        <StatCard label="Custo no período" valor={formatMoney(custoPeriodo)} sub={PERIODOS.find((p) => p.key === periodo)?.label} icon={TrendingUp} />
-        <StatCard label="Orçamento total" valor={orcamentoTotal != null ? formatMoney(orcamentoTotal) : '—'} sub={orcamentoTotal == null ? 'Nenhum orçamento definido' : undefined} icon={PiggyBank} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 eco-stagger">
+        <StatCard label="Custo total" numero={custoTotal} formatar={formatMoney} sub={obraSelecionada ? obraSelecionada.nome : 'Todas as obras · desde o início'} icon={Wallet} />
+        <StatCard label="Custo no período" numero={custoPeriodo} formatar={formatMoney} sub={PERIODOS.find((p) => p.key === periodo)?.label} icon={TrendingUp} />
+        <StatCard label="Orçamento total" numero={orcamentoTotal} formatar={formatMoney} valor="—" sub={orcamentoTotal == null ? 'Nenhum orçamento definido' : undefined} icon={PiggyBank} />
         <StatCard
           label="Saldo disponível"
-          valor={saldo != null ? formatMoney(saldo) : '—'}
+          numero={saldo}
+          formatar={formatMoney}
+          valor="—"
           tone={saldo != null ? (saldo < 0 ? 'bad' : 'good') : 'default'}
           sub={saldo != null && saldo < 0 ? 'Orçamento ultrapassado' : undefined}
           icon={saldo != null && saldo < 0 ? TrendingDown : TrendingUp}
         />
         <StatCard
           label="% do orçamento utilizado"
-          valor={formatPct(pctUtilizado)}
+          numero={pctUtilizado}
+          formatar={formatPct}
+          valor="—"
           tone={pctUtilizado != null && pctUtilizado > 100 ? 'bad' : 'default'}
           icon={Percent}
         />
-        <StatCard label="Média por lançamento" valor={formatMoney(mediaGastos)} sub={`${periodoLancamentos.length} lançamento(s) no período`} icon={Layers} />
+        <StatCard label="Média por lançamento" numero={mediaGastos} formatar={formatMoney} sub={`${periodoLancamentos.length} lançamento(s) no período`} icon={Layers} />
         <StatCard label="Maior categoria de gasto" valor={maiorCategoria ? maiorCategoria.label : '—'} sub={maiorCategoria ? `${formatMoney(maiorCategoria.valor)} · ${formatPct(maiorCategoria.pct)}` : 'Sem lançamentos'} icon={Layers} />
         {obraId === 'todas' ? (
-          <StatCard label="Obras no recorte" valor={String(obraDados.length)} sub={`de ${obras.length} cadastrada(s)`} icon={Building2} />
+          <StatCard label="Obras no recorte" numero={obraDados.length} formatar={(v) => String(Math.round(v))} sub={`de ${obras.length} cadastrada(s)`} icon={Building2} />
         ) : (
-          <StatCard label="Fornecedores envolvidos" valor={String(fornecedoresDadosTodos.length)} icon={Users} />
+          <StatCard label="Fornecedores envolvidos" numero={fornecedoresDadosTodos.length} formatar={(v) => String(Math.round(v))} icon={Users} />
         )}
         {temContas && (
           <>
-            <StatCard label="Valor pago" valor={formatMoney(valorPago)} tone="good" icon={CheckCircle2} />
-            <StatCard label="Valor pendente" valor={formatMoney(valorPendente)} icon={Wallet} />
+            <StatCard label="Valor pago" numero={valorPago} formatar={formatMoney} tone="good" icon={CheckCircle2} />
+            <StatCard label="Valor pendente" numero={valorPendente} formatar={formatMoney} icon={Wallet} />
             <StatCard
               label="Contas em atraso"
-              valor={String(contasEmAtraso.length)}
+              numero={contasEmAtraso.length}
+              formatar={(v) => String(Math.round(v))}
               sub={contasEmAtraso.length > 0 ? formatMoney(contasEmAtraso.reduce((a, c) => a + c.valor, 0)) : 'Nenhuma'}
               tone={contasEmAtraso.length > 0 ? 'bad' : 'good'}
               icon={AlertTriangle}
@@ -517,13 +520,13 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
       {/* ---- alertas ---- */}
       {alertas.length > 0 && (
         <SectionCard title="Alertas financeiros">
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 eco-stagger">
             {alertas.slice(0, 8).map((a, i) => <AlertaItem key={i} alerta={a} />)}
           </div>
         </SectionCard>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 eco-stagger">
         {obraId === 'todas' && (
           <SectionCard title="Custos por obra" subtitle="Quanto cada obra consumiu no recorte filtrado">
             {obraDados.length === 0 ? <p className="text-xs text-stone-400 py-10 text-center">Nenhum lançamento no recorte selecionado.</p> : <GraficoPorObra dados={obraDados} />}
