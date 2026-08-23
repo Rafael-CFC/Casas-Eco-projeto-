@@ -41,3 +41,15 @@ export const CLS = {
   orange: { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', solid: 'bg-orange-600' },
   blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', solid: 'bg-blue-600' },
 };
+
+// Paleta usada nos gráficos de categoria (Dashboard Financeiro e Resumo Final
+// da Obra). Validada com o script de acessibilidade (contraste/CVD) do
+// projeto — mantida separada das cores de badge acima (CLS), que já existiam
+// antes e são usadas em outros lugares do app.
+export const CORES_CATEGORIA = { mao_de_obra: '#d97706', material_bruto: '#0d9488', produto_loja: '#2563eb' };
+
+export function formatPct(v) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  const arredondado = Math.round(v * 10) / 10;
+  return `${arredondado.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
+}

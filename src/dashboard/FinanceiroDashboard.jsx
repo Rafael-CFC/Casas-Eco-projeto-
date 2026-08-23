@@ -7,7 +7,7 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
-import { formatMoney, formatDateBR, todayISO, CATEGORIAS, CLS } from '../domain';
+import { formatMoney, formatDateBR, todayISO, CATEGORIAS, CLS, CORES_CATEGORIA, formatPct } from '../domain';
 import useCountUp from '../ui/useCountUp';
 import {
   PERIODOS, getPeriodoRange, filtrarLancamentos, filtrarContas, somarTotal,
@@ -18,15 +18,8 @@ import {
 const VERDE = '#16a34a';
 const VERMELHO = '#dc2626';
 const CINZA_REF = '#d6d3d1';
-const CORES_CATEGORIA = { mao_de_obra: '#d97706', material_bruto: '#0d9488', produto_loja: '#2563eb' };
 
-function formatPct(v) {
-  if (v === null || v === undefined || Number.isNaN(v)) return '—';
-  const arredondado = Math.round(v * 10) / 10;
-  return `${arredondado.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
-}
-
-function StatCard({ label, valor, numero, formatar, sub, icon: Icon, tone = 'default' }) {
+export function StatCard({ label, valor, numero, formatar, sub, icon: Icon, tone = 'default' }) {
   const tones = {
     default: 'text-stone-900',
     good: 'text-green-700',
@@ -46,7 +39,7 @@ function StatCard({ label, valor, numero, formatar, sub, icon: Icon, tone = 'def
   );
 }
 
-function CustomTooltip({ active, payload, label, formatter }) {
+export function CustomTooltip({ active, payload, label, formatter }) {
   if (!active || !payload || payload.length === 0) return null;
   return (
     <div className="bg-white border border-stone-200 rounded-md shadow-lg px-3 py-2 text-xs">
@@ -61,7 +54,7 @@ function CustomTooltip({ active, payload, label, formatter }) {
   );
 }
 
-function SectionCard({ title, subtitle, children, right }) {
+export function SectionCard({ title, subtitle, children, right }) {
   return (
     <div className="eco-card p-4">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
@@ -263,7 +256,7 @@ function RankingObras({ dados, obras, categoria }) {
   );
 }
 
-function RankingFornecedores({ dados }) {
+export function RankingFornecedores({ dados }) {
   if (dados.length === 0) return <p className="text-xs text-stone-400 py-6 text-center">Nenhum lançamento com fornecedor informado neste recorte.</p>;
   const max = dados[0].total;
   return (

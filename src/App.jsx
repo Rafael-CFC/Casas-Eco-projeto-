@@ -4,13 +4,16 @@ import {
   ArrowLeft,
   Upload, ArrowUpRight, ArrowDownRight, CheckCircle2, X, Pencil, Copy,
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
-  ChevronsLeft, ChevronsRight,
+  ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
 import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
 import ToastStack from './ui/Toast';
 import { DashboardSkeleton } from './ui/Skeleton';
+import FinalizarObraModal from './obra/FinalizarObraModal';
+import SucessoFinalizacaoModal from './obra/SucessoFinalizacaoModal';
+import ResumoFinalObra from './obra/ResumoFinalObra';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -110,9 +113,15 @@ function CustoObraApp() {
   const [view, setView] = useState('home');
   const [obraAtivaId, setObraAtivaId] = useState(null);
   const [categoriaAtiva, setCategoriaAtiva] = useState('produto_loja');
+  const [filtroObras, setFiltroObras] = useState('todas'); // 'todas' | 'andamento' | 'concluidas'
 
   const [novaObraNome, setNovaObraNome] = useState('');
   const [novaObraOrcamento, setNovaObraOrcamento] = useState('');
+  const [novaObraCliente, setNovaObraCliente] = useState('');
+  const [novaObraEndereco, setNovaObraEndereco] = useState('');
+
+  const [modalFinalizarId, setModalFinalizarId] = useState(null);
+  const [sucessoFinalizacaoId, setSucessoFinalizacaoId] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -214,13 +223,60 @@ function CustoObraApp() {
     const nome = novaObraNome.trim();
     if (!nome) return;
     const orcamento = novaObraOrcamento.trim() ? parsePrecoBR(novaObraOrcamento) : null;
-    const nova = { id: crypto.randomUUID(), nome, criadoEm: todayISO(), orcamento: isNaN(orcamento) ? null : orcamento };
+    const nova = {
+      id: crypto.randomUUID(),
+      nome,
+      criadoEm: todayISO(),
+      orcamento: isNaN(orcamento) ? null : orcamento,
+      cliente: novaObraCliente.trim() || null,
+      endereco: novaObraEndereco.trim() || null,
+      status: 'em_andamento',
+    };
     const ok = await salvarObras([...obras, nova]);
     if (ok) {
       setAviso(`Obra "${nome}" criada.`);
       setNovaObraNome('');
       setNovaObraOrcamento('');
+      setNovaObraCliente('');
+      setNovaObraEndereco('');
     }
+  }
+
+  // ---- finalização / reabertura de obra ----
+  // Obras antigas não têm o campo "status" — tratamos qualquer valor
+  // diferente de 'concluida' como "em andamento", então nada quebra para
+  // quem já tinha obras cadastradas antes desta funcionalidade existir.
+  function obraEstaConcluida(obra) {
+    return !!obra && obra.status === 'concluida';
+  }
+
+  async function finalizarObra(obraId, observacoes) {
+    const atual = obras.find((o) => o.id === obraId);
+    if (!atual) return;
+    const agora = new Date().toISOString();
+    const historico = [...(atual.historicoFinalizacao || []), { tipo: 'finalizada', data: agora }];
+    const ok = await salvarObras(obras.map((o) => o.id === obraId ? {
+      ...o,
+      status: 'concluida',
+      finalizadaEm: agora,
+      observacoesFinais: (observacoes || '').trim(),
+      historicoFinalizacao: historico,
+    } : o));
+    if (ok) {
+      setModalFinalizarId(null);
+      setSucessoFinalizacaoId(obraId);
+    }
+  }
+
+  function pedirReaberturaObra(obraId) {
+    const atual = obras.find((o) => o.id === obraId);
+    if (!atual) return;
+    confirmar(`Tem certeza que deseja reabrir a obra "${atual.nome}"? Ela volta para "em andamento" e novos lançamentos poderão ser feitos. O resumo já gerado não é apagado.`, () => {
+      const agora = new Date().toISOString();
+      const historico = [...(atual.historicoFinalizacao || []), { tipo: 'reaberta', data: agora }];
+      salvarObras(obras.map((o) => o.id === obraId ? { ...o, status: 'em_andamento', historicoFinalizacao: historico } : o));
+      setAviso(`Obra "${atual.nome}" reaberta.`);
+    });
   }
 
   function removerObra(id, nome) {
@@ -788,10 +844,16 @@ function CustoObraApp() {
   }
 
   const obraAtiva = obras.find((o) => o.id === obraAtivaId);
+  const obraConcluida = obraEstaConcluida(obraAtiva);
   const produtosOrdenados = produtosOrdenadosPorUso();
-  const paginaAtual = view === 'obra' && obraAtiva
-    ? { titulo: obraAtiva.nome, subtitulo: `Desde ${formatDateBR(obraAtiva.criadoEm)}` }
+  const paginaAtual = (view === 'obra' || view === 'resumo') && obraAtiva
+    ? {
+        titulo: obraAtiva.nome,
+        subtitulo: view === 'resumo' ? 'Resumo final da obra' : `Desde ${formatDateBR(obraAtiva.criadoEm)}${obraConcluida ? ' · Concluída' : ''}`,
+      }
     : (PAGINA_META[view] || PAGINA_META.home);
+  const obraDoModalFinalizar = modalFinalizarId ? obras.find((o) => o.id === modalFinalizarId) : null;
+  const obraDoSucesso = sucessoFinalizacaoId ? obras.find((o) => o.id === sucessoFinalizacaoId) : null;
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-800 flex">
@@ -813,7 +875,7 @@ function CustoObraApp() {
         <nav className="flex-1 overflow-y-auto py-3 px-2.5 space-y-0.5">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
-            const ativo = view === item.key || (item.key === 'home' && view === 'obra');
+            const ativo = view === item.key || (item.key === 'home' && (view === 'obra' || view === 'resumo'));
             return (
               <button
                 key={item.key}
@@ -852,7 +914,7 @@ function CustoObraApp() {
       <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-stone-200 flex z-20">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
-          const ativo = view === item.key || (item.key === 'home' && view === 'obra');
+          const ativo = view === item.key || (item.key === 'home' && (view === 'obra' || view === 'resumo'));
           return (
             <button
               key={item.key}
@@ -958,6 +1020,15 @@ function CustoObraApp() {
                   className="eco-input"
                 />
               </div>
+              <div className="w-full sm:w-48">
+                <label className="text-xs text-stone-500 block mb-1">Cliente (opcional)</label>
+                <input
+                  value={novaObraCliente}
+                  onChange={(e) => setNovaObraCliente(e.target.value)}
+                  placeholder="Ex: João da Silva"
+                  className="eco-input"
+                />
+              </div>
               <div className="w-full sm:w-40">
                 <label className="text-xs text-stone-500 block mb-1">Orçamento (opcional)</label>
                 <input
@@ -973,54 +1044,105 @@ function CustoObraApp() {
               </button>
             </div>
 
-            {obras.length === 0 ? (
-              <p className="text-center text-stone-400 py-10">Nenhuma obra cadastrada. Crie a primeira acima.</p>
-            ) : (
-              <div className="eco-stagger grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {obras.map((o) => {
-                  const gasto = totalObra(o.id);
-                  const pct = o.orcamento ? Math.min(100, (gasto / o.orcamento) * 100) : null;
-                  return (
-                    <div key={o.id} className="eco-card eco-card-hover p-4">
-                      <button onClick={() => abrirObra(o.id)} className="w-full text-left">
-                        <p className="font-semibold text-stone-900">{o.nome}</p>
-                        <p className="text-xs text-stone-400 mb-3">desde {formatDateBR(o.criadoEm)}</p>
-                        <p className="text-2xl font-semibold text-green-800 mb-1">{formatMoney(gasto)}</p>
-                        {o.orcamento ? (
-                          <div className="mb-3">
-                            <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden">
-                              <div className={`h-full ${pct >= 100 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${pct}%` }}></div>
-                            </div>
-                            <p className="text-xs text-stone-400 mt-1">{pct.toFixed(0)}% de {formatMoney(o.orcamento)}</p>
-                          </div>
-                        ) : (
-                          <p className="text-xs text-stone-300 mb-3">sem orçamento definido</p>
-                        )}
-                        <div className="flex flex-wrap gap-2">
-                          {Object.entries(CATEGORIAS).map(([key, cat]) => {
-                            const Icon = cat.icon;
-                            const c = CLS[cat.cls];
-                            return (
-                              <span key={key} className={`eco-badge ${c.bg} ${c.text} border ${c.border}`}>
-                                <Icon size={12} /> {formatMoney(totalObraCategoria(o.id, key))}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </button>
-                      <div className="flex items-center gap-3 mt-3">
-                        <button onClick={() => definirOrcamento(o.id)} className="text-xs text-stone-400 hover:text-green-700 flex items-center gap-1 transition-colors">
-                          <Pencil size={12} /> {o.orcamento ? 'Editar orçamento' : 'Definir orçamento'}
-                        </button>
-                        <button onClick={() => removerObra(o.id, o.nome)} className="text-xs text-stone-400 hover:text-red-600 flex items-center gap-1 transition-colors">
-                          <Trash2 size={12} /> Remover obra
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+            {obras.length > 0 && (
+              <div className="flex gap-1 bg-stone-100 rounded-md p-0.5 w-fit">
+                {[
+                  ['todas', 'Todas'],
+                  ['andamento', 'Em andamento'],
+                  ['concluidas', 'Concluídas'],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setFiltroObras(key)}
+                    className={`text-xs px-3 py-1.5 rounded transition-colors duration-150 ${filtroObras === key ? 'bg-white text-green-700 shadow-sm font-medium' : 'text-stone-500'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             )}
+
+            {(() => {
+              const obrasFiltradas = obras.filter((o) => {
+                if (filtroObras === 'andamento') return !obraEstaConcluida(o);
+                if (filtroObras === 'concluidas') return obraEstaConcluida(o);
+                return true;
+              });
+              if (obras.length === 0) {
+                return <p className="text-center text-stone-400 py-10">Nenhuma obra cadastrada. Crie a primeira acima.</p>;
+              }
+              if (obrasFiltradas.length === 0) {
+                return <p className="text-center text-stone-400 py-10">Nenhuma obra {filtroObras === 'concluidas' ? 'concluída' : 'em andamento'} no momento.</p>;
+              }
+              return (
+                <div className="eco-stagger grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {obrasFiltradas.map((o) => {
+                    const gasto = totalObra(o.id);
+                    const pct = o.orcamento ? Math.min(100, (gasto / o.orcamento) * 100) : null;
+                    const concluida = obraEstaConcluida(o);
+                    return (
+                      <div key={o.id} className={`eco-card eco-card-hover p-4 ${concluida ? 'border-green-200' : ''}`}>
+                        <button onClick={() => abrirObra(o.id)} className="w-full text-left">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <p className="font-semibold text-stone-900 truncate">{o.nome}</p>
+                            {concluida ? (
+                              <span className="eco-badge bg-green-50 text-green-700 border border-green-200 flex-shrink-0">
+                                <CheckCircle2 size={12} /> CONCLUÍDA
+                              </span>
+                            ) : (
+                              <span className="eco-badge bg-blue-50 text-blue-700 border border-blue-200 flex-shrink-0">
+                                🟢 EM ANDAMENTO
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-stone-400 mb-3">
+                            desde {formatDateBR(o.criadoEm)}
+                            {concluida && o.finalizadaEm && ` · finalizada em ${formatDateBR(o.finalizadaEm.slice(0, 10))}`}
+                          </p>
+                          <p className="text-2xl font-semibold text-green-800 mb-1">{formatMoney(gasto)}</p>
+                          {o.orcamento ? (
+                            <div className="mb-3">
+                              <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                                <div className={`h-full ${pct >= 100 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${pct}%` }}></div>
+                              </div>
+                              <p className="text-xs text-stone-400 mt-1">{pct.toFixed(0)}% de {formatMoney(o.orcamento)}</p>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-stone-300 mb-3">sem orçamento definido</p>
+                          )}
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(CATEGORIAS).map(([key, cat]) => {
+                              const Icon = cat.icon;
+                              const c = CLS[cat.cls];
+                              return (
+                                <span key={key} className={`eco-badge ${c.bg} ${c.text} border ${c.border}`}>
+                                  <Icon size={12} /> {formatMoney(totalObraCategoria(o.id, key))}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </button>
+                        <div className="flex items-center gap-3 mt-3 flex-wrap">
+                          {!concluida && (
+                            <button onClick={() => definirOrcamento(o.id)} className="text-xs text-stone-400 hover:text-green-700 flex items-center gap-1 transition-colors">
+                              <Pencil size={12} /> {o.orcamento ? 'Editar orçamento' : 'Definir orçamento'}
+                            </button>
+                          )}
+                          {concluida && (
+                            <button onClick={() => { setObraAtivaId(o.id); setView('resumo'); }} className="text-xs text-green-700 hover:text-green-800 flex items-center gap-1 transition-colors">
+                              <ClipboardCheck size={12} /> Ver resumo final
+                            </button>
+                          )}
+                          <button onClick={() => removerObra(o.id, o.nome)} className="text-xs text-stone-400 hover:text-red-600 flex items-center gap-1 transition-colors">
+                            <Trash2 size={12} /> Remover obra
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -1472,8 +1594,20 @@ function CustoObraApp() {
 
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
-                <h2 className="text-xl font-semibold text-stone-900">{obraAtiva.nome}</h2>
-                <p className="text-xs text-stone-400">desde {formatDateBR(obraAtiva.criadoEm)}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-xl font-semibold text-stone-900">{obraAtiva.nome}</h2>
+                  {obraConcluida ? (
+                    <span className="eco-badge bg-green-50 text-green-700 border border-green-200">
+                      <CheckCircle2 size={12} /> OBRA CONCLUÍDA
+                    </span>
+                  ) : (
+                    <span className="eco-badge bg-blue-50 text-blue-700 border border-blue-200">🟢 EM ANDAMENTO</span>
+                  )}
+                </div>
+                <p className="text-xs text-stone-400">
+                  desde {formatDateBR(obraAtiva.criadoEm)}
+                  {obraConcluida && obraAtiva.finalizadaEm && ` · Finalizada em: ${formatDateBR(obraAtiva.finalizadaEm.slice(0, 10))}`}
+                </p>
               </div>
               <div className="flex items-center gap-3">
                 <button onClick={() => exportarObraCSV(obraAtiva)} className="eco-btn-secondary eco-btn-sm">
@@ -1489,6 +1623,40 @@ function CustoObraApp() {
               </div>
             </div>
 
+            {/* ---- ação de encerramento da obra: separada das ações do dia a dia ---- */}
+            {obraConcluida ? (
+              <div className="eco-card p-4 border-green-200 bg-green-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <ShieldCheck size={20} className="text-green-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-green-800">Obra concluída</p>
+                    <p className="text-xs text-green-700/80">Os lançamentos e o orçamento ficam protegidos contra alteração acidental. Reabra a obra se precisar corrigir algo.</p>
+                  </div>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button onClick={() => pedirReaberturaObra(obraAtiva.id)} className="eco-btn-secondary eco-btn-sm">
+                    <RotateCcw size={14} /> Reabrir obra
+                  </button>
+                  <button onClick={() => setView('resumo')} className="eco-btn-primary eco-btn-sm">
+                    <ClipboardCheck size={14} /> Ver resumo final
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="eco-card p-4 border-green-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <ShieldCheck size={20} className="text-stone-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-stone-700">Encerramento da obra</p>
+                    <p className="text-xs text-stone-400">Quando a obra terminar, finalize para consolidar o resumo financeiro e travar os lançamentos.</p>
+                  </div>
+                </div>
+                <button onClick={() => setModalFinalizarId(obraAtiva.id)} className="eco-btn-dark eco-btn-sm flex-shrink-0">
+                  <CheckCircle2 size={14} /> Finalizar obra
+                </button>
+              </div>
+            )}
+
             {obraAtiva.orcamento ? (
               <div className="eco-card p-3">
                 <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden">
@@ -1503,15 +1671,19 @@ function CustoObraApp() {
                   {totalObra(obraAtiva.id) > obraAtiva.orcamento
                     ? `estourou em ${formatMoney(totalObra(obraAtiva.id) - obraAtiva.orcamento)}`
                     : `restam ${formatMoney(obraAtiva.orcamento - totalObra(obraAtiva.id))}`}
-                  {' · '}
-                  <button onClick={() => definirOrcamento(obraAtiva.id)} className="underline hover:text-green-700">editar</button>
+                  {!obraConcluida && (
+                    <>
+                      {' · '}
+                      <button onClick={() => definirOrcamento(obraAtiva.id)} className="underline hover:text-green-700">editar</button>
+                    </>
+                  )}
                 </p>
               </div>
-            ) : (
+            ) : !obraConcluida ? (
               <button onClick={() => definirOrcamento(obraAtiva.id)} className="text-xs text-stone-400 hover:text-green-700 flex items-center gap-1 transition-colors">
                 <Pencil size={12} /> Definir orçamento para esta obra
               </button>
-            )}
+            ) : null}
 
             <nav className="grid grid-cols-3 gap-2">
               {Object.entries(CATEGORIAS).map(([key, cat]) => {
@@ -1550,14 +1722,20 @@ function CustoObraApp() {
                       </div>
                       <p className="text-xs text-stone-500 mt-1.5">
                         Orçamento de {CATEGORIAS[categoriaAtiva].label}: {formatMoney(gastoCat)} de {formatMoney(orcCat)}
-                        {' · '}
-                        <button onClick={() => definirOrcamentoCategoria(obraAtiva.id, categoriaAtiva)} className="underline hover:text-green-700">editar</button>
+                        {!obraConcluida && (
+                          <>
+                            {' · '}
+                            <button onClick={() => definirOrcamentoCategoria(obraAtiva.id, categoriaAtiva)} className="underline hover:text-green-700">editar</button>
+                          </>
+                        )}
                       </p>
                     </>
-                  ) : (
+                  ) : !obraConcluida ? (
                     <button onClick={() => definirOrcamentoCategoria(obraAtiva.id, categoriaAtiva)} className="text-xs text-stone-400 hover:text-green-700 flex items-center gap-1 transition-colors">
                       <Pencil size={12} /> Definir orçamento para {CATEGORIAS[categoriaAtiva].label}
                     </button>
+                  ) : (
+                    <p className="text-xs text-stone-300">Sem orçamento definido para {CATEGORIAS[categoriaAtiva].label}.</p>
                   )}
                 </div>
               );
@@ -1566,6 +1744,10 @@ function CustoObraApp() {
             {/* ---- Etapas da obra ---- */}
             <div className="eco-card p-4">
               <p className="text-sm font-semibold text-stone-700 mb-3">Etapas da obra</p>
+              {obraConcluida && (
+                <p className="text-xs text-stone-400 flex items-center gap-1 mb-3"><Lock size={12} /> Obra concluída — reabra para adicionar ou remover etapas.</p>
+              )}
+              {!obraConcluida && (
               <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-end mb-4">
                 <div className="w-full sm:flex-1 min-w-0">
                   <label className="text-xs text-stone-500 block mb-1">Nome da etapa</label>
@@ -1581,6 +1763,7 @@ function CustoObraApp() {
                   <Plus size={15} /> Adicionar etapa
                 </button>
               </div>
+              )}
 
               {etapas.filter((et) => et.obraId === obraAtiva.id).length === 0 ? (
                 <p className="text-xs text-stone-400">Nenhuma etapa criada ainda. Etapas ajudam a saber onde o dinheiro está indo dentro da obra (fundação, alvenaria, cobertura...).</p>
@@ -1595,9 +1778,11 @@ function CustoObraApp() {
                           <p className="text-sm font-medium text-stone-800">{et.nome}</p>
                           <div className="flex items-center gap-2">
                             <p className="text-sm text-stone-600">{formatMoney(gasto)}{et.orcamento ? ` / ${formatMoney(et.orcamento)}` : ''}</p>
-                            <button onClick={() => removerEtapa(et.id, et.nome)} className="eco-icon-btn-danger">
-                              <Trash2 size={14} />
-                            </button>
+                            {!obraConcluida && (
+                              <button onClick={() => removerEtapa(et.id, et.nome)} className="eco-icon-btn-danger">
+                                <Trash2 size={14} />
+                              </button>
+                            )}
                           </div>
                         </div>
                         {et.orcamento && (
@@ -1612,6 +1797,10 @@ function CustoObraApp() {
               )}
             </div>
 
+            {obraConcluida && (
+              <p className="text-xs text-stone-400 flex items-center gap-1 -mb-2"><Lock size={12} /> Obra concluída — reabra a obra para lançar novos gastos.</p>
+            )}
+            {!obraConcluida && (
             <div className="eco-card p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 items-end">
               {categoriaAtiva === 'produto_loja' ? (
                 <div className="col-span-2 sm:col-span-4 lg:col-span-2">
@@ -1695,7 +1884,8 @@ function CustoObraApp() {
                 )}
               </div>
             </div>
-            {categoriaAtiva === 'produto_loja' && produtos.length === 0 && (
+            )}
+            {!obraConcluida && categoriaAtiva === 'produto_loja' && produtos.length === 0 && (
               <p className="text-xs text-stone-400 -mt-3">Ainda não tem produto cadastrado — pode digitar o nome, a unidade e o preço aqui mesmo que ele já entra no catálogo sozinho.</p>
             )}
 
@@ -1753,12 +1943,18 @@ function CustoObraApp() {
                           <td className="px-3 py-2 text-right">{formatMoney(l.preco)}</td>
                           <td className="px-3 py-2 text-right font-medium">{formatMoney(l.total)}</td>
                           <td className="px-3 py-2 text-right whitespace-nowrap">
-                            <button onClick={() => editarLancamento(l)} className="eco-icon-btn mr-1" title="Editar">
-                              <Pencil size={15} />
-                            </button>
-                            <button onClick={() => removerLancamento(l.id)} className="eco-icon-btn-danger" title="Remover">
-                              <Trash2 size={15} />
-                            </button>
+                            {obraConcluida ? (
+                              <Lock size={13} className="inline text-stone-300" />
+                            ) : (
+                              <>
+                                <button onClick={() => editarLancamento(l)} className="eco-icon-btn mr-1" title="Editar">
+                                  <Pencil size={15} />
+                                </button>
+                                <button onClick={() => removerLancamento(l.id)} className="eco-icon-btn-danger" title="Remover">
+                                  <Trash2 size={15} />
+                                </button>
+                              </>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -1770,8 +1966,34 @@ function CustoObraApp() {
             })()}
           </div>
         )}
+
+        {/* ---------------- RESUMO FINAL DA OBRA ---------------- */}
+        {view === 'resumo' && obraAtiva && (
+          <ResumoFinalObra
+            obra={obraAtiva}
+            lancamentos={lancamentos}
+            onVoltar={() => setView('obra')}
+          />
+        )}
         </main>
       </div>
+
+      {modalFinalizarId && obraDoModalFinalizar && (
+        <FinalizarObraModal
+          obra={obraDoModalFinalizar}
+          lancamentos={lancamentos}
+          onCancelar={() => setModalFinalizarId(null)}
+          onConfirmar={(observacoes) => finalizarObra(modalFinalizarId, observacoes)}
+        />
+      )}
+
+      {sucessoFinalizacaoId && obraDoSucesso && (
+        <SucessoFinalizacaoModal
+          obra={obraDoSucesso}
+          onFechar={() => setSucessoFinalizacaoId(null)}
+          onVerResumo={() => { setSucessoFinalizacaoId(null); setView('resumo'); }}
+        />
+      )}
 
       {dialogo && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 animate-fade-in">
