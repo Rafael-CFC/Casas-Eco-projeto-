@@ -47,9 +47,20 @@ function quebrarPaginaSeNecessario(ctx, alturaNecessaria) {
   }
 }
 
+// desconto: { tipo: 'percentual' | 'valor', valor: number } | null
+function calcularValorDesconto(bruto, desconto) {
+  if (!desconto || !desconto.valor || desconto.valor <= 0) return 0;
+  if (desconto.tipo === 'percentual') return bruto * (Math.min(desconto.valor, 100) / 100);
+  return Math.min(desconto.valor, bruto);
+}
+
+function rotuloDesconto(desconto) {
+  return desconto.tipo === 'percentual' ? `Desconto (${String(desconto.valor).replace('.', ',')}%)` : 'Desconto';
+}
+
 // itens: [{ nome, formato, quantidade, precoAVista, precoAPrazo }]
 // modo: 'vista' | 'prazo' | 'ambos'
-export async function gerarPdfOrcamentoVenda({ itens, modo, clienteNome, observacao }) {
+export async function gerarPdfOrcamentoVenda({ itens, modo, clienteNome, observacao, desconto }) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const larguraPagina = doc.internal.pageSize.getWidth();
   const largura = larguraPagina - MARGEM * 2;
@@ -163,26 +174,48 @@ export async function gerarPdfOrcamentoVenda({ itens, modo, clienteNome, observa
   ctx.y += 6;
   doc.setDrawColor(...COR.linha);
   doc.setLineWidth(1);
-  quebrarPaginaSeNecessario(ctx, 60);
+  quebrarPaginaSeNecessario(ctx, 90);
   doc.line(ctx.x, ctx.y, ctx.x + largura, ctx.y);
   ctx.y += 20;
 
+  function linhaSubtotalEDesconto(bruto) {
+    const valorDesc = calcularValorDesconto(bruto, desconto);
+    if (valorDesc <= 0) return bruto;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    doc.setTextColor(...COR.cinzaClaro);
+    doc.text('Subtotal', ctx.x, ctx.y);
+    doc.text(formatMoney(bruto), ctx.x + largura, ctx.y, { align: 'right' });
+    ctx.y += 15;
+    doc.text(rotuloDesconto(desconto), ctx.x, ctx.y);
+    doc.text(`-${formatMoney(valorDesc)}`, ctx.x + largura, ctx.y, { align: 'right' });
+    ctx.y += 17;
+    return bruto - valorDesc;
+  }
+
   if (modo === 'ambos') {
+    const liquidoVista = linhaSubtotalEDesconto(totalVista);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.setTextColor(...COR.verdeEscuro);
     doc.text('TOTAL À VISTA', ctx.x, ctx.y);
-    doc.text(formatMoney(totalVista), ctx.x + largura, ctx.y, { align: 'right' });
-    ctx.y += 20;
+    doc.text(formatMoney(liquidoVista), ctx.x + largura, ctx.y, { align: 'right' });
+    ctx.y += 22;
+    const liquidoPrazo = linhaSubtotalEDesconto(totalPrazo);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(...COR.verdeEscuro);
     doc.text('TOTAL A PRAZO', ctx.x, ctx.y);
-    doc.text(formatMoney(totalPrazo), ctx.x + largura, ctx.y, { align: 'right' });
+    doc.text(formatMoney(liquidoPrazo), ctx.x + largura, ctx.y, { align: 'right' });
     ctx.y += 28;
   } else {
+    const totalBruto = modo === 'vista' ? totalVista : totalPrazo;
+    const totalLiquido = linhaSubtotalEDesconto(totalBruto);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
     doc.setTextColor(...COR.verdeEscuro);
     doc.text('TOTAL', ctx.x, ctx.y);
-    doc.text(formatMoney(modo === 'vista' ? totalVista : totalPrazo), ctx.x + largura, ctx.y, { align: 'right' });
+    doc.text(formatMoney(totalLiquido), ctx.x + largura, ctx.y, { align: 'right' });
     ctx.y += 28;
   }
 
