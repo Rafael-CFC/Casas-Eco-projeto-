@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Package, Plus, Trash2, AlertCircle,
   ArrowLeft,
@@ -97,6 +97,11 @@ function CustoObraApp() {
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
   const [dialogo, setDialogo] = useState(null); // { tipo: 'confirm'|'prompt', mensagem, valor, onConfirmar }
+
+  const backupInputRef = useRef(null);
+  const [ultimoBackup, setUltimoBackup] = useState(() => {
+    try { return localStorage.getItem('casaseco-ultimo-backup') || null; } catch (e) { return null; }
+  });
 
   function confirmar(mensagem, onConfirmar) {
     setDialogo({ tipo: 'confirm', mensagem, onConfirmar });
@@ -548,6 +553,79 @@ function CustoObraApp() {
       linhas.push([c.descricao, c.valor, formatDateBR(c.vencimento), c.status === 'pago' ? 'Paga' : 'Pendente', o ? o.nome : '', c.fornecedorNome || '']);
     });
     baixarCSV('contas-a-pagar.csv', linhas);
+  }
+
+  // ---- backup completo do sistema (baixar / restaurar) ----
+  function exportarBackupCompleto() {
+    const backup = {
+      sistema: 'casaseco-custo-obra',
+      versaoBackup: 1,
+      geradoEm: new Date().toISOString(),
+      dados: { obras, produtos, lancamentos, etapas, fornecedores, contas },
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const carimbo = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup-casaseco-${carimbo}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    try { localStorage.setItem('casaseco-ultimo-backup', new Date().toISOString()); } catch (e) { /* ignora */ }
+    setUltimoBackup(new Date().toISOString());
+    setAviso('Backup completo baixado. Guarde esse arquivo em um lugar seguro (e-mail, Google Drive, pendrive).');
+  }
+
+  function abrirSeletorRestauracao() {
+    if (backupInputRef.current) backupInputRef.current.click();
+  }
+
+  function handleArquivoRestauracao(e) {
+    const arquivo = e.target.files && e.target.files[0];
+    e.target.value = ''; // permite escolher o mesmo arquivo de novo depois, se precisar
+    if (!arquivo) return;
+
+    const leitor = new FileReader();
+    leitor.onload = () => {
+      let backup;
+      try {
+        backup = JSON.parse(leitor.result);
+      } catch (err) {
+        setErro('Esse arquivo não é um backup válido (não é um JSON legível).');
+        return;
+      }
+      const dados = backup && backup.dados;
+      const chavesEsperadas = ['obras', 'produtos', 'lancamentos', 'etapas', 'fornecedores', 'contas'];
+      const valido = dados && chavesEsperadas.every((k) => Array.isArray(dados[k]));
+      if (!valido) {
+        setErro('Esse arquivo não parece um backup do Casas Eco (faltam dados esperados).');
+        return;
+      }
+      confirmar(
+        `Restaurar este backup vai SUBSTITUIR todos os dados atuais (obras, lançamentos, catálogo, fornecedores e contas) pelos dados do arquivo${backup.geradoEm ? ` de ${formatDateBR(backup.geradoEm.slice(0, 10))}` : ''}. O que está salvo agora será perdido. Tem certeza?`,
+        () => aplicarRestauracao(dados)
+      );
+    };
+    leitor.onerror = () => setErro('Não foi possível ler o arquivo selecionado.');
+    leitor.readAsText(arquivo);
+  }
+
+  async function aplicarRestauracao(dados) {
+    const resultados = await Promise.all([
+      salvarObras(dados.obras),
+      salvarProdutos(dados.produtos),
+      salvarLancamentos(dados.lancamentos),
+      salvarEtapas(dados.etapas),
+      salvarFornecedores(dados.fornecedores),
+      salvarContas(dados.contas),
+    ]);
+    if (resultados.every(Boolean)) {
+      setAviso('Backup restaurado com sucesso.');
+    } else {
+      setErro('Alguns dados podem não ter sido restaurados. Confira e tente novamente se necessário.');
+    }
   }
 
   function gastosPorCategoriaGeral() {
@@ -1540,6 +1618,47 @@ function CustoObraApp() {
                 )}
                 <p className="text-xs text-stone-400 mt-3">Os arquivos CSV abrem direto no Excel, Google Sheets ou similar.</p>
               </div>
+
+              {(() => {
+                const dias = ultimoBackup ? Math.floor((Date.now() - new Date(ultimoBackup).getTime()) / 86400000) : null;
+                const atrasado = dias === null || dias >= 7;
+                return (
+                  <div className={`eco-card p-4 ${atrasado ? 'border-amber-300 bg-amber-50/40' : 'border-green-200'}`}>
+                    <div className="flex items-start gap-2.5 mb-3">
+                      <ShieldCheck size={20} className={`flex-shrink-0 mt-0.5 ${atrasado ? 'text-amber-500' : 'text-green-600'}`} />
+                      <div>
+                        <p className="text-sm font-semibold text-stone-700">Backup completo do sistema</p>
+                        <p className="text-xs text-stone-500 mt-0.5">
+                          Baixa um arquivo com TODOS os dados (obras, lançamentos, catálogo, fornecedores e contas). Guarde esse arquivo fora do site — no e-mail, Google Drive, pendrive — como uma cópia de segurança independente do site.
+                        </p>
+                        <p className={`text-xs mt-1.5 font-medium ${atrasado ? 'text-amber-700' : 'text-green-700'}`}>
+                          {ultimoBackup
+                            ? `Último backup: ${formatDateBR(ultimoBackup.slice(0, 10))} (${dias === 0 ? 'hoje' : dias === 1 ? 'há 1 dia' : `há ${dias} dias`})${atrasado ? ' — considere fazer um novo' : ''}`
+                            : 'Nenhum backup feito ainda neste navegador — recomendado fazer o primeiro agora.'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button onClick={exportarBackupCompleto} className="eco-btn-primary eco-btn-sm">
+                        <Download size={14} /> Baixar backup completo
+                      </button>
+                      <button onClick={abrirSeletorRestauracao} className="eco-btn-secondary eco-btn-sm">
+                        <Upload size={14} /> Restaurar backup
+                      </button>
+                      <input
+                        ref={backupInputRef}
+                        type="file"
+                        accept="application/json,.json"
+                        onChange={handleArquivoRestauracao}
+                        className="hidden"
+                      />
+                    </div>
+                    <p className="text-xs text-stone-400 mt-3">
+                      "Restaurar backup" substitui todos os dados atuais pelos do arquivo escolhido — use só se precisar recuperar dados perdidos.
+                    </p>
+                  </div>
+                );
+              })()}
 
               <div className="eco-stagger grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="eco-card p-4">
