@@ -5,6 +5,7 @@ import {
   Upload, ArrowUpRight, ArrowDownRight, CheckCircle2, X, Pencil, Copy,
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
+  ShoppingCart,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
@@ -16,6 +17,7 @@ import SucessoFinalizacaoModal from './obra/SucessoFinalizacaoModal';
 import ResumoFinalObra from './obra/ResumoFinalObra';
 import ProdutoSeletor from './produtos/ProdutoSeletor';
 import { catalogoPorCategoria } from './produtos/catalogoUtils';
+import OrcamentoVenda from './venda/OrcamentoVenda';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -74,6 +76,7 @@ const NAV_ITEMS = [
   { key: 'catalogo', label: 'Catálogo', icon: Package },
   { key: 'fornecedores', label: 'Fornecedores', icon: Users },
   { key: 'contas', label: 'Contas', icon: Receipt },
+  { key: 'venda', label: 'Vender', icon: ShoppingCart },
   { key: 'relatorios', label: 'Relatórios', icon: FileText },
 ];
 
@@ -83,6 +86,7 @@ const PAGINA_META = {
   catalogo: { titulo: 'Catálogo', subtitulo: 'Produtos e preços cadastrados' },
   fornecedores: { titulo: 'Fornecedores', subtitulo: 'Cadastro e histórico de compras' },
   contas: { titulo: 'Contas a pagar', subtitulo: 'Vencimentos e parcelas' },
+  venda: { titulo: 'Vender Madeira', subtitulo: 'Preços de venda ao cliente e orçamento em PDF' },
   relatorios: { titulo: 'Relatórios', subtitulo: 'Exportações e resumos gerais' },
 };
 
@@ -1586,6 +1590,11 @@ function CustoObraApp() {
             </div>
           );
         })()}
+
+        {/* ---------------- VENDER MADEIRA (orçamento ao cliente) ---------------- */}
+        {view === 'venda' && (
+          <OrcamentoVenda onAviso={setAviso} onErro={setErro} />
+        )}
 
         {/* ---------------- RELATÓRIOS ---------------- */}
         {view === 'relatorios' && (() => {
