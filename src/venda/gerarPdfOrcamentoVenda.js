@@ -164,8 +164,9 @@ export async function gerarPdfOrcamentoVenda({ itens, modoPagamento, clienteNome
     doc.text(`página ${p} de ${totalPaginas}`, larguraPagina - MARGEM, RODAPE_Y, { align: 'right' });
   }
 
+  const sufixoModo = modoPagamento === 'vista' ? 'a vista' : 'a prazo';
   const nomeArquivo = clienteNome && clienteNome.trim()
-    ? `Orcamento - ${clienteNome.trim()}.pdf`
-    : `Orcamento - ${new Date().toISOString().slice(0, 10)}.pdf`;
+    ? `Orcamento (${sufixoModo}) - ${clienteNome.trim()}.pdf`
+    : `Orcamento (${sufixoModo}) - ${new Date().toISOString().slice(0, 10)}.pdf`;
   doc.save(nomeArquivo);
 }

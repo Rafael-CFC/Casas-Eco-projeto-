@@ -10,6 +10,7 @@ export default function OrcamentoVenda({ onAviso, onErro }) {
   const [carrinho, setCarrinho] = useState([]); // [{ nome, formato, quantidade, precoAVista, precoAPrazo }]
   const [clienteNome, setClienteNome] = useState('');
   const [observacao, setObservacao] = useState('');
+  const [baixarAmbos, setBaixarAmbos] = useState(false);
   const [gerando, setGerando] = useState(false);
 
   const itensFiltrados = useMemo(() => {
@@ -75,13 +76,21 @@ export default function OrcamentoVenda({ onAviso, onErro }) {
     if (carrinho.length === 0) return;
     setGerando(true);
     try {
-      await gerarPdfOrcamentoVenda({
-        itens: carrinho.map((i) => ({ nome: i.nome, formato: i.formato, quantidade: i.quantidade, precoUnit: precoAtual(i) })),
-        modoPagamento,
-        clienteNome,
-        observacao,
-      });
-      onAviso && onAviso('Orçamento em PDF baixado.');
+      const modos = baixarAmbos ? ['vista', 'prazo'] : [modoPagamento];
+      for (const modo of modos) {
+        await gerarPdfOrcamentoVenda({
+          itens: carrinho.map((i) => ({
+            nome: i.nome,
+            formato: i.formato,
+            quantidade: i.quantidade,
+            precoUnit: modo === 'vista' ? i.precoAVista : i.precoAPrazo,
+          })),
+          modoPagamento: modo,
+          clienteNome,
+          observacao,
+        });
+      }
+      onAviso && onAviso(baixarAmbos ? 'Os dois orçamentos (à vista e a prazo) foram baixados.' : 'Orçamento em PDF baixado.');
     } catch (e) {
       onErro && onErro('Não foi possível gerar o PDF do orçamento.');
     } finally {
@@ -204,6 +213,15 @@ export default function OrcamentoVenda({ onAviso, onErro }) {
             <label className="eco-label">Observações (opcional)</label>
             <textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} className="eco-input" rows={2} placeholder="Ex.: prazo de entrega, frete, etc." />
           </div>
+          <label className="flex items-center gap-2 text-sm text-stone-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={baixarAmbos}
+              onChange={(e) => setBaixarAmbos(e.target.checked)}
+              className="w-4 h-4 rounded border-stone-300 text-green-700 focus:ring-green-500/40"
+            />
+            Gerar os dois PDFs (à vista e a prazo) — útil quando o cliente pede pra comparar
+          </label>
         </div>
       )}
 
@@ -216,7 +234,7 @@ export default function OrcamentoVenda({ onAviso, onErro }) {
               <p className="text-lg font-bold text-green-800">{formatMoney(total)}</p>
             </div>
             <button onClick={baixarPdf} disabled={gerando} className="eco-btn-primary">
-              <FileDown size={16} /> {gerando ? 'Gerando…' : 'Gerar PDF'}
+              <FileDown size={16} /> {gerando ? 'Gerando…' : baixarAmbos ? 'Gerar os 2 PDFs' : 'Gerar PDF'}
             </button>
           </div>
         </div>
