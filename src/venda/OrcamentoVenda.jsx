@@ -10,7 +10,7 @@ export default function OrcamentoVenda({ onAviso, onErro }) {
   const [carrinho, setCarrinho] = useState([]); // [{ nome, formato, quantidade, precoAVista, precoAPrazo }]
   const [clienteNome, setClienteNome] = useState('');
   const [observacao, setObservacao] = useState('');
-  const [baixarAmbos, setBaixarAmbos] = useState(false);
+  const [incluirAmbosPrecos, setIncluirAmbosPrecos] = useState(false);
   const [gerando, setGerando] = useState(false);
 
   const itensFiltrados = useMemo(() => {
@@ -70,27 +70,31 @@ export default function OrcamentoVenda({ onAviso, onErro }) {
     setObservacao('');
   }
 
-  const total = carrinho.reduce((acc, i) => acc + i.quantidade * precoAtual(i), 0);
+  const totalVista = carrinho.reduce((acc, i) => acc + i.quantidade * i.precoAVista, 0);
+  const totalPrazo = carrinho.reduce((acc, i) => acc + i.quantidade * i.precoAPrazo, 0);
+  const total = modoPagamento === 'vista' ? totalVista : totalPrazo;
 
   async function baixarPdf() {
     if (carrinho.length === 0) return;
     setGerando(true);
     try {
-      const modos = baixarAmbos ? ['vista', 'prazo'] : [modoPagamento];
-      for (const modo of modos) {
-        await gerarPdfOrcamentoVenda({
-          itens: carrinho.map((i) => ({
-            nome: i.nome,
-            formato: i.formato,
-            quantidade: i.quantidade,
-            precoUnit: modo === 'vista' ? i.precoAVista : i.precoAPrazo,
-          })),
-          modoPagamento: modo,
-          clienteNome,
-          observacao,
-        });
-      }
-      onAviso && onAviso(baixarAmbos ? 'Os dois orçamentos (à vista e a prazo) foram baixados.' : 'Orçamento em PDF baixado.');
+      // Sempre um PDF só por chamada: no iPhone/Safari, um segundo download
+      // disparado depois de um `await` (fora do toque original) é bloqueado
+      // silenciosamente. Quando o cliente quer as duas formas de pagamento,
+      // as duas aparecem lado a lado no mesmo documento (modo 'ambos').
+      await gerarPdfOrcamentoVenda({
+        itens: carrinho.map((i) => ({
+          nome: i.nome,
+          formato: i.formato,
+          quantidade: i.quantidade,
+          precoAVista: i.precoAVista,
+          precoAPrazo: i.precoAPrazo,
+        })),
+        modo: incluirAmbosPrecos ? 'ambos' : modoPagamento,
+        clienteNome,
+        observacao,
+      });
+      onAviso && onAviso('Orçamento em PDF baixado.');
     } catch (e) {
       onErro && onErro('Não foi possível gerar o PDF do orçamento.');
     } finally {
@@ -216,11 +220,11 @@ export default function OrcamentoVenda({ onAviso, onErro }) {
           <label className="flex items-center gap-2 text-sm text-stone-600 cursor-pointer">
             <input
               type="checkbox"
-              checked={baixarAmbos}
-              onChange={(e) => setBaixarAmbos(e.target.checked)}
+              checked={incluirAmbosPrecos}
+              onChange={(e) => setIncluirAmbosPrecos(e.target.checked)}
               className="w-4 h-4 rounded border-stone-300 text-green-700 focus:ring-green-500/40"
             />
-            Gerar os dois PDFs (à vista e a prazo) — útil quando o cliente pede pra comparar
+            Mostrar as duas formas de pagamento no PDF — útil quando o cliente pede pra comparar
           </label>
         </div>
       )}
@@ -229,12 +233,21 @@ export default function OrcamentoVenda({ onAviso, onErro }) {
       {carrinho.length > 0 && (
         <div className="fixed inset-x-0 bottom-28 sm:static sm:bottom-auto z-30 px-3 sm:px-0">
           <div className="eco-card max-w-5xl mx-auto sm:mx-0 p-3 flex items-center justify-between gap-3 shadow-elevated sm:shadow-soft">
-            <div>
-              <p className="text-xs text-stone-400">Total ({modoPagamento === 'vista' ? 'à vista' : 'a prazo'})</p>
-              <p className="text-lg font-bold text-green-800">{formatMoney(total)}</p>
-            </div>
+            {incluirAmbosPrecos ? (
+              <div>
+                <p className="text-xs text-stone-400">Total à vista / a prazo</p>
+                <p className="text-base font-bold text-green-800">
+                  {formatMoney(totalVista)} <span className="text-stone-300 font-normal mx-0.5">/</span> {formatMoney(totalPrazo)}
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-xs text-stone-400">Total ({modoPagamento === 'vista' ? 'à vista' : 'a prazo'})</p>
+                <p className="text-lg font-bold text-green-800">{formatMoney(total)}</p>
+              </div>
+            )}
             <button onClick={baixarPdf} disabled={gerando} className="eco-btn-primary">
-              <FileDown size={16} /> {gerando ? 'Gerando…' : baixarAmbos ? 'Gerar os 2 PDFs' : 'Gerar PDF'}
+              <FileDown size={16} /> {gerando ? 'Gerando…' : 'Gerar PDF'}
             </button>
           </div>
         </div>

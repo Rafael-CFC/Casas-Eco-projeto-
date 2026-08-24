@@ -1,7 +1,13 @@
 // Geração do PDF "Orçamento" que o funcionário monta pro cliente na tela de
 // venda de madeira. Mesmo estilo visual (cores/fontes) do Resumo Final da
-// Obra (ver src/obra/gerarPdfResumoObra.js), mas layout mais simples: só uma
-// tabela de itens + total.
+// Obra (ver src/obra/gerarPdfResumoObra.js).
+//
+// Importante: gera SEMPRE um único arquivo/download por chamada. Quando o
+// cliente pede as duas formas de pagamento, o modo 'ambos' mostra as duas
+// colunas de preço no mesmo PDF em vez de acionar dois downloads — no Safari
+// do iPhone, um segundo download disparado depois de um `await` (fora do
+// gesto de toque original) é bloqueado silenciosamente pelo navegador, então
+// "baixar dois arquivos de uma vez" não é confiável no celular.
 import { jsPDF } from 'jspdf';
 import { formatMoney, formatDateBR } from '../domain';
 
@@ -41,7 +47,9 @@ function quebrarPaginaSeNecessario(ctx, alturaNecessaria) {
   }
 }
 
-export async function gerarPdfOrcamentoVenda({ itens, modoPagamento, clienteNome, observacao }) {
+// itens: [{ nome, formato, quantidade, precoAVista, precoAPrazo }]
+// modo: 'vista' | 'prazo' | 'ambos'
+export async function gerarPdfOrcamentoVenda({ itens, modo, clienteNome, observacao }) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const larguraPagina = doc.internal.pageSize.getWidth();
   const largura = larguraPagina - MARGEM * 2;
@@ -69,11 +77,12 @@ export async function gerarPdfOrcamentoVenda({ itens, modoPagamento, clienteNome
   doc.line(ctx.x, ctx.y, ctx.x + largura, ctx.y);
   ctx.y += 22;
 
+  const rotuloModo = modo === 'ambos' ? 'À vista e a prazo' : modo === 'vista' ? 'À vista' : 'A prazo';
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
   doc.setTextColor(...COR.cinzaClaro);
   doc.text(`Data: ${formatDateBR(new Date().toISOString().slice(0, 10))}`, ctx.x, ctx.y);
-  doc.text(`Forma de pagamento: ${modoPagamento === 'vista' ? 'À vista' : 'A prazo'}`, ctx.x + largura, ctx.y, { align: 'right' });
+  doc.text(`Forma de pagamento: ${rotuloModo}`, ctx.x + largura, ctx.y, { align: 'right' });
   ctx.y += 16;
   if (clienteNome && clienteNome.trim()) {
     doc.setFont('helvetica', 'bold');
@@ -83,54 +92,99 @@ export async function gerarPdfOrcamentoVenda({ itens, modoPagamento, clienteNome
   }
   ctx.y += 10;
 
-  // ---- cabeçalho da tabela ----
+  // ---- colunas: offsets medidos a partir da borda direita da tabela ----
+  const col = modo === 'ambos'
+    ? { subPrazo: 0, valPrazo: 85, subVista: 165, valVista: 250, unid: 310, qtd: 345 }
+    : { subUnica: 0, valUnica: 80, unid: 160, qtd: 220 };
+  const larguraItem = largura - col.qtd - 12;
+
   function cabecalhoTabela() {
     doc.setFillColor(...COR.fundoVerde);
     doc.rect(ctx.x, ctx.y, largura, 22, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
+    doc.setFontSize(7.5);
     doc.setTextColor(...COR.verdeEscuro);
     doc.text('ITEM', ctx.x + 6, ctx.y + 14);
-    doc.text('QTD', ctx.x + largura - 220, ctx.y + 14, { align: 'right' });
-    doc.text('UNID.', ctx.x + largura - 160, ctx.y + 14, { align: 'right' });
-    doc.text('VALOR UNIT.', ctx.x + largura - 80, ctx.y + 14, { align: 'right' });
-    doc.text('SUBTOTAL', ctx.x + largura, ctx.y + 14, { align: 'right' });
+    doc.text('QTD', ctx.x + largura - col.qtd, ctx.y + 14, { align: 'right' });
+    doc.text('UNID.', ctx.x + largura - col.unid, ctx.y + 14, { align: 'right' });
+    if (modo === 'ambos') {
+      doc.text('VALOR', ctx.x + largura - col.valVista, ctx.y + 9, { align: 'right' });
+      doc.text('À VISTA', ctx.x + largura - col.valVista, ctx.y + 18, { align: 'right' });
+      doc.text('SUBTOT.', ctx.x + largura - col.subVista, ctx.y + 9, { align: 'right' });
+      doc.text('À VISTA', ctx.x + largura - col.subVista, ctx.y + 18, { align: 'right' });
+      doc.text('VALOR', ctx.x + largura - col.valPrazo, ctx.y + 9, { align: 'right' });
+      doc.text('A PRAZO', ctx.x + largura - col.valPrazo, ctx.y + 18, { align: 'right' });
+      doc.text('SUBTOT.', ctx.x + largura - col.subPrazo, ctx.y + 9, { align: 'right' });
+      doc.text('A PRAZO', ctx.x + largura - col.subPrazo, ctx.y + 18, { align: 'right' });
+    } else {
+      doc.setFontSize(9);
+      doc.text('VALOR UNIT.', ctx.x + largura - col.valUnica, ctx.y + 14, { align: 'right' });
+      doc.text('SUBTOTAL', ctx.x + largura - col.subUnica, ctx.y + 14, { align: 'right' });
+    }
     ctx.y += 30;
   }
   cabecalhoTabela();
 
-  let total = 0;
-  itens.forEach((item, i) => {
+  let totalVista = 0;
+  let totalPrazo = 0;
+  itens.forEach((item) => {
     quebrarPaginaSeNecessario(ctx, 18);
     if (ctx.y === MARGEM) cabecalhoTabela();
-    const subtotal = item.quantidade * item.precoUnit;
-    total += subtotal;
-    doc.setFont('helvetica', i % 2 === 0 ? 'normal' : 'normal');
-    doc.setFontSize(9.5);
+    const subVista = item.quantidade * item.precoAVista;
+    const subPrazo = item.quantidade * item.precoAPrazo;
+    totalVista += subVista;
+    totalPrazo += subPrazo;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
     doc.setTextColor(...COR.cinzaTexto);
-    doc.text(item.nome, ctx.x + 6, ctx.y, { maxWidth: largura - 280 });
-    doc.text(String(item.quantidade).replace('.', ','), ctx.x + largura - 220, ctx.y, { align: 'right' });
-    doc.text(item.formato, ctx.x + largura - 160, ctx.y, { align: 'right' });
-    doc.text(formatMoney(item.precoUnit), ctx.x + largura - 80, ctx.y, { align: 'right' });
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...COR.preto);
-    doc.text(formatMoney(subtotal), ctx.x + largura, ctx.y, { align: 'right' });
+    doc.text(item.nome, ctx.x + 6, ctx.y, { maxWidth: larguraItem });
+    doc.text(String(item.quantidade).replace('.', ','), ctx.x + largura - col.qtd, ctx.y, { align: 'right' });
+    doc.text(item.formato, ctx.x + largura - col.unid, ctx.y, { align: 'right' });
+
+    if (modo === 'ambos') {
+      doc.text(formatMoney(item.precoAVista), ctx.x + largura - col.valVista, ctx.y, { align: 'right' });
+      doc.text(formatMoney(item.precoAPrazo), ctx.x + largura - col.valPrazo, ctx.y, { align: 'right' });
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...COR.preto);
+      doc.text(formatMoney(subVista), ctx.x + largura - col.subVista, ctx.y, { align: 'right' });
+      doc.text(formatMoney(subPrazo), ctx.x + largura - col.subPrazo, ctx.y, { align: 'right' });
+    } else {
+      const precoUnit = modo === 'vista' ? item.precoAVista : item.precoAPrazo;
+      const subtotal = modo === 'vista' ? subVista : subPrazo;
+      doc.text(formatMoney(precoUnit), ctx.x + largura - col.valUnica, ctx.y, { align: 'right' });
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...COR.preto);
+      doc.text(formatMoney(subtotal), ctx.x + largura - col.subUnica, ctx.y, { align: 'right' });
+    }
     ctx.y += 17;
   });
 
   ctx.y += 6;
   doc.setDrawColor(...COR.linha);
   doc.setLineWidth(1);
-  quebrarPaginaSeNecessario(ctx, 40);
+  quebrarPaginaSeNecessario(ctx, 60);
   doc.line(ctx.x, ctx.y, ctx.x + largura, ctx.y);
   ctx.y += 20;
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.setTextColor(...COR.verdeEscuro);
-  doc.text('TOTAL', ctx.x, ctx.y);
-  doc.text(formatMoney(total), ctx.x + largura, ctx.y, { align: 'right' });
-  ctx.y += 28;
+  if (modo === 'ambos') {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(...COR.verdeEscuro);
+    doc.text('TOTAL À VISTA', ctx.x, ctx.y);
+    doc.text(formatMoney(totalVista), ctx.x + largura, ctx.y, { align: 'right' });
+    ctx.y += 20;
+    doc.text('TOTAL A PRAZO', ctx.x, ctx.y);
+    doc.text(formatMoney(totalPrazo), ctx.x + largura, ctx.y, { align: 'right' });
+    ctx.y += 28;
+  } else {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(...COR.verdeEscuro);
+    doc.text('TOTAL', ctx.x, ctx.y);
+    doc.text(formatMoney(modo === 'vista' ? totalVista : totalPrazo), ctx.x + largura, ctx.y, { align: 'right' });
+    ctx.y += 28;
+  }
 
   if (observacao && observacao.trim()) {
     quebrarPaginaSeNecessario(ctx, 30);
@@ -164,7 +218,7 @@ export async function gerarPdfOrcamentoVenda({ itens, modoPagamento, clienteNome
     doc.text(`página ${p} de ${totalPaginas}`, larguraPagina - MARGEM, RODAPE_Y, { align: 'right' });
   }
 
-  const sufixoModo = modoPagamento === 'vista' ? 'a vista' : 'a prazo';
+  const sufixoModo = modo === 'ambos' ? 'a vista e a prazo' : modo === 'vista' ? 'a vista' : 'a prazo';
   const nomeArquivo = clienteNome && clienteNome.trim()
     ? `Orcamento (${sufixoModo}) - ${clienteNome.trim()}.pdf`
     : `Orcamento (${sufixoModo}) - ${new Date().toISOString().slice(0, 10)}.pdf`;
