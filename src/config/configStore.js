@@ -7,21 +7,18 @@
 // as edições que a empresa fizer no modelo daqui pra frente.
 import { todayISO } from '../domain';
 import { BLOCOS_CONTRATO, BLOCOS_MEMORIAL, CONTRATADA_PADRAO } from '../contratos/modeloCasasEco';
+import { semMarcacao } from '../contratos/textoRico';
 
 export function configuracaoVazia() {
   return {
     contratada: { ...CONTRATADA_PADRAO },
     cidadeContrato: CONTRATADA_PADRAO.cidade,
-    modeloContrato: {
-      versao: 1,
-      blocos: BLOCOS_CONTRATO.map((b) => ({ chave: b.chave, texto: b.texto })),
-      atualizadoEm: todayISO(),
-    },
-    modeloMemorial: {
-      versao: 1,
-      blocos: BLOCOS_MEMORIAL.map((b) => ({ chave: b.chave, texto: b.texto })),
-      atualizadoEm: todayISO(),
-    },
+    // `blocos` guarda SÓ o que a empresa reescreveu. O que nunca foi
+    // mexido continua vindo do modelo — assim uma correção no modelo
+    // (ortografia, negrito, formatação) chega sozinha nos contratos novos,
+    // sem apagar nenhuma edição feita aqui.
+    modeloContrato: { versao: 1, blocos: [], atualizadoEm: todayISO() },
+    modeloMemorial: { versao: 1, blocos: [], atualizadoEm: todayISO() },
     atualizadoEm: todayISO(),
   };
 }
@@ -34,6 +31,24 @@ function mesclarBlocos(estrutura, salvos) {
     ...b,
     texto: porChave[b.chave] !== undefined ? porChave[b.chave] : b.texto,
   }));
+}
+
+// Descarta o que está salvo igualzinho ao modelo: é texto que ninguém
+// reescreveu de verdade (versões antigas do sistema gravavam o modelo
+// inteiro) e só serviria para congelar o documento numa versão velha.
+//
+// A comparação ignora as marcações de negrito (** **): se o que está
+// salvo só difere do modelo por causa delas, é texto não editado — a
+// formatação nova do modelo passa a valer.
+function apenasEdicoes(estrutura, salvos) {
+  const porChave = Object.fromEntries(estrutura.map((b) => [b.chave, b.texto]));
+  return (salvos || [])
+    .filter((b) => {
+      if (!b || !b.chave || porChave[b.chave] === undefined) return false;
+      if (porChave[b.chave] === b.texto) return false;
+      return semMarcacao(porChave[b.chave]) !== semMarcacao(b.texto);
+    })
+    .map((b) => ({ chave: b.chave, texto: b.texto }));
 }
 
 export function blocosContratoDaConfig(config) {
@@ -57,12 +72,12 @@ export function normalizarConfiguracao(bruta) {
     modeloContrato: {
       versao: bruta.modeloContrato?.versao || 1,
       atualizadoEm: bruta.modeloContrato?.atualizadoEm || base.modeloContrato.atualizadoEm,
-      blocos: mesclarBlocos(BLOCOS_CONTRATO, bruta.modeloContrato?.blocos).map((b) => ({ chave: b.chave, texto: b.texto })),
+      blocos: apenasEdicoes(BLOCOS_CONTRATO, bruta.modeloContrato?.blocos),
     },
     modeloMemorial: {
       versao: bruta.modeloMemorial?.versao || 1,
       atualizadoEm: bruta.modeloMemorial?.atualizadoEm || base.modeloMemorial.atualizadoEm,
-      blocos: mesclarBlocos(BLOCOS_MEMORIAL, bruta.modeloMemorial?.blocos).map((b) => ({ chave: b.chave, texto: b.texto })),
+      blocos: apenasEdicoes(BLOCOS_MEMORIAL, bruta.modeloMemorial?.blocos),
     },
   };
 }
