@@ -148,7 +148,7 @@ export function montarValoresMarcadores(contrato, config) {
     '{{VALOR_TOTAL}}': `R$${(Number(contrato.valorTotal) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     '{{VALOR_TOTAL_EXTENSO}}': valorPorExtenso(contrato.valorTotal),
     '{{DATA_CONTRATO_EXTENSO}}': dataPorExtenso(contrato.dataContrato),
-    '{{CIDADE_DATA}}': `${cidade},${dataPorExtenso(contrato.dataContrato)}`,
+    '{{CIDADE_DATA}}': `${cidade}, ${dataPorExtenso(contrato.dataContrato)}`,
   };
 }
 

@@ -53,8 +53,16 @@ function garantirEspaco(ctx, altura) {
   }
 }
 
-// Escreve texto com quebra de linha e de página, permitindo destacar em
-// negrito o começo de um parágrafo (ex.: "CLAUSULA PRIMEIRA:").
+// Rótulo que fica em negrito no começo do parágrafo. É fechado de
+// propósito (só o nome da cláusula/parágrafo até os dois pontos) — uma
+// regra mais solta engolia a frase inteira até um "agência:" no meio do
+// texto e o documento saía errado.
+const REGEX_ROTULO = /^((?:CL[ÁA]USULA\s+\w+|Par[áa]grafo\s+\w+(?:\s*[–—-]\s*[^:;]{0,45})?|Obs\.?|Observação)\s*[:;])/i;
+
+// Escreve texto com quebra de linha e de página, destacando em negrito o
+// rótulo inicial (ex.: "CLAUSULA PRIMEIRA:"). O texto é desenhado sempre a
+// partir da linha original, sem remontar espaços, para o documento sair
+// caractere por caractere igual ao modelo.
 function escreverParagrafo(ctx, texto, opcoes = {}) {
   const tamanho = opcoes.tamanho || TAMANHO_TEXTO;
   const recuo = opcoes.recuo || 0;
@@ -65,24 +73,37 @@ function escreverParagrafo(ctx, texto, opcoes = {}) {
   limparTexto(texto).split('\n').forEach((bloco) => {
     if (bloco.trim() === '') { ctx.y += ALTURA_LINHA * 0.5; return; }
 
-    // destaque em negrito até os dois pontos, quando o parágrafo começa
-    // com um rótulo de cláusula/parágrafo
-    const m = opcoes.semDestaque ? null : bloco.match(/^((?:CL[ÁA]USULA\s+\w+|Par[áa]grafo\s+\w+|Obs\.?:?|Observação:)[^:;]*[:;])\s*/i);
-    let prefixo = '';
-    let resto = bloco;
-    if (m) { prefixo = m[1]; resto = bloco.slice(m[0].length); }
+    const m = opcoes.semDestaque ? null : bloco.match(REGEX_ROTULO);
+    const prefixo = m ? m[1] : '';
+
+    // O negrito é mais largo que o normal: desconta essa diferença da
+    // largura na hora de quebrar as linhas, senão a primeira linha
+    // estouraria a margem direita.
+    let descontoBold = 0;
+    if (prefixo) {
+      ctx.doc.setFont('helvetica', 'bold');
+      const wBold = ctx.doc.getTextWidth(prefixo);
+      ctx.doc.setFont('helvetica', 'normal');
+      descontoBold = Math.max(0, wBold - ctx.doc.getTextWidth(prefixo));
+    }
 
     ctx.doc.setFont('helvetica', 'normal');
-    const linhas = ctx.doc.splitTextToSize(prefixo ? `${prefixo} ${resto}` : bloco, larguraUtil);
+    const linhas = ctx.doc.splitTextToSize(bloco, larguraUtil - descontoBold);
+
+    // Só destaca se o rótulo couber inteiro na primeira linha — do
+    // contrário o texto sairia duplicado.
+    const podeDestacar = !!prefixo && linhas.length > 0 && linhas[0].length >= prefixo.length;
 
     linhas.forEach((linha, i) => {
       garantirEspaco(ctx, ALTURA_LINHA);
-      if (i === 0 && prefixo) {
+      if (i === 0 && podeDestacar) {
+        const parteNegrito = linha.slice(0, prefixo.length);
+        const parteNormal = linha.slice(prefixo.length);
         ctx.doc.setFont('helvetica', 'bold');
-        ctx.doc.text(prefixo, ctx.x + recuo, ctx.y);
-        const larguraPrefixo = ctx.doc.getTextWidth(prefixo + ' ');
+        ctx.doc.text(parteNegrito, ctx.x + recuo, ctx.y);
+        const larguraNegrito = ctx.doc.getTextWidth(parteNegrito);
         ctx.doc.setFont('helvetica', 'normal');
-        ctx.doc.text(linha.slice(prefixo.length).trimStart(), ctx.x + recuo + larguraPrefixo, ctx.y);
+        if (parteNormal) ctx.doc.text(parteNormal, ctx.x + recuo + larguraNegrito, ctx.y);
       } else {
         ctx.doc.setFont('helvetica', opcoes.negrito ? 'bold' : 'normal');
         ctx.doc.text(linha, ctx.x + recuo, ctx.y);
