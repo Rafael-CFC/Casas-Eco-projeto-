@@ -1,20 +1,19 @@
 import React, { useState } from 'react';
-import { Building2, FileSignature, ClipboardList, Save, Info, ChevronDown } from 'lucide-react';
+import { Building2, FileSignature, ClipboardList, Save, Info, RotateCcw } from 'lucide-react';
 import {
-  MODELOS_OBRA, CATEGORIAS_MEMORIAL, MARCADORES_DISPONIVEIS,
-  memorialPadraoDoModelo, contratadaEstaPreenchida, modeloContratoEstaPreenchido,
+  MARCADORES_DISPONIVEIS, blocosContratoDaConfig, blocosMemorialDaConfig,
+  contratadaEstaPreenchida, configuracaoVazia,
 } from './configStore';
 
 const ABAS = [
   { key: 'contratada', label: 'Dados da empresa', icon: Building2 },
-  { key: 'contrato', label: 'Modelo de contrato', icon: FileSignature },
-  { key: 'memorial', label: 'Memorial padrão', icon: ClipboardList },
+  { key: 'contrato', label: 'Texto do contrato', icon: FileSignature },
+  { key: 'memorial', label: 'Texto do memorial', icon: ClipboardList },
 ];
 
 export default function Configuracoes({ config, onSalvarConfig, onAviso, onErro }) {
   const [aba, setAba] = useState('contratada');
   const [rascunho, setRascunho] = useState(config);
-  const [modeloMemorialAtivo, setModeloMemorialAtivo] = useState('mista');
   const [salvando, setSalvando] = useState(false);
   const [mostrarMarcadores, setMostrarMarcadores] = useState(false);
 
@@ -24,48 +23,41 @@ export default function Configuracoes({ config, onSalvarConfig, onAviso, onErro 
     setRascunho((r) => ({ ...r, contratada: { ...r.contratada, [campo]: valor } }));
   }
 
-  function setClausula(chave, texto) {
-    setRascunho((r) => ({
-      ...r,
-      modeloContrato: {
-        ...r.modeloContrato,
-        clausulas: r.modeloContrato.clausulas.map((c) => (c.chave === chave ? { ...c, texto } : c)),
-      },
-    }));
+  function setBloco(qualDoc, chave, texto) {
+    const campo = qualDoc === 'memorial' ? 'modeloMemorial' : 'modeloContrato';
+    setRascunho((r) => {
+      const blocos = r[campo].blocos.some((b) => b.chave === chave)
+        ? r[campo].blocos.map((b) => (b.chave === chave ? { ...b, texto } : b))
+        : [...r[campo].blocos, { chave, texto }];
+      return { ...r, [campo]: { ...r[campo], blocos } };
+    });
   }
 
-  function setMemorial(modeloKey, chave, texto) {
-    setRascunho((r) => {
-      const atuais = memorialPadraoDoModelo(r, modeloKey);
-      const novas = atuais.map((c) => (c.chave === chave ? { ...c, texto } : c));
-      return {
-        ...r,
-        modelosMemorial: { ...r.modelosMemorial, [modeloKey]: { categorias: novas } },
-      };
-    });
+  function restaurarBloco(qualDoc, chave) {
+    const padrao = configuracaoVazia();
+    const campo = qualDoc === 'memorial' ? 'modeloMemorial' : 'modeloContrato';
+    const textoPadrao = padrao[campo].blocos.find((b) => b.chave === chave)?.texto || '';
+    setBloco(qualDoc, chave, textoPadrao);
   }
 
   async function salvar() {
     setSalvando(true);
     try {
-      // A versão do modelo de contrato sobe sempre que o texto das cláusulas
-      // muda — assim cada contrato guarda em qual versão foi gerado.
-      // A versão de referência vem SEMPRE de `config` (o que está salvo), e
-      // não do rascunho local: senão um segundo salvamento seguido gravaria
-      // de volta a versão antiga que o rascunho ainda carregava.
-      const versaoAtual = config.modeloContrato.versao || 1;
-      const clausulasMudaram =
-        JSON.stringify(rascunho.modeloContrato.clausulas) !== JSON.stringify(config.modeloContrato.clausulas);
+      // A versão sobe quando o texto do modelo muda — cada contrato guarda
+      // em qual versão foi gerado. A referência vem sempre de `config`
+      // (o que está salvo), nunca do rascunho local.
+      const versaoC = config.modeloContrato.versao || 1;
+      const versaoM = config.modeloMemorial.versao || 1;
+      const mudouContrato = JSON.stringify(rascunho.modeloContrato.blocos) !== JSON.stringify(config.modeloContrato.blocos);
+      const mudouMemorial = JSON.stringify(rascunho.modeloMemorial.blocos) !== JSON.stringify(config.modeloMemorial.blocos);
       const paraSalvar = {
         ...rascunho,
-        modeloContrato: {
-          ...rascunho.modeloContrato,
-          versao: clausulasMudaram ? versaoAtual + 1 : versaoAtual,
-        },
+        modeloContrato: { ...rascunho.modeloContrato, versao: mudouContrato ? versaoC + 1 : versaoC },
+        modeloMemorial: { ...rascunho.modeloMemorial, versao: mudouMemorial ? versaoM + 1 : versaoM },
       };
       const ok = await onSalvarConfig(paraSalvar);
       if (ok) {
-        setRascunho(paraSalvar); // mantém o rascunho igual ao que foi salvo
+        setRascunho(paraSalvar);
         onAviso('Configurações salvas.');
       } else {
         onErro('Não foi possível salvar as configurações.');
@@ -77,38 +69,82 @@ export default function Configuracoes({ config, onSalvarConfig, onAviso, onErro 
     }
   }
 
-  const memorialAtual = memorialPadraoDoModelo(rascunho, modeloMemorialAtivo);
   const camposContratada = [
-    ['razaoSocial', 'Razão social *', 'CASAS ECO ...'],
-    ['cnpj', 'CNPJ *', '00.000.000/0001-00'],
-    ['endereco', 'Endereço', 'Rua, número, bairro'],
+    ['razaoSocial', 'Razão social *', ''],
+    ['cnpj', 'CNPJ *', ''],
+    ['endereco', 'Endereço', ''],
     ['cidade', 'Cidade', ''],
-    ['estado', 'Estado (UF)', 'SC'],
-    ['representante', 'Representante legal', 'Nome completo'],
-    ['cpfRepresentante', 'CPF do representante', '000.000.000-00'],
+    ['estado', 'Estado (UF)', ''],
+    ['representante', 'Representante (assina o contrato)', ''],
+    ['cpfRepresentante', 'CPF do representante', ''],
     ['telefone', 'Telefone', ''],
     ['email', 'E-mail', ''],
   ];
 
+  const blocosContrato = blocosContratoDaConfig(rascunho);
+  const blocosMemorial = blocosMemorialDaConfig(rascunho);
+  const padrao = configuracaoVazia();
+
+  function EditorBlocos({ qualDoc, blocos }) {
+    const campoPadrao = qualDoc === 'memorial' ? 'modeloMemorial' : 'modeloContrato';
+    return (
+      <div className="space-y-3">
+        {blocos.map((b) => {
+          const textoPadrao = padrao[campoPadrao].blocos.find((x) => x.chave === b.chave)?.texto || '';
+          const alterado = b.texto !== textoPadrao;
+          if (b.tabelaParcelas) {
+            return (
+              <div key={b.chave} className="eco-card p-4 bg-stone-50">
+                <p className="text-sm font-medium text-stone-600">{b.rotulo}</p>
+                <p className="text-xs text-stone-400 mt-1">
+                  Montada automaticamente a partir das parcelas de cada contrato — não precisa editar aqui.
+                </p>
+              </div>
+            );
+          }
+          return (
+            <div key={b.chave} className="eco-card p-4">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <label className="eco-label mb-0 flex items-center gap-1.5">
+                  {b.rotulo}
+                  {b.variavel && (
+                    <span className="eco-badge bg-blue-50 text-blue-700 border border-blue-200 text-[10px]">muda por obra</span>
+                  )}
+                  {alterado && (
+                    <span className="eco-badge bg-amber-50 text-amber-700 border border-amber-200 text-[10px]">editado</span>
+                  )}
+                </label>
+                {alterado && (
+                  <button
+                    onClick={() => restaurarBloco(qualDoc, b.chave)}
+                    className="text-[11px] text-stone-400 hover:text-green-700 flex items-center gap-1 flex-shrink-0"
+                  >
+                    <RotateCcw size={11} /> voltar ao original
+                  </button>
+                )}
+              </div>
+              <textarea
+                value={b.texto}
+                onChange={(e) => setBloco(qualDoc, b.chave, e.target.value)}
+                rows={Math.min(12, Math.max(2, Math.ceil(b.texto.length / 90)))}
+                className="eco-input text-xs"
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 pb-24 sm:pb-6">
-      {/* status de preenchimento */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className={`eco-card p-3 ${contratadaEstaPreenchida(rascunho) ? 'border-green-200' : 'border-amber-300 bg-amber-50/40'}`}>
-          <p className="text-xs text-stone-500">Dados da empresa</p>
-          <p className={`text-sm font-semibold ${contratadaEstaPreenchida(rascunho) ? 'text-green-700' : 'text-amber-700'}`}>
-            {contratadaEstaPreenchida(rascunho) ? 'Preenchidos' : 'Faltam razão social e CNPJ'}
-          </p>
-        </div>
-        <div className={`eco-card p-3 ${modeloContratoEstaPreenchido(rascunho) ? 'border-green-200' : 'border-amber-300 bg-amber-50/40'}`}>
-          <p className="text-xs text-stone-500">Modelo de contrato</p>
-          <p className={`text-sm font-semibold ${modeloContratoEstaPreenchido(rascunho) ? 'text-green-700' : 'text-amber-700'}`}>
-            {modeloContratoEstaPreenchido(rascunho) ? 'Cadastrado' : 'Cole o texto do seu contrato'}
-          </p>
-        </div>
+      <div className={`eco-card p-3 ${contratadaEstaPreenchida(rascunho) ? 'border-green-200' : 'border-amber-300 bg-amber-50/40'}`}>
+        <p className="text-xs text-stone-500">Dados da empresa</p>
+        <p className={`text-sm font-semibold ${contratadaEstaPreenchida(rascunho) ? 'text-green-700' : 'text-amber-700'}`}>
+          {contratadaEstaPreenchida(rascunho) ? 'Preenchidos' : 'Faltam razão social e CNPJ'}
+        </p>
       </div>
 
-      {/* abas */}
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {ABAS.map((a) => {
           const Icon = a.icon;
@@ -127,35 +163,32 @@ export default function Configuracoes({ config, onSalvarConfig, onAviso, onErro 
         })}
       </div>
 
-      {/* ---- ABA: dados da contratada ---- */}
       {aba === 'contratada' && (
         <div className="eco-card p-4 space-y-3">
           <div>
             <p className="text-sm font-semibold text-stone-700">Dados da CONTRATADA</p>
             <p className="text-xs text-stone-500 mt-0.5">
-              Preenchidos uma única vez. Aparecem automaticamente em todo contrato novo.
-              Se mudarem no futuro, contratos já gerados continuam com os dados antigos.
+              Aparecem automaticamente em todo contrato. Se mudarem no futuro, contratos já gerados continuam com os dados antigos.
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {camposContratada.map(([campo, label, placeholder]) => (
+            {camposContratada.map(([campo, label, ph]) => (
               <div key={campo} className={campo === 'razaoSocial' || campo === 'endereco' ? 'sm:col-span-2' : ''}>
                 <label className="eco-label">{label}</label>
                 <input
                   value={rascunho.contratada[campo] || ''}
                   onChange={(e) => setContratada(campo, e.target.value)}
-                  placeholder={placeholder}
+                  placeholder={ph}
                   className="eco-input"
                 />
               </div>
             ))}
             <div className="sm:col-span-2">
-              <label className="eco-label">Dados bancários (opcional)</label>
+              <label className="eco-label">Dados bancários</label>
               <textarea
                 value={rascunho.contratada.dadosBancarios || ''}
                 onChange={(e) => setContratada('dadosBancarios', e.target.value)}
                 rows={2}
-                placeholder="Banco, agência, conta, PIX…"
                 className="eco-input"
               />
             </div>
@@ -164,7 +197,6 @@ export default function Configuracoes({ config, onSalvarConfig, onAviso, onErro 
               <input
                 value={rascunho.cidadeContrato || ''}
                 onChange={(e) => setRascunho((r) => ({ ...r, cidadeContrato: e.target.value }))}
-                placeholder="Cidade que aparece antes da data, no fim do contrato"
                 className="eco-input"
               />
             </div>
@@ -172,103 +204,44 @@ export default function Configuracoes({ config, onSalvarConfig, onAviso, onErro 
         </div>
       )}
 
-      {/* ---- ABA: modelo de contrato ---- */}
-      {aba === 'contrato' && (
-        <div className="space-y-3">
+      {(aba === 'contrato' || aba === 'memorial') && (
+        <>
           <div className="eco-card p-4 border-blue-200 bg-blue-50/40">
             <div className="flex items-start gap-2.5">
               <Info size={18} className="text-blue-600 flex-shrink-0 mt-0.5" />
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-blue-900">Cole aqui o texto do contrato que a Casas Eco já usa</p>
-                <p className="text-xs text-blue-800/80 mt-1">
-                  O sistema não inventa texto jurídico. Cole o texto de cada cláusula do seu modelo atual —
-                  isso é feito <strong>uma única vez</strong>. Depois, todo contrato novo já nasce com essas
-                  cláusulas prontas, e só o que é específico do cliente e da obra muda.
+                <p className="text-sm font-semibold text-blue-900">
+                  Este é o texto que sai no PDF — já preenchido com o modelo da Casas Eco
                 </p>
-                <button
-                  onClick={() => setMostrarMarcadores((v) => !v)}
-                  className="text-xs text-blue-700 underline mt-2 inline-flex items-center gap-1"
-                >
-                  Ver campos automáticos disponíveis
-                  <ChevronDown size={12} className={`transition-transform ${mostrarMarcadores ? 'rotate-180' : ''}`} />
+                <p className="text-xs text-blue-800/80 mt-1">
+                  Os blocos marcados como <strong>"muda por obra"</strong> têm campos que são preenchidos na hora de
+                  criar cada contrato. O resto sai igual em todos. Só mexa aqui se o modelo da empresa mudar de vez —
+                  para ajustar só um contrato, edite direto na tela dele.
+                </p>
+                <button onClick={() => setMostrarMarcadores((v) => !v)} className="text-xs text-blue-700 underline mt-2">
+                  {mostrarMarcadores ? 'Esconder' : 'Ver'} os campos automáticos
                 </button>
                 {mostrarMarcadores && (
-                  <div className="mt-2 bg-white border border-blue-200 rounded-lg p-2.5 max-h-56 overflow-y-auto">
-                    <p className="text-xs text-stone-500 mb-2">
-                      Escreva estes códigos dentro do texto e o sistema troca pelo dado real na hora de gerar:
-                    </p>
-                    <div className="space-y-1">
-                      {MARCADORES_DISPONIVEIS.map((m) => (
-                        <div key={m.chave} className="flex justify-between gap-2 text-xs">
-                          <code className="text-green-800 font-mono">{m.chave}</code>
-                          <span className="text-stone-400 text-right">{m.descricao}</span>
-                        </div>
-                      ))}
-                    </div>
+                  <div className="mt-2 bg-white border border-blue-200 rounded-lg p-2.5 max-h-52 overflow-y-auto space-y-1">
+                    {MARCADORES_DISPONIVEIS.map((m) => (
+                      <div key={m.chave} className="flex justify-between gap-2 text-xs">
+                        <code className="text-green-800 font-mono">{m.chave}</code>
+                        <span className="text-stone-400 text-right">{m.descricao}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
             </div>
           </div>
-
-          {rascunho.modeloContrato.clausulas.map((c, i) => (
-            <div key={c.chave} className="eco-card p-4">
-              <label className="eco-label">
-                Cláusula {i + 1} — {c.titulo}
-              </label>
-              <textarea
-                value={c.texto}
-                onChange={(e) => setClausula(c.chave, e.target.value)}
-                rows={4}
-                placeholder="Cole aqui o texto desta cláusula do contrato da Casas Eco…"
-                className="eco-input font-mono text-xs"
-              />
-            </div>
-          ))}
-        </div>
+          <EditorBlocos qualDoc={aba} blocos={aba === 'memorial' ? blocosMemorial : blocosContrato} />
+        </>
       )}
 
-      {/* ---- ABA: memorial padrão ---- */}
-      {aba === 'memorial' && (
-        <div className="space-y-3">
-          <div className="eco-card p-4">
-            <label className="eco-label">Modelo de obra</label>
-            <select
-              value={modeloMemorialAtivo}
-              onChange={(e) => setModeloMemorialAtivo(e.target.value)}
-              className="eco-input"
-            >
-              {MODELOS_OBRA.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-            </select>
-            <p className="text-xs text-stone-500 mt-2">
-              Cada modelo de obra tem o seu próprio memorial padrão. Ao criar um contrato desse modelo,
-              o memorial já vem preenchido e você ajusta só o que for específico daquela obra.
-            </p>
-          </div>
-
-          {CATEGORIAS_MEMORIAL.map((cat) => {
-            const item = memorialAtual.find((m) => m.chave === cat.chave) || { texto: '' };
-            return (
-              <div key={cat.chave} className="eco-card p-4">
-                <label className="eco-label">{cat.titulo}</label>
-                <textarea
-                  value={item.texto}
-                  onChange={(e) => setMemorial(modeloMemorialAtivo, cat.chave, e.target.value)}
-                  rows={3}
-                  placeholder={`Descrição padrão de ${cat.titulo.toLowerCase()}…`}
-                  className="eco-input text-xs"
-                />
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* barra de salvar */}
       {sujo && (
         <div className="fixed inset-x-0 bottom-16 sm:bottom-0 z-30 px-3 sm:px-0 sm:static">
           <div className="eco-card max-w-5xl mx-auto sm:mx-0 p-3 flex items-center justify-between gap-3 shadow-elevated sm:shadow-soft border-green-200">
-            <p className="text-sm text-stone-600">Você tem alterações não salvas.</p>
+            <p className="text-sm text-stone-600">Alterações não salvas.</p>
             <div className="flex gap-2 flex-shrink-0">
               <button onClick={() => setRascunho(config)} className="eco-btn-secondary eco-btn-sm">Descartar</button>
               <button onClick={salvar} disabled={salvando} className="eco-btn-primary eco-btn-sm">

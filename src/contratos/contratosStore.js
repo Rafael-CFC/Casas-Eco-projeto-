@@ -1,13 +1,13 @@
 // Regras do módulo de Contratos (funções puras, sem React e sem rede).
 //
-// Decisão importante de arquitetura: quando um contrato é GERADO, os dados
-// da contratada, o texto das cláusulas e o memorial são "congelados" dentro
-// do próprio registro do contrato (snapshots). Assim, se o modelo for
-// alterado depois em Configurações, contratos antigos continuam exatamente
-// como foram gerados — o documento vira histórico, não muda sozinho.
+// Decisão importante: quando um contrato é GERADO, o texto dos blocos e os
+// dados da contratada são "congelados" dentro do próprio registro. Assim,
+// se o modelo for alterado depois em Configurações, contratos antigos
+// continuam exatamente como foram emitidos.
 import { todayISO, formatMoney, formatDateBR } from '../domain';
 import { valorPorExtenso } from './numeroPorExtenso';
-import { aplicarMarcadores, memorialPadraoDoModelo, CATEGORIAS_MEMORIAL } from '../config/configStore';
+import { aplicarMarcadores, blocosContratoDaConfig, blocosMemorialDaConfig } from '../config/configStore';
+import { ETAPAS_PARCELAS } from './modeloCasasEco';
 
 export const STATUS_CONTRATO = {
   rascunho: { label: 'RASCUNHO', cls: 'bg-stone-100 text-stone-600 border-stone-200' },
@@ -16,62 +16,61 @@ export const STATUS_CONTRATO = {
   cancelado: { label: 'CANCELADO', cls: 'bg-red-50 text-red-600 border-red-200' },
 };
 
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+export function dataPorExtenso(iso) {
+  if (!iso) return '';
+  const [ano, mes, dia] = iso.split('-');
+  return `${Number(dia)} de ${MESES[Number(mes) - 1]} de ${ano}`;
+}
+
 export function clienteVazio() {
   return { nome: '', cpfCnpj: '', endereco: '', cidade: '', estado: '', telefone: '', email: '' };
 }
 
-export function dadosObraVazios() {
-  return {
-    nome: '', endereco: '', cidade: '', estado: '',
-    area: '', varanda: '', deck: '', pavimentos: '',
-    dataInicio: '', prazo: '', observacoes: '',
-  };
+export function novaParcela(ordem, etapa = '', valor = 0) {
+  return { id: crypto.randomUUID(), ordem, etapa, valor: Number(valor) || 0, vencimento: '', status: 'pendente', dataPagamento: null, observacao: '' };
 }
 
-export function novoContratoRascunho(config, modeloObra = 'mista') {
+// Contrato novo já nasce com as 7 etapas de pagamento que a empresa usa.
+export function novoContratoRascunho(config) {
+  const hoje = todayISO();
   return {
     id: crypto.randomUUID(),
-    numero: null, // só recebe número quando é gerado
+    numero: null,
     status: 'rascunho',
-    modeloObra,
     cliente: clienteVazio(),
     obraId: null,
-    obra: dadosObraVazios(),
+    // campos que mudam de obra para obra
+    descricaoObra: '',
+    inicioObra: '',
+    prazoEntrega: '60',
     valorTotal: 0,
-    parcelas: [],
-    memorial: memorialPadraoDoModelo(config, modeloObra),
-    contratadaSnapshot: null,
-    clausulasSnapshot: null,
-    versaoModelo: null,
+    dataContrato: hoje,
     cidadeContrato: config?.cidadeContrato || '',
-    criadoEm: todayISO(),
-    atualizadoEm: todayISO(),
+    parcelas: ETAPAS_PARCELAS.map((e, i) => novaParcela(i + 1, e)),
+    // edições feitas só neste contrato (sobrescrevem o modelo)
+    blocosContrato: [],
+    blocosMemorial: [],
+    // congelados ao gerar
+    contratadaSnapshot: null,
+    blocosContratoSnapshot: null,
+    blocosMemorialSnapshot: null,
+    versaoModelo: null,
+    criadoEm: hoje,
+    atualizadoEm: hoje,
     geradoEm: null,
   };
 }
 
-// Numeração sequencial por ano: 2026/001, 2026/002...
 export function proximoNumeroContrato(contratos, hojeISO = todayISO()) {
   const ano = hojeISO.slice(0, 4);
-  const doAno = contratos.filter((c) => c.numero && c.numero.startsWith(`${ano}/`));
+  const doAno = contratos.filter((c) => c.numero && String(c.numero).startsWith(`${ano}/`));
   const maior = doAno.reduce((max, c) => {
     const n = parseInt(String(c.numero).split('/')[1], 10);
     return isNaN(n) ? max : Math.max(max, n);
   }, 0);
   return `${ano}/${String(maior + 1).padStart(3, '0')}`;
-}
-
-export function novaParcela(ordem, etapa = '', valor = 0) {
-  return {
-    id: crypto.randomUUID(),
-    ordem,
-    etapa,
-    valor: Number(valor) || 0,
-    vencimento: '',
-    status: 'pendente', // 'pendente' | 'pago'
-    dataPagamento: null,
-    observacao: '',
-  };
 }
 
 export function reordenarParcelas(parcelas) {
@@ -90,15 +89,11 @@ export function totalParcelas(parcelas) {
   return (parcelas || []).reduce((a, p) => a + (Number(p.valor) || 0), 0);
 }
 
-// Diferença entre o valor do contrato e a soma das parcelas.
-// Positivo = falta distribuir; negativo = parcelas passaram do valor.
 export function diferencaParcelas(valorTotal, parcelas) {
   const diff = (Number(valorTotal) || 0) - totalParcelas(parcelas);
   return Math.abs(diff) < 0.005 ? 0 : Math.round(diff * 100) / 100;
 }
 
-// Distribui o valor total igualmente entre as parcelas existentes, jogando
-// a sobra dos centavos na última — evita o clássico "faltou R$ 0,01".
 export function distribuirValorIgualmente(valorTotal, parcelas) {
   const n = parcelas.length;
   if (n === 0) return parcelas;
@@ -110,111 +105,83 @@ export function distribuirValorIgualmente(valorTotal, parcelas) {
   }));
 }
 
-// Lista de problemas que impedem (ou merecem atenção antes de) gerar o
-// documento. Nada é gerado silenciosamente com dado divergente.
 export function validarContrato(contrato, config) {
   const problemas = [];
   const bloqueios = [];
 
   if (!contrato.cliente.nome.trim()) bloqueios.push('Informe o nome do cliente.');
-  if (!contrato.obra.nome.trim()) bloqueios.push('Informe o nome da obra.');
   if (!(Number(contrato.valorTotal) > 0)) bloqueios.push('Informe o valor total do contrato.');
+  if (!config?.contratada?.razaoSocial?.trim()) bloqueios.push('Preencha os dados da empresa em Configurações.');
 
-  if (!config?.contratada?.razaoSocial?.trim()) {
-    bloqueios.push('Preencha os dados da CONTRATADA em Configurações antes de gerar contratos.');
-  }
+  if (!contrato.descricaoObra.trim()) problemas.push('A descrição da casa (cláusula primeira) está vazia.');
+  if (!contrato.cliente.cpfCnpj.trim()) problemas.push('O CPF do cliente não foi informado.');
+  if (!contrato.cliente.endereco.trim()) problemas.push('O endereço do cliente não foi informado.');
 
-  const semTextoClausulas = !(config?.modeloContrato?.clausulas || []).some((c) => c.texto.trim());
-  if (semTextoClausulas) {
-    problemas.push('O modelo de contrato está sem texto nas cláusulas. Cole o texto do contrato da Casas Eco em Configurações → Modelo de contrato (você faz isso uma única vez).');
-  }
-
-  if (contrato.parcelas.length === 0) {
-    problemas.push('Nenhuma parcela cadastrada — o contrato sairá sem tabela de pagamento.');
-  } else {
-    const diff = diferencaParcelas(contrato.valorTotal, contrato.parcelas);
-    if (diff !== 0) {
-      problemas.push(
-        diff > 0
-          ? `A soma das parcelas está ${formatMoney(diff)} ABAIXO do valor do contrato.`
-          : `A soma das parcelas está ${formatMoney(Math.abs(diff))} ACIMA do valor do contrato.`
-      );
-    }
-  }
-
-  const memorialVazio = !(contrato.memorial || []).some((m) => m.texto.trim());
-  if (memorialVazio) {
-    problemas.push('O memorial descritivo está vazio. Preencha em Configurações → Memorial padrão para já vir pronto nos próximos contratos.');
+  const diff = diferencaParcelas(contrato.valorTotal, contrato.parcelas);
+  if (diff !== 0) {
+    problemas.push(
+      diff > 0
+        ? `A soma das parcelas está ${formatMoney(diff)} ABAIXO do valor do contrato.`
+        : `A soma das parcelas está ${formatMoney(Math.abs(diff))} ACIMA do valor do contrato.`
+    );
   }
 
   return { problemas, bloqueios, podeGerar: bloqueios.length === 0 };
 }
 
-// Monta o dicionário de marcadores {{...}} com os dados reais do contrato.
+// Dicionário de marcadores {{...}} com os dados reais do contrato.
 export function montarValoresMarcadores(contrato, config) {
   const contratada = contrato.contratadaSnapshot || config?.contratada || {};
-  const tabela = (contrato.parcelas || [])
-    .map((p) => `${p.ordem}. ${p.etapa || 'Parcela'} — ${formatMoney(p.valor)}${p.vencimento ? ` (venc. ${formatDateBR(p.vencimento)})` : ''}`)
-    .join('\n');
-
+  const cidade = contrato.cidadeContrato || config?.cidadeContrato || contratada.cidade || '';
   return {
     '{{CONTRATADA_RAZAO_SOCIAL}}': contratada.razaoSocial,
     '{{CONTRATADA_CNPJ}}': contratada.cnpj,
     '{{CONTRATADA_ENDERECO}}': contratada.endereco,
     '{{CONTRATADA_REPRESENTANTE}}': contratada.representante,
     '{{CONTRATADA_CPF}}': contratada.cpfRepresentante,
-    '{{CONTRATADA_TELEFONE}}': contratada.telefone,
-    '{{CONTRATADA_EMAIL}}': contratada.email,
-    '{{CONTRATADA_DADOS_BANCARIOS}}': contratada.dadosBancarios,
     '{{CLIENTE_NOME}}': contrato.cliente.nome,
-    '{{CLIENTE_CPF_CNPJ}}': contrato.cliente.cpfCnpj,
+    '{{CLIENTE_CPF}}': contrato.cliente.cpfCnpj,
     '{{CLIENTE_ENDERECO}}': contrato.cliente.endereco,
-    '{{CLIENTE_CIDADE}}': contrato.cliente.cidade,
-    '{{CLIENTE_ESTADO}}': contrato.cliente.estado,
-    '{{CLIENTE_TELEFONE}}': contrato.cliente.telefone,
-    '{{OBRA_NOME}}': contrato.obra.nome,
-    '{{OBRA_ENDERECO}}': contrato.obra.endereco,
-    '{{OBRA_CIDADE}}': contrato.obra.cidade,
-    '{{OBRA_ESTADO}}': contrato.obra.estado,
-    '{{OBRA_AREA}}': contrato.obra.area,
-    '{{OBRA_VARANDA}}': contrato.obra.varanda,
-    '{{OBRA_DECK}}': contrato.obra.deck,
-    '{{OBRA_PAVIMENTOS}}': contrato.obra.pavimentos,
-    '{{OBRA_DATA_INICIO}}': contrato.obra.dataInicio ? formatDateBR(contrato.obra.dataInicio) : '',
-    '{{OBRA_PRAZO}}': contrato.obra.prazo,
-    '{{VALOR_TOTAL}}': formatMoney(contrato.valorTotal),
+    '{{DESCRICAO_OBRA}}': contrato.descricaoObra,
+    '{{INICIO_OBRA}}': contrato.inicioObra,
+    '{{PRAZO_ENTREGA}}': contrato.prazoEntrega,
+    '{{VALOR_TOTAL}}': `R$${(Number(contrato.valorTotal) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     '{{VALOR_TOTAL_EXTENSO}}': valorPorExtenso(contrato.valorTotal),
-    '{{NUMERO_PARCELAS}}': String((contrato.parcelas || []).length),
-    '{{TABELA_PARCELAS}}': tabela,
-    '{{DATA_HOJE}}': formatDateBR(todayISO()),
-    '{{CIDADE_CONTRATO}}': contrato.cidadeContrato || contratada.cidade,
+    '{{DATA_CONTRATO_EXTENSO}}': dataPorExtenso(contrato.dataContrato),
+    '{{CIDADE_DATA}}': `${cidade},${dataPorExtenso(contrato.dataContrato)}`,
   };
 }
 
-// Devolve as cláusulas com os marcadores já substituídos, prontas para o PDF.
-export function clausulasResolvidas(contrato, config) {
-  const clausulas = contrato.clausulasSnapshot || config?.modeloContrato?.clausulas || [];
-  const valores = montarValoresMarcadores(contrato, config);
-  return clausulas
-    .filter((c) => c.texto && c.texto.trim())
-    .map((c) => ({ ...c, texto: aplicarMarcadores(c.texto, valores) }));
+// Blocos prontos para exibição/PDF: estrutura do modelo + edições do
+// contrato + marcadores substituídos.
+function resolverBlocos(blocosBase, edicoes, valores) {
+  const porChave = Object.fromEntries((edicoes || []).map((b) => [b.chave, b.texto]));
+  return blocosBase.map((b) => {
+    const texto = porChave[b.chave] !== undefined ? porChave[b.chave] : b.texto;
+    return { ...b, texto: aplicarMarcadores(texto, valores) };
+  });
 }
 
-export function memorialResolvido(contrato, config) {
+export function blocosContratoResolvidos(contrato, config) {
   const valores = montarValoresMarcadores(contrato, config);
-  return (contrato.memorial || CATEGORIAS_MEMORIAL.map((c) => ({ ...c, texto: '' })))
-    .filter((m) => m.texto && m.texto.trim())
-    .map((m) => ({ ...m, texto: aplicarMarcadores(m.texto, valores) }));
+  const base = contrato.blocosContratoSnapshot || blocosContratoDaConfig(config);
+  return resolverBlocos(base, contrato.blocosContrato, valores);
 }
 
-// Congela o contrato no momento da geração (ver comentário no topo).
+export function blocosMemorialResolvidos(contrato, config) {
+  const valores = montarValoresMarcadores(contrato, config);
+  const base = contrato.blocosMemorialSnapshot || blocosMemorialDaConfig(config);
+  return resolverBlocos(base, contrato.blocosMemorial, valores);
+}
+
 export function congelarContrato(contrato, config, contratos) {
   return {
     ...contrato,
     numero: contrato.numero || proximoNumeroContrato(contratos),
     status: contrato.status === 'rascunho' ? 'gerado' : contrato.status,
     contratadaSnapshot: contrato.contratadaSnapshot || { ...config.contratada },
-    clausulasSnapshot: contrato.clausulasSnapshot || (config.modeloContrato?.clausulas || []).map((c) => ({ ...c })),
+    blocosContratoSnapshot: contrato.blocosContratoSnapshot || blocosContratoDaConfig(config),
+    blocosMemorialSnapshot: contrato.blocosMemorialSnapshot || blocosMemorialDaConfig(config),
     versaoModelo: contrato.versaoModelo || config.modeloContrato?.versao || 1,
     cidadeContrato: contrato.cidadeContrato || config.cidadeContrato || config.contratada?.cidade || '',
     geradoEm: contrato.geradoEm || todayISO(),
@@ -222,9 +189,8 @@ export function congelarContrato(contrato, config, contratos) {
   };
 }
 
-// Duplicar: mantém a estrutura (parcelas, memorial, modelo) e limpa o que é
-// específico do cliente anterior, para virar a base de um contrato novo.
 export function duplicarContrato(contrato) {
+  const hoje = todayISO();
   return {
     ...contrato,
     id: crypto.randomUUID(),
@@ -232,29 +198,24 @@ export function duplicarContrato(contrato) {
     status: 'rascunho',
     cliente: clienteVazio(),
     obraId: null,
-    obra: { ...contrato.obra, nome: '', endereco: '' },
+    dataContrato: hoje,
     parcelas: (contrato.parcelas || []).map((p) => ({
-      ...p,
-      id: crypto.randomUUID(),
-      vencimento: '',
-      status: 'pendente',
-      dataPagamento: null,
-      observacao: '',
+      ...p, id: crypto.randomUUID(), vencimento: '', status: 'pendente', dataPagamento: null, observacao: '',
     })),
-    // snapshots são zerados de propósito: o contrato novo usa o modelo ATUAL
+    // volta a usar o modelo ATUAL
     contratadaSnapshot: null,
-    clausulasSnapshot: null,
+    blocosContratoSnapshot: null,
+    blocosMemorialSnapshot: null,
     versaoModelo: null,
-    criadoEm: todayISO(),
-    atualizadoEm: todayISO(),
+    criadoEm: hoje,
+    atualizadoEm: hoje,
     geradoEm: null,
   };
 }
 
 // ---- parcelas como cronograma financeiro (valores A RECEBER do cliente) ----
-// Atenção: parcelas de contrato são RECEITA (dinheiro que entra), enquanto
-// lançamentos/contas/boletos são CUSTO (dinheiro que sai). Por isso elas
-// nunca são somadas ao custo da obra — aparecem sempre em bloco próprio.
+// Parcelas de contrato são RECEITA (dinheiro que entra); lançamentos,
+// contas e boletos são CUSTO. Por isso nunca são somadas ao custo da obra.
 export function resumoParcelas(parcelas, hojeISO = todayISO()) {
   const lista = parcelas || [];
   const recebido = lista.filter((p) => p.status === 'pago').reduce((a, p) => a + (Number(p.valor) || 0), 0);

@@ -648,14 +648,14 @@ function CustoObraApp() {
 
     // obra: ao GERAR um contrato sem obra vinculada, cria a obra já com
     // cliente, endereço e orçamento vindos do próprio contrato.
-    if (contrato.status !== 'rascunho' && !contrato.obraId && (contrato.obra?.nome || '').trim()) {
+    if (contrato.status !== 'rascunho' && !contrato.obraId && nomeCliente) {
       const novaObra = {
         id: crypto.randomUUID(),
-        nome: contrato.obra.nome.trim(),
-        criadoEm: contrato.obra.dataInicio || todayISO(),
+        nome: `CASA ${nomeCliente}`.toUpperCase(),
+        criadoEm: contrato.dataContrato || todayISO(),
         orcamento: Number(contrato.valorTotal) || null,
-        cliente: nomeCliente || null,
-        endereco: contrato.obra.endereco || null,
+        cliente: nomeCliente,
+        endereco: contrato.cliente.endereco || null,
         status: 'em_andamento',
       };
       const okObra = await salvarObras([...obras, novaObra]);
@@ -802,7 +802,7 @@ function CustoObraApp() {
       const r = resumoParcelas(c.parcelas);
       linhas.push([
         c.numero || '(rascunho)', c.status, c.cliente?.nome || '', c.cliente?.cpfCnpj || '',
-        c.obra?.nome || '', c.valorTotal, (c.parcelas || []).length, r.recebido, r.aReceber,
+        (obras.find((ob) => ob.id === c.obraId) || {}).nome || '', c.valorTotal, (c.parcelas || []).length, r.recebido, r.aReceber,
         c.geradoEm ? formatDateBR(c.geradoEm) : '',
       ]);
     });
@@ -814,7 +814,7 @@ function CustoObraApp() {
     contratos.forEach((c) => {
       (c.parcelas || []).forEach((p) => {
         linhas.push([
-          c.numero || '(rascunho)', c.cliente?.nome || '', c.obra?.nome || '',
+          c.numero || '(rascunho)', c.cliente?.nome || '', (obras.find((ob) => ob.id === c.obraId) || {}).nome || '',
           p.ordem, p.etapa || '', p.valor, p.vencimento ? formatDateBR(p.vencimento) : '',
           p.status === 'pago' ? 'Recebida' : 'A receber',
           p.dataPagamento ? formatDateBR(p.dataPagamento) : '',
