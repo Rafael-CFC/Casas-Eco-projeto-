@@ -25,10 +25,10 @@ import { totalBoletosPorObra } from './boletos/boletosCalc';
 import Contratos from './contratos/Contratos';
 import Configuracoes from './config/Configuracoes';
 import { normalizarConfiguracao, configuracaoVazia } from './config/configStore';
-import { resumoParcelasDaObra } from './contratos/contratosStore';
+import { resumoParcelasDaObra, resumoParcelas } from './contratos/contratosStore';
 import Materiais from './analise/Materiais';
 import BuscaGlobal from './analise/BuscaGlobal';
-import { resumoDoMes } from './analise/analiseCalc';
+import { resumoDoMes, rankingMateriais, estatisticasMaterial } from './analise/analiseCalc';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -689,24 +689,35 @@ function CustoObraApp() {
   const [fnNome, setFnNome] = useState('');
   const [fnTelefone, setFnTelefone] = useState('');
   const [fnCategoria, setFnCategoria] = useState('');
+  const [fnCnpj, setFnCnpj] = useState('');
+  const [fnEmail, setFnEmail] = useState('');
+  const [fnCidade, setFnCidade] = useState('');
+
+  function limparFormFornecedor() {
+    setFnNome(''); setFnTelefone(''); setFnCategoria('');
+    setFnCnpj(''); setFnEmail(''); setFnCidade('');
+  }
 
   async function cadastrarFornecedor() {
     setErro('');
     const nome = fnNome.trim();
     if (!nome) { setErro('Informe o nome do fornecedor.'); return; }
+    const campos = {
+      telefone: fnTelefone.trim(), categoria: fnCategoria.trim(),
+      cnpj: fnCnpj.trim(), email: fnEmail.trim(), cidade: fnCidade.trim(),
+    };
     const existente = fornecedores.find((f) => f.nome.toLowerCase() === nome.toLowerCase());
     let ok;
     if (existente) {
-      ok = await atualizarFornecedor(existente.id, { telefone: fnTelefone.trim(), categoria: fnCategoria.trim() });
+      ok = await atualizarFornecedor(existente.id, campos);
       if (ok) setAviso(`"${nome}" atualizado.`);
     } else {
       ok = await salvarFornecedores([...fornecedores, {
-        id: crypto.randomUUID(), nome, telefone: fnTelefone.trim(), categoria: fnCategoria.trim(),
-        observacoes: '', criadoEm: todayISO(),
+        id: crypto.randomUUID(), nome, ...campos, observacoes: '', criadoEm: todayISO(),
       }]);
       if (ok) setAviso(`"${nome}" cadastrado.`);
     }
-    if (ok) { setFnNome(''); setFnTelefone(''); setFnCategoria(''); }
+    if (ok) limparFormFornecedor();
   }
 
   // ---- formulário: nova conta a pagar ----
@@ -783,6 +794,46 @@ function CustoObraApp() {
       linhas.push([c.descricao, c.valor, formatDateBR(c.vencimento), c.status === 'pago' ? 'Paga' : 'Pendente', o ? o.nome : '', c.fornecedorNome || '']);
     });
     baixarCSV('contas-a-pagar.csv', linhas);
+  }
+
+  function exportarContratosCSV() {
+    const linhas = [['Número', 'Status', 'Cliente', 'CPF/CNPJ', 'Obra', 'Valor', 'Parcelas', 'Recebido', 'A receber', 'Gerado em']];
+    contratos.forEach((c) => {
+      const r = resumoParcelas(c.parcelas);
+      linhas.push([
+        c.numero || '(rascunho)', c.status, c.cliente?.nome || '', c.cliente?.cpfCnpj || '',
+        c.obra?.nome || '', c.valorTotal, (c.parcelas || []).length, r.recebido, r.aReceber,
+        c.geradoEm ? formatDateBR(c.geradoEm) : '',
+      ]);
+    });
+    baixarCSV('contratos.csv', linhas);
+  }
+
+  function exportarParcelasCSV() {
+    const linhas = [['Contrato', 'Cliente', 'Obra', 'Parcela', 'Etapa', 'Valor', 'Vencimento', 'Status', 'Recebido em']];
+    contratos.forEach((c) => {
+      (c.parcelas || []).forEach((p) => {
+        linhas.push([
+          c.numero || '(rascunho)', c.cliente?.nome || '', c.obra?.nome || '',
+          p.ordem, p.etapa || '', p.valor, p.vencimento ? formatDateBR(p.vencimento) : '',
+          p.status === 'pago' ? 'Recebida' : 'A receber',
+          p.dataPagamento ? formatDateBR(p.dataPagamento) : '',
+        ]);
+      });
+    });
+    baixarCSV('parcelas-a-receber.csv', linhas);
+  }
+
+  function exportarMateriaisCSV() {
+    const linhas = [['Material', 'Unidade', 'Quantidade', 'Compras', 'Total gasto', 'Preço médio', 'Menor preço', 'Maior preço', 'Último preço']];
+    rankingMateriais(lancamentos).forEach((m) => {
+      const st = estatisticasMaterial(lancamentos, m.descricao);
+      linhas.push([
+        m.descricao, m.unidade, m.quantidade, m.compras,
+        st.totalGasto, st.precoMedio.toFixed(2), st.menorPreco, st.maiorPreco, st.ultimoPreco,
+      ]);
+    });
+    baixarCSV('materiais.csv', linhas);
   }
 
   function exportarBoletosCSV() {
@@ -1799,6 +1850,21 @@ function CustoObraApp() {
                   <input value={fnCategoria} onChange={(e) => setFnCategoria(e.target.value)} placeholder="Ex: Materiais"
                     className="eco-input" />
                 </div>
+                <div className="w-full sm:w-44">
+                  <label className="text-xs text-stone-500 block mb-1">CNPJ</label>
+                  <input value={fnCnpj} onChange={(e) => setFnCnpj(e.target.value)} placeholder="00.000.000/0001-00"
+                    className="eco-input" />
+                </div>
+                <div className="w-full sm:w-36">
+                  <label className="text-xs text-stone-500 block mb-1">Cidade</label>
+                  <input value={fnCidade} onChange={(e) => setFnCidade(e.target.value)} placeholder="Cidade"
+                    className="eco-input" />
+                </div>
+                <div className="w-full sm:flex-1 sm:min-w-[180px]">
+                  <label className="text-xs text-stone-500 block mb-1">E-mail</label>
+                  <input value={fnEmail} onChange={(e) => setFnEmail(e.target.value)} placeholder="contato@fornecedor.com"
+                    className="eco-input" />
+                </div>
                 <button type="button" onClick={cadastrarFornecedor} className="eco-btn-primary w-full sm:w-auto">
                   <Plus size={15} /> {nomeExistente ? 'Atualizar' : 'Salvar'}
                 </button>
@@ -1813,18 +1879,37 @@ function CustoObraApp() {
                     return (
                       <div key={f.id} className="eco-card p-4 transition-colors duration-150 hover:border-stone-300">
                         <div className="flex items-start justify-between">
-                          <div>
+                          <div className="min-w-0">
                             <p className="font-semibold text-stone-900">{f.nome}</p>
-                            {(f.telefone || f.categoria) && (
-                              <p className="text-xs text-stone-400 flex items-center gap-2 mt-0.5">
+                            {(f.telefone || f.categoria || f.cidade) && (
+                              <p className="text-xs text-stone-400 flex items-center gap-2 mt-0.5 flex-wrap">
                                 {f.telefone && <span className="flex items-center gap-1"><Phone size={11} /> {f.telefone}</span>}
+                                {f.cidade && <span>{f.cidade}</span>}
                                 {f.categoria && <span>{f.categoria}</span>}
                               </p>
                             )}
+                            {(f.cnpj || f.email) && (
+                              <p className="text-xs text-stone-400 mt-0.5 truncate">
+                                {[f.cnpj, f.email].filter(Boolean).join(' · ')}
+                              </p>
+                            )}
                           </div>
-                          <button onClick={() => removerFornecedor(f.id, f.nome)} className="eco-icon-btn-danger" title="Remover fornecedor">
-                            <Trash2 size={14} />
-                          </button>
+                          <div className="flex flex-shrink-0">
+                            <button
+                              onClick={() => {
+                                setFnNome(f.nome); setFnTelefone(f.telefone || ''); setFnCategoria(f.categoria || '');
+                                setFnCnpj(f.cnpj || ''); setFnEmail(f.email || ''); setFnCidade(f.cidade || '');
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }}
+                              className="eco-icon-btn"
+                              title="Editar fornecedor"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button onClick={() => removerFornecedor(f.id, f.nome)} className="eco-icon-btn-danger" title="Remover fornecedor">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2 mt-3 text-sm">
                           <div>
@@ -2036,6 +2121,15 @@ function CustoObraApp() {
                   </button>
                   <button onClick={exportarBoletosCSV} className="eco-btn-secondary eco-btn-sm">
                     <Download size={14} /> Boletos (CSV)
+                  </button>
+                  <button onClick={exportarMateriaisCSV} className="eco-btn-secondary eco-btn-sm">
+                    <Download size={14} /> Materiais e preços (CSV)
+                  </button>
+                  <button onClick={exportarContratosCSV} className="eco-btn-secondary eco-btn-sm">
+                    <Download size={14} /> Contratos (CSV)
+                  </button>
+                  <button onClick={exportarParcelasCSV} className="eco-btn-secondary eco-btn-sm">
+                    <Download size={14} /> Parcelas a receber (CSV)
                   </button>
                 </div>
                 {obras.length > 0 && (

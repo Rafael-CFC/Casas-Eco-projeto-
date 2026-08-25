@@ -64,8 +64,11 @@ export default function Contratos({
     return ok;
   }
 
-  function duplicar(c) {
+  async function duplicar(c) {
     const copia = duplicarContrato(c);
+    // salva a cópia na hora: assim ela já aparece como rascunho na lista
+    // mesmo se a pessoa sair da tela antes de digitar qualquer coisa.
+    await onSalvarContrato(copia);
     setContratoAtivo(copia);
     setModo('editor');
     onAviso('Contrato duplicado. Ajuste os dados do novo cliente e gere.');
