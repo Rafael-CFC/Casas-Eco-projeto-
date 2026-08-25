@@ -10,6 +10,7 @@ import {
   montarValoresMarcadores, dataPorExtenso,
 } from './contratosStore';
 import { gerarPdfContrato, gerarPdfMemorial, gerarPdfContratoEMemorial } from './gerarPdfContrato';
+import { partesDoParagrafo, semMarcacao } from './textoRico';
 
 export default function NovoContrato({
   contratoInicial, config, obras, clientes, contratos,
@@ -230,7 +231,7 @@ export default function NovoContrato({
             <input type="date" value={contrato.dataContrato} onChange={(e) => set('dataContrato', e.target.value)} className="eco-input" />
           </div>
         </div>
-        <p className="text-[11px] text-stone-400">Sai como: {contrato.cidadeContrato},{dataPorExtenso(contrato.dataContrato)}</p>
+        <p className="text-[11px] text-stone-400">Sai como: {contrato.cidadeContrato}, {dataPorExtenso(contrato.dataContrato)}</p>
       </div>
 
       {(validacao.bloqueios.length > 0 || validacao.problemas.length > 0) && (
@@ -376,6 +377,15 @@ function FolhaMemorial({ contrato, config, onEditar, onRestaurar }) {
 
 // Parágrafo que vira campo de texto ao clicar — a edição vale só para
 // este contrato, o modelo salvo em Configurações não é alterado.
+// Mostra na tela os trechos entre ** ** em negrito, igual sai no PDF.
+function TextoComNegrito({ texto }) {
+  return (
+    <>
+      {partesDoParagrafo(texto).map((p, i) => (p.negrito ? <strong key={i}>{p.texto}</strong> : <span key={i}>{p.texto}</span>))}
+    </>
+  );
+}
+
 function BlocoEditavel({ bloco, editado, onSalvar, onRestaurar }) {
   const [editando, setEditando] = useState(false);
   const [texto, setTexto] = useState('');
@@ -399,6 +409,9 @@ function BlocoEditavel({ bloco, editado, onSalvar, onRestaurar }) {
           className="w-full text-xs font-sans border border-stone-200 rounded p-2 outline-none focus:border-green-500"
           autoFocus
         />
+        <p className="text-[10px] text-stone-400 mt-1">
+          Entre <code className="font-mono">**asteriscos**</code> o texto sai em negrito.
+        </p>
         <div className="flex gap-1.5 mt-1.5">
           <button onClick={confirmar} className="eco-btn-primary eco-btn-xs"><Check size={12} /> Aplicar</button>
           <button onClick={() => setEditando(false)} className="eco-btn-secondary eco-btn-xs"><X size={12} /> Cancelar</button>
@@ -416,7 +429,7 @@ function BlocoEditavel({ bloco, editado, onSalvar, onRestaurar }) {
     return (
       <div onClick={abrir} className="my-2 cursor-text rounded hover:bg-green-50/60 -mx-1 px-1 py-0.5 transition-colors">
         <ul className="list-disc list-inside space-y-1">
-          {bloco.texto.split('\n').filter((l) => l.trim()).map((l, i) => <li key={i}>{l.trim()}</li>)}
+          {semMarcacao(bloco.texto).split('\n').filter((l) => l.trim()).map((l, i) => <li key={i}>{l.trim()}</li>)}
         </ul>
       </div>
     );
@@ -428,7 +441,7 @@ function BlocoEditavel({ bloco, editado, onSalvar, onRestaurar }) {
       className={`my-2 whitespace-pre-wrap cursor-text rounded hover:bg-green-50/60 -mx-1 px-1 py-0.5 transition-colors text-justify ${editado ? 'border-l-2 border-green-400 pl-2' : ''}`}
       title="Clique para editar este parágrafo"
     >
-      {bloco.texto || <span className="text-stone-300">(vazio — clique para escrever)</span>}
+      {bloco.texto ? <TextoComNegrito texto={bloco.texto} /> : <span className="text-stone-300">(vazio — clique para escrever)</span>}
     </p>
   );
 }

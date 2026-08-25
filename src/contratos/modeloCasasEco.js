@@ -10,6 +10,10 @@
 //   rotulo   – nome do bloco na tela de edição
 //   texto    – o conteúdo (com os marcadores)
 //   variavel – true quando o bloco contém algo que muda por obra
+//
+// Trecho entre ** ** sai em NEGRITO no PDF e na tela — é assim que o
+// documento original destaca a razão social, o CNPJ e o nome/CPF das
+// partes.
 
 export const BLOCOS_CONTRATO = [
   {
@@ -17,8 +21,8 @@ export const BLOCOS_CONTRATO = [
     rotulo: 'Abertura — identificação das partes',
     variavel: true,
     texto:
-`Pelo presente instrumento particular de compra e venda, de um lado como CONTRATADA: a empresa {{CONTRATADA_RAZAO_SOCIAL}}
-CNPJ {{CONTRATADA_CNPJ}} com sede {{CONTRATADA_ENDERECO}} neste ato representado pelo procurador {{CONTRATADA_REPRESENTANTE}} CPF {{CONTRATADA_CPF}}; e de outro lado como CONTRATANTE {{CLIENTE_NOME}} CPF {{CLIENTE_CPF}} endereço : {{CLIENTE_ENDERECO}} .`,
+`Pelo presente instrumento particular de compra e venda, de um lado como **CONTRATADA**: a empresa **{{CONTRATADA_RAZAO_SOCIAL}}**
+**CNPJ {{CONTRATADA_CNPJ}}** com sede {{CONTRATADA_ENDERECO}} neste ato representado pelo procurador **{{CONTRATADA_REPRESENTANTE}} CPF {{CONTRATADA_CPF}}**; e de outro lado como **CONTRATANTE {{CLIENTE_NOME}} CPF {{CLIENTE_CPF}} endereço : {{CLIENTE_ENDERECO}} .**`,
   },
   {
     chave: 'clausula_primeira',
@@ -167,7 +171,7 @@ export const BLOCOS_MEMORIAL = [
     rotulo: 'Abertura — vínculo com o contrato',
     variavel: true,
     texto:
-`Este Memorial Descritivo faz parte do Contrato Particular de Compra e Venda firmado em {{DATA_CONTRATO_EXTENSO}}, entre {{CONTRATADA_RAZAO_SOCIAL}} e {{CLIENTE_NOME}} .`,
+`Este Memorial Descritivo faz parte do Contrato Particular de Compra e Venda firmado em {{DATA_CONTRATO_EXTENSO}}, entre **{{CONTRATADA_RAZAO_SOCIAL}}** e **{{CLIENTE_NOME}}** .`,
   },
   {
     chave: 'fundacao', rotulo: 'FUNDAÇÃO', titulo: 'FUNDAÇÃO', variavel: false,

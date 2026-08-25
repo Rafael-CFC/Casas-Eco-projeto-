@@ -7,6 +7,7 @@
 import { jsPDF } from 'jspdf';
 import { formatMoney } from '../domain';
 import { blocosContratoResolvidos, blocosMemorialResolvidos, montarValoresMarcadores } from './contratosStore';
+import { partesDoParagrafo, partesNegrito, semMarcacao } from './textoRico';
 
 const MARGEM = 62;
 const RODAPE_Y = 800;
@@ -46,6 +47,17 @@ function limparTexto(texto) {
     .replace(/[^\n\u0020-\u00ff\u2013\u2014\u2022]/g, '?');
 }
 
+// Largura que o texto REALMENTE ocupa na página.
+//
+// doc.getTextWidth() desconta o kerning da fonte, mas o PDF é escrito sem
+// kerning nenhum — então ele devolve menos do que o documento desenha, e
+// as palavras iam ficando cada vez mais deslocadas dentro da linha (a
+// palavra em negrito acabava colada na anterior).
+function larguraTexto(doc, texto) {
+  if (!texto) return 0;
+  return (doc.getStringUnitWidth(texto, { kerning: {} }) * doc.getFontSize()) / doc.internal.scaleFactor;
+}
+
 function garantirEspaco(ctx, altura) {
   if (ctx.y + altura > RODAPE_Y) {
     ctx.doc.addPage();
@@ -53,61 +65,85 @@ function garantirEspaco(ctx, altura) {
   }
 }
 
-// Rótulo que fica em negrito no começo do parágrafo. É fechado de
-// propósito (só o nome da cláusula/parágrafo até os dois pontos) — uma
-// regra mais solta engolia a frase inteira até um "agência:" no meio do
-// texto e o documento saía errado.
-const REGEX_ROTULO = /^((?:CL[ÁA]USULA\s+\w+|Par[áa]grafo\s+\w+(?:\s*[–—-]\s*[^:;]{0,45})?|Obs\.?|Observação)\s*[:;])/i;
+// Quebra as linhas respeitando o negrito: cada palavra é medida com a
+// fonte em que vai ser desenhada, e os espaços do texto são mantidos como
+// estão (o modelo tem espaçamento próprio que não pode ser remontado).
+function montarLinhas(partes, largura, medir) {
+  const pedacos = [];
+  partes.forEach((p) => {
+    p.texto.split(/(\s+)/).forEach((t) => {
+      if (t !== '') pedacos.push({ texto: t, negrito: p.negrito, espaco: /^\s+$/.test(t) });
+    });
+  });
 
-// Escreve texto com quebra de linha e de página, destacando em negrito o
-// rótulo inicial (ex.: "CLAUSULA PRIMEIRA:"). O texto é desenhado sempre a
-// partir da linha original, sem remontar espaços, para o documento sair
-// caractere por caractere igual ao modelo.
+  const linhas = [];
+  let atual = [];
+  let usado = 0;
+  pedacos.forEach((pedaco) => {
+    const l = medir(pedaco.texto, pedaco.negrito);
+    if (atual.length > 0 && usado + l > largura) {
+      linhas.push(atual);
+      atual = [];
+      usado = 0;
+      if (pedaco.espaco) return; // a quebra já faz o papel do espaço
+    }
+    if (atual.length === 0 && pedaco.espaco) return;
+    atual.push(pedaco);
+    usado += l;
+  });
+  if (atual.length > 0) linhas.push(atual);
+
+  // Cada palavra é desenhada por conta própria, levando junto o espaço que
+  // vem depois dela — o espaço continua sendo um caractere de verdade no
+  // PDF (dá para copiar e buscar o texto).
+  //
+  // Palavra por palavra, e não a linha inteira de uma vez, porque a tabela
+  // de larguras do jsPDF é arredondada: num texto longo a diferença se
+  // acumula e o leitor de PDF acaba desenhando mais largo do que o
+  // calculado, comendo o espaço antes de um trecho em negrito.
+  return linhas.map((linha) => {
+    const limpa = [...linha];
+    while (limpa.length > 0 && limpa[limpa.length - 1].espaco) limpa.pop();
+    const palavras = [];
+    limpa.forEach((pedaco) => {
+      const ultima = palavras[palavras.length - 1];
+      if (pedaco.espaco && ultima) ultima.texto += pedaco.texto;
+      else palavras.push({ texto: pedaco.texto, negrito: pedaco.negrito });
+    });
+    return palavras;
+  });
+}
+
+// Escreve um parágrafo com quebra de linha e de página, respeitando os
+// trechos em negrito (** ** no modelo) e o rótulo da cláusula.
 function escreverParagrafo(ctx, texto, opcoes = {}) {
   const tamanho = opcoes.tamanho || TAMANHO_TEXTO;
   const recuo = opcoes.recuo || 0;
   const larguraUtil = ctx.largura - recuo;
+  const pesoBase = opcoes.negrito ? 'bold' : 'normal';
   ctx.doc.setFontSize(tamanho);
   ctx.doc.setTextColor(...(opcoes.cor || COR.preto));
+
+  const medir = (t, negrito) => {
+    ctx.doc.setFont('helvetica', negrito ? 'bold' : pesoBase);
+    return larguraTexto(ctx.doc, t);
+  };
 
   limparTexto(texto).split('\n').forEach((bloco) => {
     if (bloco.trim() === '') { ctx.y += ALTURA_LINHA * 0.5; return; }
 
-    const m = opcoes.semDestaque ? null : bloco.match(REGEX_ROTULO);
-    const prefixo = m ? m[1] : '';
+    const partes = opcoes.semDestaque
+      ? partesNegrito(bloco).filter((p) => p.texto !== '')
+      : partesDoParagrafo(bloco);
 
-    // O negrito é mais largo que o normal: desconta essa diferença da
-    // largura na hora de quebrar as linhas, senão a primeira linha
-    // estouraria a margem direita.
-    let descontoBold = 0;
-    if (prefixo) {
-      ctx.doc.setFont('helvetica', 'bold');
-      const wBold = ctx.doc.getTextWidth(prefixo);
-      ctx.doc.setFont('helvetica', 'normal');
-      descontoBold = Math.max(0, wBold - ctx.doc.getTextWidth(prefixo));
-    }
-
-    ctx.doc.setFont('helvetica', 'normal');
-    const linhas = ctx.doc.splitTextToSize(bloco, larguraUtil - descontoBold);
-
-    // Só destaca se o rótulo couber inteiro na primeira linha — do
-    // contrário o texto sairia duplicado.
-    const podeDestacar = !!prefixo && linhas.length > 0 && linhas[0].length >= prefixo.length;
-
-    linhas.forEach((linha, i) => {
+    montarLinhas(partes, larguraUtil, medir).forEach((linha) => {
       garantirEspaco(ctx, ALTURA_LINHA);
-      if (i === 0 && podeDestacar) {
-        const parteNegrito = linha.slice(0, prefixo.length);
-        const parteNormal = linha.slice(prefixo.length);
-        ctx.doc.setFont('helvetica', 'bold');
-        ctx.doc.text(parteNegrito, ctx.x + recuo, ctx.y);
-        const larguraNegrito = ctx.doc.getTextWidth(parteNegrito);
-        ctx.doc.setFont('helvetica', 'normal');
-        if (parteNormal) ctx.doc.text(parteNormal, ctx.x + recuo + larguraNegrito, ctx.y);
-      } else {
-        ctx.doc.setFont('helvetica', opcoes.negrito ? 'bold' : 'normal');
-        ctx.doc.text(linha, ctx.x + recuo, ctx.y);
-      }
+      let x = ctx.x + recuo;
+      linha.forEach((pedaco) => {
+        ctx.doc.setFont('helvetica', pedaco.negrito ? 'bold' : pesoBase);
+        ctx.doc.text(pedaco.texto, x, ctx.y);
+        x += larguraTexto(ctx.doc, pedaco.texto);
+      });
       ctx.y += ALTURA_LINHA;
     });
   });
@@ -118,7 +154,7 @@ function escreverLista(ctx, texto) {
   ctx.doc.setFontSize(TAMANHO_TEXTO);
   ctx.doc.setFont('helvetica', 'normal');
   ctx.doc.setTextColor(...COR.preto);
-  limparTexto(texto).split('\n').filter((l) => l.trim()).forEach((item) => {
+  limparTexto(semMarcacao(texto)).split('\n').filter((l) => l.trim()).forEach((item) => {
     const linhas = ctx.doc.splitTextToSize(item.trim(), ctx.largura - 22);
     linhas.forEach((linha, i) => {
       garantirEspaco(ctx, ALTURA_LINHA);
@@ -160,7 +196,7 @@ function escreverTabelaParcelas(ctx, parcelas) {
       colValor + 14, ctx.y + 4
     );
     ctx.doc.setFont('helvetica', 'normal');
-    ctx.doc.text(limparTexto(p.etapa), colEtapa + 12, ctx.y + 4, { maxWidth: ctx.largura - (colEtapa - ctx.x) - 18 });
+    ctx.doc.text(limparTexto(semMarcacao(p.etapa)), colEtapa + 12, ctx.y + 4, { maxWidth: ctx.largura - (colEtapa - ctx.x) - 18 });
     ctx.y += alturaLinha;
   });
   ctx.y += 14;
@@ -182,8 +218,11 @@ function escreverAssinaturas(ctx, { cidadeData, nomeContratada, nomeContratante 
   ctx.doc.line(ctx.x, ctx.y, ctx.x + larguraLinha, ctx.y);
   ctx.doc.line(xDireita, ctx.y, xDireita + larguraLinha, ctx.y);
   ctx.y += 14;
-  ctx.doc.text(limparTexto(nomeContratada), ctx.x, ctx.y);
-  ctx.doc.text(limparTexto(nomeContratante), xDireita, ctx.y);
+  // no documento original o nome de quem assina pela empresa vem em negrito
+  ctx.doc.setFont('helvetica', 'bold');
+  ctx.doc.text(limparTexto(semMarcacao(nomeContratada)), ctx.x, ctx.y);
+  ctx.doc.setFont('helvetica', 'normal');
+  ctx.doc.text(limparTexto(semMarcacao(nomeContratante)), xDireita, ctx.y);
   ctx.y += 24;
 }
 
@@ -234,7 +273,7 @@ function escreverMemorial(ctx, contrato, config) {
       // não tem o caractere "●" e ele sairia como lixo na página
       ctx.doc.setFillColor(...COR.preto);
       ctx.doc.circle(ctx.x + 9, ctx.y - 3, 2.4, 'F');
-      ctx.doc.text(limparTexto(b.titulo), ctx.x + 22, ctx.y);
+      ctx.doc.text(limparTexto(semMarcacao(b.titulo)), ctx.x + 22, ctx.y);
       ctx.y += ALTURA_LINHA + 2;
       escreverParagrafo(ctx, b.texto, { semDestaque: true });
     } else {

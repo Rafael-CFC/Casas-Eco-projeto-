@@ -33,11 +33,14 @@ export default function Configuracoes({ config, onSalvarConfig, onAviso, onErro 
     });
   }
 
+  // Voltar ao original = apagar a edição, e não copiar o texto padrão para
+  // dentro dela: assim o bloco volta a acompanhar o modelo do sistema.
   function restaurarBloco(qualDoc, chave) {
-    const padrao = configuracaoVazia();
     const campo = qualDoc === 'memorial' ? 'modeloMemorial' : 'modeloContrato';
-    const textoPadrao = padrao[campo].blocos.find((b) => b.chave === chave)?.texto || '';
-    setBloco(qualDoc, chave, textoPadrao);
+    setRascunho((r) => ({
+      ...r,
+      [campo]: { ...r[campo], blocos: r[campo].blocos.filter((b) => b.chave !== chave) },
+    }));
   }
 
   async function salvar() {
@@ -84,13 +87,15 @@ export default function Configuracoes({ config, onSalvarConfig, onAviso, onErro 
   const blocosContrato = blocosContratoDaConfig(rascunho);
   const blocosMemorial = blocosMemorialDaConfig(rascunho);
   const padrao = configuracaoVazia();
+  const padraoContrato = blocosContratoDaConfig(padrao);
+  const padraoMemorial = blocosMemorialDaConfig(padrao);
 
   function EditorBlocos({ qualDoc, blocos }) {
-    const campoPadrao = qualDoc === 'memorial' ? 'modeloMemorial' : 'modeloContrato';
+    const original = qualDoc === 'memorial' ? padraoMemorial : padraoContrato;
     return (
       <div className="space-y-3">
         {blocos.map((b) => {
-          const textoPadrao = padrao[campoPadrao].blocos.find((x) => x.chave === b.chave)?.texto || '';
+          const textoPadrao = original.find((x) => x.chave === b.chave)?.texto || '';
           const alterado = b.texto !== textoPadrao;
           if (b.tabelaParcelas) {
             return (
@@ -233,6 +238,13 @@ export default function Configuracoes({ config, onSalvarConfig, onAviso, onErro 
                 )}
               </div>
             </div>
+          </div>
+          <div className="eco-card p-3 bg-stone-50 border-stone-200">
+            <p className="text-xs text-stone-500">
+              Para deixar um trecho em <strong>negrito</strong>, escreva ele entre dois
+              asteriscos — <code className="font-mono text-green-800">**assim**</code>. É o que
+              destaca a razão social, o CNPJ e o nome das partes no contrato.
+            </p>
           </div>
           <EditorBlocos qualDoc={aba} blocos={aba === 'memorial' ? blocosMemorial : blocosContrato} />
         </>
