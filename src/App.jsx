@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Package, Plus, Trash2, AlertCircle,
   ArrowLeft,
   Upload, ArrowUpRight, ArrowDownRight, CheckCircle2, X, Pencil, Copy,
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
-  ShoppingCart, Landmark,
+  ShoppingCart, Landmark, FileSignature, Settings, MoreHorizontal, Wallet,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
@@ -21,6 +22,10 @@ import OrcamentoVenda from './venda/OrcamentoVenda';
 import Boletos from './boletos/Boletos';
 import { novoBoleto, atualizarCamposBoleto, registrarPagamento, reabrirBoleto, cancelarBoletoObj, mapearCategoriaBoletoParaLancamento } from './boletos/boletosStore';
 import { totalBoletosPorObra } from './boletos/boletosCalc';
+import Contratos from './contratos/Contratos';
+import Configuracoes from './config/Configuracoes';
+import { normalizarConfiguracao, configuracaoVazia } from './config/configStore';
+import { resumoParcelasDaObra } from './contratos/contratosStore';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -73,15 +78,20 @@ function parseImportado(texto) {
   return { itens, invalidas };
 }
 
+// `primario` marca os itens que aparecem direto na barra de baixo do
+// celular; os demais ficam no botão "Mais". No computador a barra lateral
+// mostra todos.
 const NAV_ITEMS = [
-  { key: 'home', label: 'Início', icon: Home },
-  { key: 'financeiro', label: 'Financeiro', icon: LayoutDashboard },
+  { key: 'home', label: 'Início', icon: Home, primario: true },
+  { key: 'financeiro', label: 'Financeiro', icon: LayoutDashboard, primario: true },
+  { key: 'boletos', label: 'Boletos', icon: Landmark, primario: true },
+  { key: 'contratos', label: 'Contratos', icon: FileSignature, primario: true },
   { key: 'catalogo', label: 'Catálogo', icon: Package },
   { key: 'fornecedores', label: 'Fornecedores', icon: Users },
   { key: 'contas', label: 'Contas', icon: Receipt },
-  { key: 'boletos', label: 'Boletos', icon: Landmark },
   { key: 'venda', label: 'Vender', icon: ShoppingCart },
   { key: 'relatorios', label: 'Relatórios', icon: FileText },
+  { key: 'configuracoes', label: 'Configurações', icon: Settings },
 ];
 
 const PAGINA_META = {
@@ -91,8 +101,10 @@ const PAGINA_META = {
   fornecedores: { titulo: 'Fornecedores', subtitulo: 'Cadastro e histórico de compras' },
   contas: { titulo: 'Contas a pagar', subtitulo: 'Vencimentos e parcelas' },
   boletos: { titulo: 'Boletos', subtitulo: 'Boletos bancários por obra, categoria e vencimento' },
+  contratos: { titulo: 'Contratos', subtitulo: 'Contratos, memoriais e parcelas a receber' },
   venda: { titulo: 'Vender Madeira', subtitulo: 'Preços de venda ao cliente e orçamento em PDF' },
   relatorios: { titulo: 'Relatórios', subtitulo: 'Exportações e resumos gerais' },
+  configuracoes: { titulo: 'Configurações', subtitulo: 'Dados da empresa e modelos de contrato/memorial' },
 };
 
 function CustoObraApp() {
@@ -103,6 +115,10 @@ function CustoObraApp() {
   const [fornecedores, setFornecedores] = useState([]);
   const [contas, setContas] = useState([]);
   const [boletos, setBoletos] = useState([]);
+  const [contratos, setContratos] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const [configuracao, setConfiguracao] = useState(configuracaoVazia);
+  const [menuMaisAberto, setMenuMaisAberto] = useState(false);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
@@ -148,7 +164,7 @@ function CustoObraApp() {
         return;
       }
       try {
-        const [o, p, l, et, fo, co, bo] = await Promise.all([
+        const [o, p, l, et, fo, co, bo, ct, cl, cf] = await Promise.all([
           window.storage.get('obras', false).catch(() => null),
           window.storage.get('produtos', false).catch(() => null),
           window.storage.get('lancamentos', false).catch(() => null),
@@ -156,6 +172,9 @@ function CustoObraApp() {
           window.storage.get('fornecedores', false).catch(() => null),
           window.storage.get('contas', false).catch(() => null),
           window.storage.get('boletos', false).catch(() => null),
+          window.storage.get('contratos', false).catch(() => null),
+          window.storage.get('clientes', false).catch(() => null),
+          window.storage.get('configuracao', false).catch(() => null),
         ]);
 
         // Migração não destrutiva: padroniza nome/unidade de produtos e
@@ -188,6 +207,9 @@ function CustoObraApp() {
         setFornecedores(fo ? JSON.parse(fo.value) : []);
         setContas(co ? JSON.parse(co.value) : []);
         setBoletos(bo ? JSON.parse(bo.value) : []);
+        setContratos(ct ? JSON.parse(ct.value) : []);
+        setClientes(cl ? JSON.parse(cl.value) : []);
+        setConfiguracao(normalizarConfiguracao(cf ? JSON.parse(cf.value) : null));
 
         if (produtosMudaram) {
           window.storage.set('produtos', JSON.stringify(produtosNormalizados), false).catch(() => {});
@@ -237,6 +259,9 @@ function CustoObraApp() {
   const salvarFornecedores = (l) => persist('fornecedores', l, setFornecedores);
   const salvarContas = (l) => persist('contas', l, setContas);
   const salvarBoletos = (l) => persist('boletos', l, setBoletos);
+  const salvarContratos = (l) => persist('contratos', l, setContratos);
+  const salvarClientes = (l) => persist('clientes', l, setClientes);
+  const salvarConfiguracao = (c) => persist('configuracao', c, setConfiguracao);
 
   async function criarObra(e) {
     if (e && e.preventDefault) e.preventDefault();
@@ -362,29 +387,89 @@ function CustoObraApp() {
     return lancamentos.filter((l) => l.data >= limiteISO).reduce((a, l) => a + l.total, 0);
   }
 
+  // Faixas de alerta de orçamento: 70% avisa, 85% alerta, 95% crítico,
+  // 100% estourado.
+  function faixaOrcamento(pct) {
+    if (pct >= 100) return { tipo: 'red', rotulo: 'ultrapassou o orçamento' };
+    if (pct >= 95) return { tipo: 'red', rotulo: 'em nível crítico' };
+    if (pct >= 85) return { tipo: 'yellow', rotulo: 'em alerta' };
+    if (pct >= 70) return { tipo: 'yellow', rotulo: 'em atenção' };
+    return null;
+  }
+
   function gerarAlertas() {
     const alertas = [];
+    const hoje = todayISO();
+
     obras.forEach((o) => {
+      if (o.status === 'concluida') return;
       const gasto = totalObra(o.id);
       if (o.orcamento) {
         const pct = (gasto / o.orcamento) * 100;
-        if (pct >= 100) alertas.push({ tipo: 'red', texto: `"${o.nome}" já ultrapassou o orçamento total em ${formatMoney(gasto - o.orcamento)}.` });
-        else if (pct >= 80) alertas.push({ tipo: 'yellow', texto: `"${o.nome}" já consumiu ${pct.toFixed(0)}% do orçamento total.` });
+        const faixa = faixaOrcamento(pct);
+        if (faixa) {
+          alertas.push({
+            tipo: faixa.tipo,
+            texto: pct >= 100
+              ? `"${o.nome}" ultrapassou o orçamento em ${formatMoney(gasto - o.orcamento)} (${pct.toFixed(0)}% utilizado).`
+              : `"${o.nome}" está ${faixa.rotulo}: ${pct.toFixed(0)}% do orçamento utilizado (restam ${formatMoney(o.orcamento - gasto)}).`,
+          });
+        }
       }
       if (o.orcamentoCategorias) {
         Object.entries(o.orcamentoCategorias).forEach(([cat, valor]) => {
           if (!valor) return;
           const gastoCat = totalObraCategoria(o.id, cat);
           const pct = (gastoCat / valor) * 100;
-          if (pct >= 100) alertas.push({ tipo: 'red', texto: `"${o.nome}": ${CATEGORIAS[cat].label} ultrapassou o orçamento em ${formatMoney(gastoCat - valor)}.` });
-          else if (pct >= 80) alertas.push({ tipo: 'yellow', texto: `"${o.nome}": ${CATEGORIAS[cat].label} já consumiu ${pct.toFixed(0)}% do orçamento.` });
+          const faixa = faixaOrcamento(pct);
+          if (faixa) {
+            alertas.push({
+              tipo: faixa.tipo,
+              texto: pct >= 100
+                ? `"${o.nome}": ${CATEGORIAS[cat].label} ultrapassou o orçamento em ${formatMoney(gastoCat - valor)}.`
+                : `"${o.nome}": ${CATEGORIAS[cat].label} ${faixa.rotulo} — ${pct.toFixed(0)}% do orçamento.`,
+            });
+          }
         });
       }
     });
-    const vencidas = contas.filter((c) => c.status !== 'pago' && c.vencimento < todayISO());
+
+    // contas a pagar
+    const vencidas = contas.filter((c) => c.status !== 'pago' && c.vencimento < hoje);
     if (vencidas.length > 0) {
       alertas.unshift({ tipo: 'red', texto: `${vencidas.length} conta(s) vencida(s), totalizando ${formatMoney(vencidas.reduce((a, c) => a + c.valor, 0))}.` });
     }
+
+    // boletos vencidos e a vencer nos próximos 3 dias
+    const em3 = new Date(); em3.setDate(em3.getDate() + 3);
+    const em3ISO = em3.toISOString().slice(0, 10);
+    const boletosVencidos = boletos.filter((b) => b.status === 'pendente' && b.vencimento < hoje);
+    if (boletosVencidos.length > 0) {
+      alertas.unshift({ tipo: 'red', texto: `${boletosVencidos.length} boleto(s) vencido(s), totalizando ${formatMoney(boletosVencidos.reduce((a, b) => a + (Number(b.valor) || 0), 0))}.` });
+    }
+    const boletosProximos = boletos.filter((b) => b.status === 'pendente' && b.vencimento >= hoje && b.vencimento <= em3ISO);
+    if (boletosProximos.length > 0) {
+      alertas.unshift({ tipo: 'yellow', texto: `${boletosProximos.length} boleto(s) vencem nos próximos 3 dias (${formatMoney(boletosProximos.reduce((a, b) => a + (Number(b.valor) || 0), 0))}).` });
+    }
+
+    // parcelas de contrato atrasadas (dinheiro a receber do cliente)
+    const parcelasAtrasadas = contratos
+      .filter((c) => c.status !== 'cancelado' && c.status !== 'rascunho')
+      .flatMap((c) => (c.parcelas || []).map((p) => ({ ...p, cliente: c.cliente?.nome })))
+      .filter((p) => p.status !== 'pago' && p.vencimento && p.vencimento < hoje);
+    if (parcelasAtrasadas.length > 0) {
+      alertas.unshift({
+        tipo: 'yellow',
+        texto: `${parcelasAtrasadas.length} parcela(s) de contrato em atraso a receber, totalizando ${formatMoney(parcelasAtrasadas.reduce((a, p) => a + (Number(p.valor) || 0), 0))}.`,
+      });
+    }
+
+    // contratos parados em rascunho
+    const rascunhos = contratos.filter((c) => c.status === 'rascunho');
+    if (rascunhos.length > 0) {
+      alertas.push({ tipo: 'yellow', texto: `${rascunhos.length} contrato(s) em rascunho aguardando conclusão.` });
+    }
+
     return alertas;
   }
 
@@ -521,6 +606,78 @@ function CustoObraApp() {
     return salvarBoletos(boletos.filter((b) => b.id !== id));
   }
 
+  // ---- contratos ----
+  // Salvar um contrato também mantém o cadastro de clientes e a obra em dia,
+  // para o mesmo dado nunca precisar ser digitado duas vezes.
+  async function salvarContrato(contrato) {
+    const existe = contratos.some((c) => c.id === contrato.id);
+    const lista = existe
+      ? contratos.map((c) => (c.id === contrato.id ? contrato : c))
+      : [contrato, ...contratos];
+    const ok = await salvarContratos(lista);
+    if (!ok) return false;
+
+    // cliente: cria/atualiza no cadastro a partir dos dados do contrato
+    const nomeCliente = (contrato.cliente?.nome || '').trim();
+    if (nomeCliente) {
+      const existente = clientes.find(
+        (c) => c.id === contrato.clienteId || c.nome.trim().toLowerCase() === nomeCliente.toLowerCase()
+      );
+      const dados = {
+        nome: nomeCliente,
+        cpfCnpj: contrato.cliente.cpfCnpj || '',
+        endereco: contrato.cliente.endereco || '',
+        cidade: contrato.cliente.cidade || '',
+        estado: contrato.cliente.estado || '',
+        telefone: contrato.cliente.telefone || '',
+        email: contrato.cliente.email || '',
+      };
+      if (existente) {
+        salvarClientes(clientes.map((c) => (c.id === existente.id ? { ...c, ...dados } : c)));
+      } else {
+        salvarClientes([...clientes, { id: crypto.randomUUID(), ...dados, criadoEm: todayISO() }]);
+      }
+    }
+
+    // obra: ao GERAR um contrato sem obra vinculada, cria a obra já com
+    // cliente, endereço e orçamento vindos do próprio contrato.
+    if (contrato.status !== 'rascunho' && !contrato.obraId && (contrato.obra?.nome || '').trim()) {
+      const novaObra = {
+        id: crypto.randomUUID(),
+        nome: contrato.obra.nome.trim(),
+        criadoEm: contrato.obra.dataInicio || todayISO(),
+        orcamento: Number(contrato.valorTotal) || null,
+        cliente: nomeCliente || null,
+        endereco: contrato.obra.endereco || null,
+        status: 'em_andamento',
+      };
+      const okObra = await salvarObras([...obras, novaObra]);
+      if (okObra) {
+        await salvarContratos(
+          lista.map((c) => (c.id === contrato.id ? { ...c, obraId: novaObra.id } : c))
+        );
+        setAviso(`Obra "${novaObra.nome}" criada automaticamente a partir do contrato.`);
+      }
+    }
+    return true;
+  }
+
+  async function removerContrato(id) {
+    return salvarContratos(contratos.filter((c) => c.id !== id));
+  }
+
+  async function atualizarParcelaContrato(contratoId, parcelaId, campos) {
+    return salvarContratos(contratos.map((c) => (
+      c.id === contratoId
+        ? {
+            ...c,
+            parcelas: (c.parcelas || []).map((p) => (p.id === parcelaId ? { ...p, ...campos } : p)),
+            atualizadoEm: todayISO(),
+          }
+        : c
+    )));
+  }
+
   // ---- formulário: cadastro/edição de fornecedor ----
   const [fnNome, setFnNome] = useState('');
   const [fnTelefone, setFnTelefone] = useState('');
@@ -639,7 +796,7 @@ function CustoObraApp() {
       sistema: 'casaseco-custo-obra',
       versaoBackup: 1,
       geradoEm: new Date().toISOString(),
-      dados: { obras, produtos, lancamentos, etapas, fornecedores, contas, boletos },
+      dados: { obras, produtos, lancamentos, etapas, fornecedores, contas, boletos, contratos, clientes, configuracao },
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -679,9 +836,10 @@ function CustoObraApp() {
       // módulo existir não têm essa chave, e continuam válidos (restauram
       // sem boletos, em vez de serem rejeitados).
       const chavesObrigatorias = ['obras', 'produtos', 'lancamentos', 'etapas', 'fornecedores', 'contas'];
+      const listasOpcionais = ['boletos', 'contratos', 'clientes'];
       const valido = dados
         && chavesObrigatorias.every((k) => Array.isArray(dados[k]))
-        && (dados.boletos === undefined || Array.isArray(dados.boletos));
+        && listasOpcionais.every((k) => dados[k] === undefined || Array.isArray(dados[k]));
       if (!valido) {
         setErro('Esse arquivo não parece um backup do Casas Eco (faltam dados esperados).');
         return;
@@ -704,6 +862,9 @@ function CustoObraApp() {
       salvarFornecedores(dados.fornecedores),
       salvarContas(dados.contas),
       salvarBoletos(dados.boletos || []),
+      salvarContratos(dados.contratos || []),
+      salvarClientes(dados.clientes || []),
+      salvarConfiguracao(normalizarConfiguracao(dados.configuracao || null)),
     ]);
     if (resultados.every(Boolean)) {
       setAviso('Backup restaurado com sucesso.');
@@ -1070,9 +1231,10 @@ function CustoObraApp() {
         </div>
       </aside>
 
-      {/* barra de navegação fixa embaixo, só no celular */}
+      {/* barra de navegação fixa embaixo, só no celular: os itens principais
+          ficam à mão e o resto abre no botão "Mais" */}
       <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-stone-200 flex z-20">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter((i) => i.primario).map((item) => {
           const Icon = item.icon;
           const ativo = view === item.key || (item.key === 'home' && (view === 'obra' || view === 'resumo'));
           return (
@@ -1081,12 +1243,66 @@ function CustoObraApp() {
               onClick={() => { setView(item.key); if (item.key === 'home') setObraAtivaId(null); }}
               className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] leading-tight transition-colors duration-150 ${ativo ? 'text-green-700' : 'text-stone-400'}`}
             >
-              <Icon size={17} />
+              <Icon size={18} />
               <span className="truncate max-w-full px-0.5">{item.label}</span>
             </button>
           );
         })}
+        {(() => {
+          const secundarios = NAV_ITEMS.filter((i) => !i.primario);
+          const ativoNoMais = secundarios.some((i) => i.key === view);
+          return (
+            <button
+              onClick={() => setMenuMaisAberto(true)}
+              className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] leading-tight transition-colors duration-150 ${ativoNoMais ? 'text-green-700' : 'text-stone-400'}`}
+            >
+              <MoreHorizontal size={18} />
+              <span className="truncate max-w-full px-0.5">Mais</span>
+            </button>
+          );
+        })()}
       </nav>
+
+      {/* painel "Mais" (celular) */}
+      {menuMaisAberto && createPortal(
+        <>
+          <div className="fixed inset-0 bg-black/30 z-40 animate-fade-in sm:hidden" onClick={() => setMenuMaisAberto(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl shadow-popover bg-white animate-sheet-up sm:hidden">
+            <div className="flex justify-center pt-2 pb-1">
+              <span className="w-10 h-1 rounded-full bg-stone-200" />
+            </div>
+            <div className="flex items-center justify-between px-4 pb-2 border-b border-stone-100">
+              <p className="text-sm font-semibold text-stone-700">Todas as áreas</p>
+              <button onClick={() => setMenuMaisAberto(false)} className="eco-icon-btn -mr-1.5">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-2 pb-24 grid grid-cols-3 gap-1.5">
+              {NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const ativo = view === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => {
+                      setView(item.key);
+                      if (item.key === 'home') setObraAtivaId(null);
+                      setMenuMaisAberto(false);
+                    }}
+                    className={`flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-xl border text-[11px] font-medium transition-colors ${
+                      ativo ? 'bg-green-50 border-green-200 text-green-800' : 'bg-white border-stone-200 text-stone-600'
+                    }`}
+                  >
+                    <Icon size={20} />
+                    <span className="truncate max-w-full px-1">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
 
       {/* ---- coluna principal ---- */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -1689,6 +1905,32 @@ function CustoObraApp() {
           />
         )}
 
+        {/* ---------------- CONTRATOS ---------------- */}
+        {view === 'contratos' && (
+          <Contratos
+            contratos={contratos}
+            config={configuracao}
+            obras={obras}
+            clientes={clientes}
+            onSalvarContrato={salvarContrato}
+            onRemoverContrato={removerContrato}
+            onAtualizarParcela={atualizarParcelaContrato}
+            onAviso={setAviso}
+            onErro={setErro}
+            onConfirmar={confirmar}
+          />
+        )}
+
+        {/* ---------------- CONFIGURAÇÕES ---------------- */}
+        {view === 'configuracoes' && (
+          <Configuracoes
+            config={configuracao}
+            onSalvarConfig={salvarConfiguracao}
+            onAviso={setAviso}
+            onErro={setErro}
+          />
+        )}
+
         {/* ---------------- VENDER MADEIRA (orçamento ao cliente) ---------------- */}
         {view === 'venda' && (
           <OrcamentoVenda onAviso={setAviso} onErro={setErro} />
@@ -1925,6 +2167,71 @@ function CustoObraApp() {
                   </p>
                   <p className="text-[11px] text-stone-400 mt-1">
                     Este valor é informativo e não entra na soma de "Total da obra" acima.
+                  </p>
+                </div>
+              );
+            })()}
+
+            {/* ---- contrato e parcelas a receber desta obra ---- */}
+            {(() => {
+              const contratosDaObra = contratos.filter((c) => c.obraId === obraAtiva.id && c.status !== 'cancelado');
+              const resumoRec = resumoParcelasDaObra(contratos, obraAtiva.id);
+              if (contratosDaObra.length === 0) {
+                return (
+                  <div className="eco-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <FileSignature size={20} className="text-stone-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-stone-700">Contrato</p>
+                        <p className="text-xs text-stone-400">
+                          Esta obra ainda não tem contrato. Ao gerar, os dados da obra já vão preenchidos.
+                        </p>
+                      </div>
+                    </div>
+                    <button onClick={() => setView('contratos')} className="eco-btn-secondary eco-btn-sm flex-shrink-0">
+                      <FileSignature size={14} /> Gerar contrato
+                    </button>
+                  </div>
+                );
+              }
+              return (
+                <div className="eco-card p-4">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <p className="text-sm font-semibold text-stone-700 flex items-center gap-1.5">
+                      <Wallet size={15} /> Contrato e recebimentos
+                    </p>
+                    <button onClick={() => setView('contratos')} className="text-xs text-stone-500 underline hover:text-green-700 flex-shrink-0">
+                      abrir contratos
+                    </button>
+                  </div>
+                  {contratosDaObra.map((c) => (
+                    <p key={c.id} className="text-xs text-stone-500 mb-1.5">
+                      {c.numero ? `Contrato nº ${c.numero}` : 'Contrato (rascunho)'} · {formatMoney(c.valorTotal)}
+                      {' · '}<span className="uppercase">{c.status}</span>
+                    </p>
+                  ))}
+                  {resumoRec.quantidade > 0 && (
+                    <div className="grid grid-cols-3 gap-2 mt-2">
+                      <div className="bg-stone-50 rounded-lg p-2">
+                        <p className="text-[11px] text-stone-400">Contratado</p>
+                        <p className="text-sm font-semibold text-stone-800">{formatMoney(resumoRec.total)}</p>
+                      </div>
+                      <div className="bg-green-50 rounded-lg p-2">
+                        <p className="text-[11px] text-green-700/70">Recebido</p>
+                        <p className="text-sm font-semibold text-green-800">{formatMoney(resumoRec.recebido)}</p>
+                      </div>
+                      <div className={`rounded-lg p-2 ${resumoRec.vencidas > 0 ? 'bg-red-50' : 'bg-amber-50'}`}>
+                        <p className={`text-[11px] ${resumoRec.vencidas > 0 ? 'text-red-700/70' : 'text-amber-700/70'}`}>
+                          A receber{resumoRec.vencidas > 0 ? ` (${resumoRec.vencidas} atrasada${resumoRec.vencidas > 1 ? 's' : ''})` : ''}
+                        </p>
+                        <p className={`text-sm font-semibold ${resumoRec.vencidas > 0 ? 'text-red-700' : 'text-amber-700'}`}>
+                          {formatMoney(resumoRec.aReceber)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-stone-400 mt-2">
+                    Parcelas são o que o cliente paga à Casas Eco (receita) — não se misturam com o custo da obra acima.
                   </p>
                 </div>
               );
