@@ -7,11 +7,14 @@ import {
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
   ShoppingCart, Landmark, FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search,
+  LogOut, KeyRound,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
 import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
 import ToastStack from './ui/Toast';
+import TrocarSenha from './auth/TrocarSenha';
+import { sair } from './auth/authStore';
 import { DashboardSkeleton } from './ui/Skeleton';
 import FinalizarObraModal from './obra/FinalizarObraModal';
 import SucessoFinalizacaoModal from './obra/SucessoFinalizacaoModal';
@@ -54,10 +57,10 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-export default function CustoObraAppBoundary() {
+export default function CustoObraAppBoundary({ usuario }) {
   return (
     <ErrorBoundary>
-      <CustoObraApp />
+      <CustoObraApp usuario={usuario} />
     </ErrorBoundary>
   );
 }
@@ -112,7 +115,7 @@ const PAGINA_META = {
   configuracoes: { titulo: 'Configurações', subtitulo: 'Dados da empresa e modelos de contrato/memorial' },
 };
 
-function CustoObraApp() {
+function CustoObraApp({ usuario }) {
   const [obras, setObras] = useState([]);
   const [produtos, setProdutos] = useState([]);
   const [lancamentos, setLancamentos] = useState([]);
@@ -124,6 +127,7 @@ function CustoObraApp() {
   const [clientes, setClientes] = useState([]);
   const [configuracao, setConfiguracao] = useState(configuracaoVazia);
   const [menuMaisAberto, setMenuMaisAberto] = useState(false);
+  const [trocandoSenha, setTrocandoSenha] = useState(false);
   const [buscaAberta, setBuscaAberta] = useState(false);
   const [materialFoco, setMaterialFoco] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1280,6 +1284,27 @@ function CustoObraApp() {
               </span>
             </div>
           )}
+          {!sidebarColapsada && usuario?.email && (
+            <p className="text-[11px] text-stone-400 px-2 truncate" title={usuario.email}>{usuario.email}</p>
+          )}
+          <div className={`flex gap-1 ${sidebarColapsada ? 'flex-col' : ''}`}>
+            <button
+              onClick={() => setTrocandoSenha(true)}
+              title="Trocar minha senha"
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors duration-150"
+            >
+              <KeyRound size={16} />
+              {!sidebarColapsada && <span className="text-xs">Senha</span>}
+            </button>
+            <button
+              onClick={sair}
+              title="Sair"
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors duration-150"
+            >
+              <LogOut size={16} />
+              {!sidebarColapsada && <span className="text-xs">Sair</span>}
+            </button>
+          </div>
           <button
             onClick={() => setSidebarColapsada((v) => !v)}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors duration-150"
@@ -1335,7 +1360,7 @@ function CustoObraApp() {
                 <X size={16} />
               </button>
             </div>
-            <div className="p-2 pb-24 grid grid-cols-3 gap-1.5">
+            <div className="p-2 grid grid-cols-3 gap-1.5">
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const ativo = view === item.key;
@@ -1357,8 +1382,30 @@ function CustoObraApp() {
                 );
               })}
             </div>
+            <div className="px-4 pb-6 mb-16 border-t border-stone-100 pt-3 flex items-center gap-2">
+              {usuario?.email && (
+                <p className="text-[11px] text-stone-400 truncate flex-1" title={usuario.email}>{usuario.email}</p>
+              )}
+              <button
+                onClick={() => { setMenuMaisAberto(false); setTrocandoSenha(true); }}
+                className="eco-btn-secondary eco-btn-xs flex-shrink-0"
+              >
+                <KeyRound size={12} /> Senha
+              </button>
+              <button onClick={sair} className="eco-btn-secondary eco-btn-xs flex-shrink-0">
+                <LogOut size={12} /> Sair
+              </button>
+            </div>
           </div>
         </>,
+        document.body
+      )}
+
+      {trocandoSenha && createPortal(
+        <TrocarSenha
+          onFechar={() => setTrocandoSenha(false)}
+          onPronto={() => { setTrocandoSenha(false); setAviso('Senha trocada.'); }}
+        />,
         document.body
       )}
 

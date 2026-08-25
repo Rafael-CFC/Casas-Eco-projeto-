@@ -1,30 +1,45 @@
--- Rode esse script inteiro no Supabase, DEPOIS de já ter rodado o schema.sql
--- original. Menu "SQL Editor" > "New query" > colar > "Run".
+-- =====================================================================
+--  FOTOS DOS BOLETOS
 --
--- Isso cria um espaço de armazenamento de arquivos ("bucket") para guardar
--- as fotos dos boletos, com a mesma proteção que os outros dados já têm:
--- só quem estiver logado consegue ver/enviar/apagar as fotos.
+--  Rode DEPOIS do schema.sql. Supabase > "SQL Editor" > "New query" >
+--  colar > "Run". Pode rodar mais de uma vez sem problema.
+--
+--  Cria o espaço de arquivos ("bucket") das fotos de boleto com a mesma
+--  tranca dos outros dados: fechado para a internet e liberado só para a
+--  conta do dono.
+-- =====================================================================
 
 insert into storage.buckets (id, name, public)
 values ('boletos', 'boletos', false)
-on conflict (id) do nothing;
+on conflict (id) do update set public = false;
 
--- Só quem estiver logado pode ver as fotos dos boletos
-create policy "usuarios logados podem ler fotos de boletos"
+-- tira as regras antigas (liberavam para qualquer conta logada,
+-- inclusive a do funcionário)
+drop policy if exists "usuarios logados podem ler fotos de boletos"      on storage.objects;
+drop policy if exists "usuarios logados podem enviar fotos de boletos"   on storage.objects;
+drop policy if exists "usuarios logados podem atualizar fotos de boletos" on storage.objects;
+drop policy if exists "usuarios logados podem apagar fotos de boletos"   on storage.objects;
+drop policy if exists "dono le fotos de boletos"       on storage.objects;
+drop policy if exists "dono envia fotos de boletos"    on storage.objects;
+drop policy if exists "dono atualiza fotos de boletos" on storage.objects;
+drop policy if exists "dono apaga fotos de boletos"    on storage.objects;
+
+create policy "dono le fotos de boletos"
   on storage.objects for select
-  using (bucket_id = 'boletos' and auth.role() = 'authenticated');
+  to authenticated
+  using (bucket_id = 'boletos' and public.papel_do_usuario() = 'dono');
 
--- Só quem estiver logado pode enviar fotos novas
-create policy "usuarios logados podem enviar fotos de boletos"
+create policy "dono envia fotos de boletos"
   on storage.objects for insert
-  with check (bucket_id = 'boletos' and auth.role() = 'authenticated');
+  to authenticated
+  with check (bucket_id = 'boletos' and public.papel_do_usuario() = 'dono');
 
--- Só quem estiver logado pode substituir uma foto
-create policy "usuarios logados podem atualizar fotos de boletos"
+create policy "dono atualiza fotos de boletos"
   on storage.objects for update
-  using (bucket_id = 'boletos' and auth.role() = 'authenticated');
+  to authenticated
+  using (bucket_id = 'boletos' and public.papel_do_usuario() = 'dono');
 
--- Só quem estiver logado pode apagar uma foto
-create policy "usuarios logados podem apagar fotos de boletos"
+create policy "dono apaga fotos de boletos"
   on storage.objects for delete
-  using (bucket_id = 'boletos' and auth.role() = 'authenticated');
+  to authenticated
+  using (bucket_id = 'boletos' and public.papel_do_usuario() = 'dono');
