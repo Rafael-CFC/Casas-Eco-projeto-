@@ -6,7 +6,7 @@ import {
   Upload, ArrowUpRight, ArrowDownRight, CheckCircle2, X, Pencil, Copy,
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
-  ShoppingCart, Landmark, FileSignature, Settings, MoreHorizontal, Wallet,
+  ShoppingCart, Landmark, FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
@@ -26,6 +26,9 @@ import Contratos from './contratos/Contratos';
 import Configuracoes from './config/Configuracoes';
 import { normalizarConfiguracao, configuracaoVazia } from './config/configStore';
 import { resumoParcelasDaObra } from './contratos/contratosStore';
+import Materiais from './analise/Materiais';
+import BuscaGlobal from './analise/BuscaGlobal';
+import { resumoDoMes } from './analise/analiseCalc';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -87,6 +90,7 @@ const NAV_ITEMS = [
   { key: 'boletos', label: 'Boletos', icon: Landmark, primario: true },
   { key: 'contratos', label: 'Contratos', icon: FileSignature, primario: true },
   { key: 'catalogo', label: 'Catálogo', icon: Package },
+  { key: 'materiais', label: 'Materiais', icon: Boxes },
   { key: 'fornecedores', label: 'Fornecedores', icon: Users },
   { key: 'contas', label: 'Contas', icon: Receipt },
   { key: 'venda', label: 'Vender', icon: ShoppingCart },
@@ -98,6 +102,7 @@ const PAGINA_META = {
   home: { titulo: 'Início', subtitulo: 'Visão geral de todas as obras' },
   financeiro: { titulo: 'Financeiro', subtitulo: 'Indicadores, gráficos e alertas de custo' },
   catalogo: { titulo: 'Catálogo', subtitulo: 'Produtos e preços cadastrados' },
+  materiais: { titulo: 'Materiais', subtitulo: 'Preço médio, histórico e comparação entre fornecedores' },
   fornecedores: { titulo: 'Fornecedores', subtitulo: 'Cadastro e histórico de compras' },
   contas: { titulo: 'Contas a pagar', subtitulo: 'Vencimentos e parcelas' },
   boletos: { titulo: 'Boletos', subtitulo: 'Boletos bancários por obra, categoria e vencimento' },
@@ -119,6 +124,8 @@ function CustoObraApp() {
   const [clientes, setClientes] = useState([]);
   const [configuracao, setConfiguracao] = useState(configuracaoVazia);
   const [menuMaisAberto, setMenuMaisAberto] = useState(false);
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const [materialFoco, setMaterialFoco] = useState(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
@@ -1317,6 +1324,14 @@ function CustoObraApp() {
             <h1 className="text-base sm:text-lg font-semibold text-stone-900 truncate">{paginaAtual.titulo}</h1>
             <p className="text-xs text-stone-400 truncate hidden sm:block">{paginaAtual.subtitulo}</p>
           </div>
+          <button
+            onClick={() => setBuscaAberta(true)}
+            className="flex items-center gap-2 flex-shrink-0 text-stone-400 hover:text-stone-700 sm:border sm:border-stone-200 sm:rounded-lg sm:px-3 sm:py-1.5 sm:hover:border-stone-300 transition-colors"
+            title="Buscar em todo o sistema"
+          >
+            <Search size={17} />
+            <span className="hidden sm:inline text-xs">Buscar…</span>
+          </button>
           <span className="sm:hidden inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: window.storage ? '#22c55e' : '#ef4444' }}></span>
         </header>
 
@@ -1371,6 +1386,63 @@ function CustoObraApp() {
                       <p className="text-lg font-semibold text-stone-900">{contasProx7.length}</p>
                     </div>
                   </div>
+                  {/* ---- resumo do mês ---- */}
+                  {(() => {
+                    const r = resumoDoMes({ lancamentos, obras, contas, boletos, CATEGORIAS }, hoje);
+                    if (r.lancamentosNoMes === 0 && r.totalAnterior === 0) return null;
+                    const subiu = r.variacaoPct != null && r.variacaoPct > 0;
+                    return (
+                      <div className="eco-card p-4">
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <p className="text-sm font-semibold text-stone-700">Resumo do mês</p>
+                          {r.variacaoPct != null && (
+                            <span className={`eco-badge border ${subiu ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+                              {subiu ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+                              {Math.abs(r.variacaoPct).toFixed(0)}% vs. mês anterior
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                          <div>
+                            <p className="text-xs text-stone-400">Gasto no mês</p>
+                            <p className="text-base font-semibold text-stone-900">{formatMoney(r.total)}</p>
+                            <p className="text-[11px] text-stone-400">{r.lancamentosNoMes} lançamentos</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-stone-400">Obra que mais gastou</p>
+                            <p className="text-sm font-semibold text-stone-900 truncate">{r.topObra?.nome || '—'}</p>
+                            {r.topObra && <p className="text-[11px] text-stone-400">{formatMoney(r.topObra.valor)}</p>}
+                          </div>
+                          <div>
+                            <p className="text-xs text-stone-400">Categoria que mais consumiu</p>
+                            <p className="text-sm font-semibold text-stone-900 truncate">{r.topCategoria?.label || '—'}</p>
+                            {r.topCategoria && <p className="text-[11px] text-stone-400">{formatMoney(r.topCategoria.valor)}</p>}
+                          </div>
+                          <div>
+                            <p className="text-xs text-stone-400">Fornecedor que mais recebeu</p>
+                            <p className="text-sm font-semibold text-stone-900 truncate">{r.topFornecedor?.nome || '—'}</p>
+                            {r.topFornecedor && <p className="text-[11px] text-stone-400">{formatMoney(r.topFornecedor.valor)}</p>}
+                          </div>
+                        </div>
+                        {r.variacoesMateriais.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-stone-100">
+                            <p className="text-xs text-stone-400 mb-1.5">Materiais que mudaram de preço em relação ao mês passado</p>
+                            <div className="space-y-1">
+                              {r.variacoesMateriais.map((v) => (
+                                <div key={v.descricao} className="flex items-center justify-between gap-2 text-xs">
+                                  <span className="text-stone-600 truncate">{v.descricao}</span>
+                                  <span className={`font-medium flex-shrink-0 ${v.pct > 0 ? 'text-red-600' : 'text-green-700'}`}>
+                                    {v.pct > 0 ? '+' : ''}{v.pct.toFixed(0)}% ({formatMoney(v.de)} → {formatMoney(v.para)})
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {alertas.length > 0 && (
                     <div className="space-y-1.5 eco-stagger">
                       {alertas.map((a, i) => (
@@ -1902,6 +1974,16 @@ function CustoObraApp() {
             onAviso={setAviso}
             onErro={setErro}
             onConfirmar={confirmar}
+          />
+        )}
+
+        {/* ---------------- MATERIAIS ---------------- */}
+        {view === 'materiais' && (
+          <Materiais
+            lancamentos={lancamentos}
+            obras={obras}
+            materialInicial={materialFoco}
+            onLimparMaterialInicial={() => setMaterialFoco(null)}
           />
         )}
 
@@ -2572,6 +2654,21 @@ function CustoObraApp() {
           </div>
         </div>
       )}
+
+      <BuscaGlobal
+        aberto={buscaAberta}
+        onFechar={() => setBuscaAberta(false)}
+        dados={{ obras, clientes, produtos, fornecedores, boletos, contratos, lancamentos, contas }}
+        onIr={(destino) => {
+          if (destino.view === 'obra' && destino.obraId) {
+            setObraAtivaId(destino.obraId);
+            setView('obra');
+          } else {
+            if (destino.material) setMaterialFoco(destino.material);
+            setView(destino.view);
+          }
+        }}
+      />
 
       <ToastStack
         aviso={aviso}
