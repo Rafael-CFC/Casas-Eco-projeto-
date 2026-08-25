@@ -59,6 +59,14 @@ Siga na ordem. Não precisa saber programar nem usar linha de comando — tudo �
 
 ## Como usar as telas principais
 
+### Madeiras (antigo "Vender")
+
+O botão que se chamava **Vender** agora se chama **Madeiras** — a tela é a tabela
+de preços das madeiras e o orçamento em PDF para o cliente, e por enquanto só
+madeira entra ali. No celular ele fica fixo na barra de baixo, logo depois do
+Início, para não precisar procurar dentro do "Mais". O **Financeiro** saiu da barra
+de baixo e continua no botão **Mais** (é tela de gráfico, melhor no computador).
+
 ### Catálogo — pesquisar produto
 
 Na tela **Catálogo** tem uma barra de pesquisa acima da lista. Digite parte do nome

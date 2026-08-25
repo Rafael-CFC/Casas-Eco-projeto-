@@ -6,7 +6,7 @@ import {
   Upload, ArrowUpRight, ArrowDownRight, CheckCircle2, X, Pencil, Copy,
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
-  ShoppingCart, Landmark, FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search, NotebookPen,
+  Landmark, FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search, NotebookPen, Trees,
   LogOut, KeyRound,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit } from './textUtils';
@@ -89,18 +89,24 @@ function parseImportado(texto) {
 
 // `primario` marca os itens que aparecem direto na barra de baixo do
 // celular; os demais ficam no botão "Mais". No computador a barra lateral
-// mostra todos.
+// mostra todos, sempre nesta ordem.
+//
+// `ordemMobile` decide a ordem só da barra do celular: "Madeiras" fica
+// logo depois de "Início" porque é a tela que mais se abre no balcão,
+// pelo celular, e antes ela ficava escondida dentro do "Mais". O
+// Financeiro saiu da barra (continua no "Mais"): é tela de gráfico, de
+// olhar no computador.
 const NAV_ITEMS = [
-  { key: 'home', label: 'Início', icon: Home, primario: true },
-  { key: 'financeiro', label: 'Financeiro', icon: LayoutDashboard, primario: true },
-  { key: 'boletos', label: 'Boletos', icon: Landmark, primario: true },
-  { key: 'contratos', label: 'Contratos', icon: FileSignature, primario: true },
+  { key: 'home', label: 'Início', icon: Home, primario: true, ordemMobile: 1 },
+  { key: 'financeiro', label: 'Financeiro', icon: LayoutDashboard },
+  { key: 'boletos', label: 'Boletos', icon: Landmark, primario: true, ordemMobile: 3 },
+  { key: 'contratos', label: 'Contratos', icon: FileSignature, primario: true, ordemMobile: 4 },
   { key: 'catalogo', label: 'Catálogo', icon: Package },
   { key: 'crediario', label: 'Crediário', icon: NotebookPen },
   { key: 'materiais', label: 'Materiais', icon: Boxes },
   { key: 'fornecedores', label: 'Fornecedores', icon: Users },
   { key: 'contas', label: 'Contas', icon: Receipt },
-  { key: 'venda', label: 'Vender', icon: ShoppingCart },
+  { key: 'venda', label: 'Madeiras', icon: Trees, primario: true, ordemMobile: 2 },
   { key: 'relatorios', label: 'Relatórios', icon: FileText },
   { key: 'configuracoes', label: 'Configurações', icon: Settings },
 ];
@@ -115,7 +121,7 @@ const PAGINA_META = {
   contas: { titulo: 'Contas a pagar', subtitulo: 'Vencimentos e parcelas' },
   boletos: { titulo: 'Boletos', subtitulo: 'Boletos bancários por obra, categoria e vencimento' },
   contratos: { titulo: 'Contratos', subtitulo: 'Contratos, memoriais e parcelas a receber' },
-  venda: { titulo: 'Vender Madeira', subtitulo: 'Preços de venda ao cliente e orçamento em PDF' },
+  venda: { titulo: 'Madeiras', subtitulo: 'Tabela de preços das madeiras e orçamento em PDF' },
   relatorios: { titulo: 'Relatórios', subtitulo: 'Exportações e resumos gerais' },
   configuracoes: { titulo: 'Configurações', subtitulo: 'Dados da empresa e modelos de contrato/memorial' },
 };
@@ -1344,7 +1350,7 @@ function CustoObraApp({ usuario }) {
       {/* barra de navegação fixa embaixo, só no celular: os itens principais
           ficam à mão e o resto abre no botão "Mais" */}
       <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-stone-200 flex z-20">
-        {NAV_ITEMS.filter((i) => i.primario).map((item) => {
+        {NAV_ITEMS.filter((i) => i.primario).sort((a, b) => a.ordemMobile - b.ordemMobile).map((item) => {
           const Icon = item.icon;
           const ativo = view === item.key || (item.key === 'home' && (view === 'obra' || view === 'resumo'));
           return (
@@ -2230,7 +2236,7 @@ function CustoObraApp({ usuario }) {
           />
         )}
 
-        {/* ---------------- VENDER MADEIRA (orçamento ao cliente) ---------------- */}
+        {/* ---------------- MADEIRAS (tabela de preços e orçamento ao cliente) ---------------- */}
         {view === 'venda' && (
           <OrcamentoVenda onAviso={setAviso} onErro={setErro} />
         )}
