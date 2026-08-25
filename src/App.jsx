@@ -5,7 +5,7 @@ import {
   Upload, ArrowUpRight, ArrowDownRight, CheckCircle2, X, Pencil, Copy,
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
-  ShoppingCart,
+  ShoppingCart, Landmark,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
@@ -18,6 +18,9 @@ import ResumoFinalObra from './obra/ResumoFinalObra';
 import ProdutoSeletor from './produtos/ProdutoSeletor';
 import { catalogoPorCategoria } from './produtos/catalogoUtils';
 import OrcamentoVenda from './venda/OrcamentoVenda';
+import Boletos from './boletos/Boletos';
+import { novoBoleto, atualizarCamposBoleto, registrarPagamento, reabrirBoleto, cancelarBoletoObj, mapearCategoriaBoletoParaLancamento } from './boletos/boletosStore';
+import { totalBoletosPorObra } from './boletos/boletosCalc';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -76,6 +79,7 @@ const NAV_ITEMS = [
   { key: 'catalogo', label: 'Catálogo', icon: Package },
   { key: 'fornecedores', label: 'Fornecedores', icon: Users },
   { key: 'contas', label: 'Contas', icon: Receipt },
+  { key: 'boletos', label: 'Boletos', icon: Landmark },
   { key: 'venda', label: 'Vender', icon: ShoppingCart },
   { key: 'relatorios', label: 'Relatórios', icon: FileText },
 ];
@@ -86,6 +90,7 @@ const PAGINA_META = {
   catalogo: { titulo: 'Catálogo', subtitulo: 'Produtos e preços cadastrados' },
   fornecedores: { titulo: 'Fornecedores', subtitulo: 'Cadastro e histórico de compras' },
   contas: { titulo: 'Contas a pagar', subtitulo: 'Vencimentos e parcelas' },
+  boletos: { titulo: 'Boletos', subtitulo: 'Boletos bancários por obra, categoria e vencimento' },
   venda: { titulo: 'Vender Madeira', subtitulo: 'Preços de venda ao cliente e orçamento em PDF' },
   relatorios: { titulo: 'Relatórios', subtitulo: 'Exportações e resumos gerais' },
 };
@@ -97,6 +102,7 @@ function CustoObraApp() {
   const [etapas, setEtapas] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [contas, setContas] = useState([]);
+  const [boletos, setBoletos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
@@ -142,13 +148,14 @@ function CustoObraApp() {
         return;
       }
       try {
-        const [o, p, l, et, fo, co] = await Promise.all([
+        const [o, p, l, et, fo, co, bo] = await Promise.all([
           window.storage.get('obras', false).catch(() => null),
           window.storage.get('produtos', false).catch(() => null),
           window.storage.get('lancamentos', false).catch(() => null),
           window.storage.get('etapas', false).catch(() => null),
           window.storage.get('fornecedores', false).catch(() => null),
           window.storage.get('contas', false).catch(() => null),
+          window.storage.get('boletos', false).catch(() => null),
         ]);
 
         // Migração não destrutiva: padroniza nome/unidade de produtos e
@@ -180,6 +187,7 @@ function CustoObraApp() {
         setEtapas(et ? JSON.parse(et.value) : []);
         setFornecedores(fo ? JSON.parse(fo.value) : []);
         setContas(co ? JSON.parse(co.value) : []);
+        setBoletos(bo ? JSON.parse(bo.value) : []);
 
         if (produtosMudaram) {
           window.storage.set('produtos', JSON.stringify(produtosNormalizados), false).catch(() => {});
@@ -228,6 +236,7 @@ function CustoObraApp() {
   const salvarEtapas = (l) => persist('etapas', l, setEtapas);
   const salvarFornecedores = (l) => persist('fornecedores', l, setFornecedores);
   const salvarContas = (l) => persist('contas', l, setContas);
+  const salvarBoletos = (l) => persist('boletos', l, setBoletos);
 
   async function criarObra(e) {
     if (e && e.preventDefault) e.preventDefault();
@@ -459,6 +468,59 @@ function CustoObraApp() {
     return 'futuro';
   }
 
+  // ---- boletos ----
+  // Wrappers "só persistem": diálogos de confirmação e avisos ficam por
+  // conta da tela (src/boletos/Boletos.jsx), que já recebe `confirmar` como
+  // prop — mesmo padrão usado por OrcamentoVenda.jsx.
+  async function criarBoleto(campos) {
+    return salvarBoletos([novoBoleto(campos), ...boletos]);
+  }
+
+  async function atualizarBoleto(id, campos) {
+    return salvarBoletos(boletos.map((b) => (b.id === id ? atualizarCamposBoleto(b, campos) : b)));
+  }
+
+  async function marcarBoletoPago(id, dados) {
+    const boleto = boletos.find((b) => b.id === id);
+    if (!boleto) return false;
+    const boletoPago = registrarPagamento(boleto, dados);
+    let lancamentoId = null;
+    if (dados.lancarComoDespesa && boleto.obraId && !boleto.lancamentoGeradoId) {
+      lancamentoId = crypto.randomUUID();
+      const item = {
+        id: lancamentoId,
+        obraId: boleto.obraId,
+        categoria: mapearCategoriaBoletoParaLancamento(boleto.categoria),
+        produtoId: null,
+        descricao: boleto.descricao || boleto.beneficiario,
+        unidade: 'UN',
+        quantidade: 1,
+        preco: boletoPago.valorPago,
+        total: boletoPago.valorPago,
+        data: boletoPago.dataPagamento,
+        observacao: `Lançado a partir do boleto de ${boleto.beneficiario} (categoria original: ${boleto.categoria}).`,
+        etapaId: null,
+        fornecedorNome: boleto.beneficiario,
+      };
+      const okLancamento = await salvarLancamentos([item, ...lancamentos]);
+      if (!okLancamento) lancamentoId = null;
+    }
+    const boletoFinal = lancamentoId ? { ...boletoPago, lancamentoGeradoId: lancamentoId } : boletoPago;
+    return salvarBoletos(boletos.map((b) => (b.id === id ? boletoFinal : b)));
+  }
+
+  async function reabrirBoletoPagamento(id) {
+    return salvarBoletos(boletos.map((b) => (b.id === id ? reabrirBoleto(b) : b)));
+  }
+
+  async function cancelarBoleto(id) {
+    return salvarBoletos(boletos.map((b) => (b.id === id ? cancelarBoletoObj(b, '') : b)));
+  }
+
+  async function removerBoleto(id) {
+    return salvarBoletos(boletos.filter((b) => b.id !== id));
+  }
+
   // ---- formulário: cadastro/edição de fornecedor ----
   const [fnNome, setFnNome] = useState('');
   const [fnTelefone, setFnTelefone] = useState('');
@@ -559,13 +621,25 @@ function CustoObraApp() {
     baixarCSV('contas-a-pagar.csv', linhas);
   }
 
+  function exportarBoletosCSV() {
+    const linhas = [['Beneficiário', 'CNPJ', 'Valor', 'Vencimento', 'Status', 'Categoria', 'Obra', 'Fornecedor', 'Documento']];
+    boletos.forEach((b) => {
+      const o = b.obraId ? obras.find((ob) => ob.id === b.obraId) : null;
+      linhas.push([
+        b.beneficiario, b.cnpjCpfBeneficiario || '', b.valor, formatDateBR(b.vencimento), b.status,
+        b.categoria, o ? o.nome : 'Despesa geral', b.fornecedorNome || '', b.numeroDocumento || '',
+      ]);
+    });
+    baixarCSV('boletos.csv', linhas);
+  }
+
   // ---- backup completo do sistema (baixar / restaurar) ----
   function exportarBackupCompleto() {
     const backup = {
       sistema: 'casaseco-custo-obra',
       versaoBackup: 1,
       geradoEm: new Date().toISOString(),
-      dados: { obras, produtos, lancamentos, etapas, fornecedores, contas },
+      dados: { obras, produtos, lancamentos, etapas, fornecedores, contas, boletos },
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -601,8 +675,13 @@ function CustoObraApp() {
         return;
       }
       const dados = backup && backup.dados;
-      const chavesEsperadas = ['obras', 'produtos', 'lancamentos', 'etapas', 'fornecedores', 'contas'];
-      const valido = dados && chavesEsperadas.every((k) => Array.isArray(dados[k]));
+      // "boletos" é opcional aqui de propósito: backups feitos antes desse
+      // módulo existir não têm essa chave, e continuam válidos (restauram
+      // sem boletos, em vez de serem rejeitados).
+      const chavesObrigatorias = ['obras', 'produtos', 'lancamentos', 'etapas', 'fornecedores', 'contas'];
+      const valido = dados
+        && chavesObrigatorias.every((k) => Array.isArray(dados[k]))
+        && (dados.boletos === undefined || Array.isArray(dados.boletos));
       if (!valido) {
         setErro('Esse arquivo não parece um backup do Casas Eco (faltam dados esperados).');
         return;
@@ -624,6 +703,7 @@ function CustoObraApp() {
       salvarEtapas(dados.etapas),
       salvarFornecedores(dados.fornecedores),
       salvarContas(dados.contas),
+      salvarBoletos(dados.boletos || []),
     ]);
     if (resultados.every(Boolean)) {
       setAviso('Backup restaurado com sucesso.');
@@ -999,10 +1079,10 @@ function CustoObraApp() {
             <button
               key={item.key}
               onClick={() => { setView(item.key); if (item.key === 'home') setObraAtivaId(null); }}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-xs transition-colors duration-150 ${ativo ? 'text-green-700' : 'text-stone-400'}`}
+              className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] leading-tight transition-colors duration-150 ${ativo ? 'text-green-700' : 'text-stone-400'}`}
             >
-              <Icon size={18} />
-              {item.label}
+              <Icon size={17} />
+              <span className="truncate max-w-full px-0.5">{item.label}</span>
             </button>
           );
         })}
@@ -1591,6 +1671,24 @@ function CustoObraApp() {
           );
         })()}
 
+        {/* ---------------- BOLETOS ---------------- */}
+        {view === 'boletos' && (
+          <Boletos
+            boletos={boletos}
+            obras={obras}
+            fornecedores={fornecedores}
+            onCriarBoleto={criarBoleto}
+            onAtualizarBoleto={atualizarBoleto}
+            onMarcarPago={marcarBoletoPago}
+            onReabrirBoleto={reabrirBoletoPagamento}
+            onCancelarBoleto={cancelarBoleto}
+            onRemoverBoleto={removerBoleto}
+            onAviso={setAviso}
+            onErro={setErro}
+            onConfirmar={confirmar}
+          />
+        )}
+
         {/* ---------------- VENDER MADEIRA (orçamento ao cliente) ---------------- */}
         {view === 'venda' && (
           <OrcamentoVenda onAviso={setAviso} onErro={setErro} />
@@ -1611,6 +1709,9 @@ function CustoObraApp() {
                   </button>
                   <button onClick={exportarContasCSV} className="eco-btn-secondary eco-btn-sm">
                     <Download size={14} /> Contas a pagar (CSV)
+                  </button>
+                  <button onClick={exportarBoletosCSV} className="eco-btn-secondary eco-btn-sm">
+                    <Download size={14} /> Boletos (CSV)
                   </button>
                 </div>
                 {obras.length > 0 && (
@@ -1810,6 +1911,24 @@ function CustoObraApp() {
                 <Pencil size={12} /> Definir orçamento para esta obra
               </button>
             ) : null}
+
+            {(() => {
+              const resumoBoletos = totalBoletosPorObra(boletos, obraAtiva.id);
+              if (resumoBoletos.quantidade === 0) return null;
+              return (
+                <div className="eco-card p-4">
+                  <p className="text-sm font-semibold text-stone-700 mb-1">Boletos vinculados a esta obra</p>
+                  <p className="text-xs text-stone-500">
+                    {formatMoney(resumoBoletos.pendente)} pendente · {formatMoney(resumoBoletos.pago)} pago
+                    {' · '}
+                    <button onClick={() => setView('boletos')} className="underline hover:text-green-700">ver boletos</button>
+                  </p>
+                  <p className="text-[11px] text-stone-400 mt-1">
+                    Este valor é informativo e não entra na soma de "Total da obra" acima.
+                  </p>
+                </div>
+              );
+            })()}
 
             <nav className="grid grid-cols-3 gap-2">
               {Object.entries(CATEGORIAS).map(([key, cat]) => {
