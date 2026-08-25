@@ -8,6 +8,24 @@
 
 import { supabase } from './supabaseClient';
 
+// O banco só aceita leitura e gravação de quem está logado, e só da conta
+// marcada como dona do sistema. Quando ele recusa, a mensagem que chega é
+// técnica e em inglês — aqui ela vira algo que dá para agir em cima.
+function explicarErro(error) {
+  const m = String(error?.message || '').toLowerCase();
+  const codigo = String(error?.code || '');
+  if (codigo === '42501' || m.includes('row-level security') || m.includes('violates row-level')) {
+    return 'Sua conta não tem permissão para gravar. No Supabase, confira se o seu e-mail está marcado como "dono" (passo 5 do schema.sql).';
+  }
+  if (m.includes('jwt') || m.includes('token') || String(error?.status) === '401') {
+    return 'Sua sessão expirou. Saia e entre de novo.';
+  }
+  if (m.includes('failed to fetch') || m.includes('networkerror')) {
+    return 'Sem conexão com o servidor. O que você digitou continua na tela.';
+  }
+  return error?.message || 'erro desconhecido do banco de dados';
+}
+
 window.storage = {
   async get(key) {
     const { data, error } = await supabase
@@ -28,7 +46,7 @@ window.storage = {
 
     if (error) {
       console.error('Erro ao salvar no Supabase:', error);
-      throw new Error(error.message || 'erro desconhecido do banco de dados');
+      throw new Error(explicarErro(error));
     }
     return { key, value, shared: true };
   },
