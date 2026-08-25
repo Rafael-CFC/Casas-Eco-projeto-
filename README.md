@@ -57,6 +57,45 @@ Siga na ordem. Não precisa saber programar nem usar linha de comando — tudo �
 
 ---
 
+## Como usar as telas principais
+
+### Catálogo — pesquisar produto
+
+Na tela **Catálogo** tem uma barra de pesquisa acima da lista. Digite parte do nome
+(ou a unidade) e a lista filtra na hora — sem acento funciona igual (`moerao` acha
+`MOERÃO`) e a ordem das palavras não importa (`cimento 50` acha `CIMENTO CP-II 50KG`).
+Ao lado fica o **Ordenar por**: nome, atualizado recentemente, ou preço (maior/menor).
+Embaixo da tabela aparece quantos produtos foram encontrados.
+
+### Crediário — o que os montadores pegam
+
+A tela **Crediário** é a caderneta dos montadores (Messias, Berlanda e quem mais
+pegar produto na loja).
+
+**Isso não é venda.** É só anotação interna, para descontar depois na mão de obra.
+Nada do crediário vira nota fiscal, imposto, faturamento ou custo de obra: não
+aparece no Financeiro, nem nos relatórios, nem no resumo das obras. Os dados ficam
+guardados separados de todo o resto do sistema.
+
+Como funciona no dia a dia:
+
+1. **Cadastre o montador** uma vez (botão "Novo montador"): nome, apelido, telefone.
+2. **Quando ele levar produto**, abra o cartão dele e clique em **Retirada**. Escolha
+   os produtos (a lista traz o catálogo da loja mais a tabela de madeiras), a
+   quantidade e o valor — o valor já vem preenchido pelo cadastro e dá para mudar.
+   Pode marcar de qual obra é e deixar uma observação.
+3. **Quando seu pai descontar o valor na mão de obra**, clique em **Acerto** e
+   registre quanto foi descontado. O sistema já sugere o saldo inteiro, mas aceita
+   desconto parcial. Também aceita "pago em dinheiro" ou "PIX" quando for o caso.
+4. O **saldo** de cada montador é sempre "o que ele pegou menos o que já foi
+   descontado". Verde = em dia, amarelo = ainda tem valor a descontar.
+
+Para conferir com o montador: dentro do extrato dele tem **Extrato em PDF** (sai
+carimbado como documento interno, sem valor fiscal, com linha para as duas
+assinaturas) e **Copiar para WhatsApp** (cola o extrato como texto).
+
+Tudo isso entra no backup normal do sistema (botão de backup em Relatórios).
+
 ## E se eu precisar mexer em algo depois?
 
 Sempre que eu (Claude) fizer uma atualização no software, vou te mandar os arquivos atualizados aqui no chat. Você só precisa:

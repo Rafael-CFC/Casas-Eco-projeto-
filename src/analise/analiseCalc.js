@@ -197,6 +197,7 @@ export function buscaGlobal(termo, dados) {
   const {
     obras = [], clientes = [], produtos = [], fornecedores = [],
     boletos = [], contratos = [], lancamentos = [], contas = [],
+    montadores = [], crediario = [],
   } = dados;
 
   const bate = (...campos) => campos.some((c) => semAcento(c).includes(t));
@@ -233,6 +234,22 @@ export function buscaGlobal(termo, dados) {
     id: p.id, titulo: p.nome, subtitulo: `${p.unidade} · último preço registrado`,
     destino: { view: 'materiais', material: p.nome },
   })));
+
+  // Crediário: o saldo mostrado é o que ainda falta descontar da mão de
+  // obra do montador — não é venda nem conta a receber.
+  push('Crediário (montadores)', montadores.filter((m) => bate(m.nome, m.apelido, m.telefone)).map((m) => {
+    const movimentos = crediario.filter((mov) => mov.montadorId === m.id);
+    const saldo = movimentos.reduce(
+      (acc, mov) => acc + (mov.tipo === 'acerto' ? -(Number(mov.valor) || 0) : (Number(mov.valor) || 0)),
+      0
+    );
+    return {
+      id: m.id,
+      titulo: m.apelido ? `${m.nome} (${m.apelido})` : m.nome,
+      subtitulo: `saldo a descontar: ${saldo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`,
+      destino: { view: 'crediario' },
+    };
+  }));
 
   push('Contas a pagar', contas.filter((c) => bate(c.descricao, c.fornecedorNome)).map((c) => ({
     id: c.id, titulo: c.descricao, subtitulo: `vence ${c.vencimento} · ${c.status}`,

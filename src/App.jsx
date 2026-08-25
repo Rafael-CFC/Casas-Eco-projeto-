@@ -6,7 +6,7 @@ import {
   Upload, ArrowUpRight, ArrowDownRight, CheckCircle2, X, Pencil, Copy,
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
-  ShoppingCart, Landmark, FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search,
+  ShoppingCart, Landmark, FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search, NotebookPen,
   LogOut, KeyRound,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit } from './textUtils';
@@ -20,7 +20,7 @@ import FinalizarObraModal from './obra/FinalizarObraModal';
 import SucessoFinalizacaoModal from './obra/SucessoFinalizacaoModal';
 import ResumoFinalObra from './obra/ResumoFinalObra';
 import ProdutoSeletor from './produtos/ProdutoSeletor';
-import { catalogoPorCategoria } from './produtos/catalogoUtils';
+import { catalogoPorCategoria, filtrarOrdenarProdutos, ORDENS_CATALOGO } from './produtos/catalogoUtils';
 import OrcamentoVenda from './venda/OrcamentoVenda';
 import Boletos from './boletos/Boletos';
 import { novoBoleto, atualizarCamposBoleto, registrarPagamento, reabrirBoleto, cancelarBoletoObj, mapearCategoriaBoletoParaLancamento } from './boletos/boletosStore';
@@ -29,6 +29,9 @@ import Contratos from './contratos/Contratos';
 import Configuracoes from './config/Configuracoes';
 import { normalizarConfiguracao, configuracaoVazia } from './config/configStore';
 import { resumoParcelasDaObra, resumoParcelas } from './contratos/contratosStore';
+import Crediario from './crediario/Crediario';
+import { catalogoParaRetirada } from './crediario/crediarioCalc';
+import { CATALOGO_VENDA } from './venda/catalogoVenda';
 import Materiais from './analise/Materiais';
 import BuscaGlobal from './analise/BuscaGlobal';
 import { resumoDoMes, rankingMateriais, estatisticasMaterial } from './analise/analiseCalc';
@@ -93,6 +96,7 @@ const NAV_ITEMS = [
   { key: 'boletos', label: 'Boletos', icon: Landmark, primario: true },
   { key: 'contratos', label: 'Contratos', icon: FileSignature, primario: true },
   { key: 'catalogo', label: 'Catálogo', icon: Package },
+  { key: 'crediario', label: 'Crediário', icon: NotebookPen },
   { key: 'materiais', label: 'Materiais', icon: Boxes },
   { key: 'fornecedores', label: 'Fornecedores', icon: Users },
   { key: 'contas', label: 'Contas', icon: Receipt },
@@ -105,6 +109,7 @@ const PAGINA_META = {
   home: { titulo: 'Início', subtitulo: 'Visão geral de todas as obras' },
   financeiro: { titulo: 'Financeiro', subtitulo: 'Indicadores, gráficos e alertas de custo' },
   catalogo: { titulo: 'Catálogo', subtitulo: 'Produtos e preços cadastrados' },
+  crediario: { titulo: 'Crediário dos montadores', subtitulo: 'Anotação do que cada um pegou — não é venda, não gera nota nem imposto' },
   materiais: { titulo: 'Materiais', subtitulo: 'Preço médio, histórico e comparação entre fornecedores' },
   fornecedores: { titulo: 'Fornecedores', subtitulo: 'Cadastro e histórico de compras' },
   contas: { titulo: 'Contas a pagar', subtitulo: 'Vencimentos e parcelas' },
@@ -125,6 +130,8 @@ function CustoObraApp({ usuario }) {
   const [boletos, setBoletos] = useState([]);
   const [contratos, setContratos] = useState([]);
   const [clientes, setClientes] = useState([]);
+  const [montadores, setMontadores] = useState([]);
+  const [crediario, setCrediario] = useState([]);
   const [configuracao, setConfiguracao] = useState(configuracaoVazia);
   const [menuMaisAberto, setMenuMaisAberto] = useState(false);
   const [trocandoSenha, setTrocandoSenha] = useState(false);
@@ -175,7 +182,7 @@ function CustoObraApp({ usuario }) {
         return;
       }
       try {
-        const [o, p, l, et, fo, co, bo, ct, cl, cf] = await Promise.all([
+        const [o, p, l, et, fo, co, bo, ct, cl, cf, mt, cr] = await Promise.all([
           window.storage.get('obras', false).catch(() => null),
           window.storage.get('produtos', false).catch(() => null),
           window.storage.get('lancamentos', false).catch(() => null),
@@ -186,6 +193,8 @@ function CustoObraApp({ usuario }) {
           window.storage.get('contratos', false).catch(() => null),
           window.storage.get('clientes', false).catch(() => null),
           window.storage.get('configuracao', false).catch(() => null),
+          window.storage.get('montadores', false).catch(() => null),
+          window.storage.get('crediario', false).catch(() => null),
         ]);
 
         // Migração não destrutiva: padroniza nome/unidade de produtos e
@@ -221,6 +230,8 @@ function CustoObraApp({ usuario }) {
         setContratos(ct ? JSON.parse(ct.value) : []);
         setClientes(cl ? JSON.parse(cl.value) : []);
         setConfiguracao(normalizarConfiguracao(cf ? JSON.parse(cf.value) : null));
+        setMontadores(mt ? JSON.parse(mt.value) : []);
+        setCrediario(cr ? JSON.parse(cr.value) : []);
 
         if (produtosMudaram) {
           window.storage.set('produtos', JSON.stringify(produtosNormalizados), false).catch(() => {});
@@ -273,6 +284,10 @@ function CustoObraApp({ usuario }) {
   const salvarContratos = (l) => persist('contratos', l, setContratos);
   const salvarClientes = (l) => persist('clientes', l, setClientes);
   const salvarConfiguracao = (c) => persist('configuracao', c, setConfiguracao);
+  // O crediário mora em duas chaves próprias, separadas de `lancamentos`:
+  // é anotação interna, não custo de obra nem venda.
+  const salvarMontadores = (l) => persist('montadores', l, setMontadores);
+  const salvarCrediario = (l) => persist('crediario', l, setCrediario);
 
   async function criarObra(e) {
     if (e && e.preventDefault) e.preventDefault();
@@ -858,7 +873,7 @@ function CustoObraApp({ usuario }) {
       sistema: 'casaseco-custo-obra',
       versaoBackup: 1,
       geradoEm: new Date().toISOString(),
-      dados: { obras, produtos, lancamentos, etapas, fornecedores, contas, boletos, contratos, clientes, configuracao },
+      dados: { obras, produtos, lancamentos, etapas, fornecedores, contas, boletos, contratos, clientes, montadores, crediario, configuracao },
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -898,7 +913,7 @@ function CustoObraApp({ usuario }) {
       // módulo existir não têm essa chave, e continuam válidos (restauram
       // sem boletos, em vez de serem rejeitados).
       const chavesObrigatorias = ['obras', 'produtos', 'lancamentos', 'etapas', 'fornecedores', 'contas'];
-      const listasOpcionais = ['boletos', 'contratos', 'clientes'];
+      const listasOpcionais = ['boletos', 'contratos', 'clientes', 'montadores', 'crediario'];
       const valido = dados
         && chavesObrigatorias.every((k) => Array.isArray(dados[k]))
         && listasOpcionais.every((k) => dados[k] === undefined || Array.isArray(dados[k]));
@@ -926,6 +941,8 @@ function CustoObraApp({ usuario }) {
       salvarBoletos(dados.boletos || []),
       salvarContratos(dados.contratos || []),
       salvarClientes(dados.clientes || []),
+      salvarMontadores(dados.montadores || []),
+      salvarCrediario(dados.crediario || []),
       salvarConfiguracao(normalizarConfiguracao(dados.configuracao || null)),
     ]);
     if (resultados.every(Boolean)) {
@@ -1076,6 +1093,10 @@ function CustoObraApp({ usuario }) {
       if (npEditandoId === id) cancelarEdicaoProduto();
     });
   }
+
+  // ---- busca do catálogo ----
+  const [buscaCatalogo, setBuscaCatalogo] = useState('');
+  const [ordemCatalogo, setOrdemCatalogo] = useState('nome');
 
   // ---- importação do PDV ----
   const [importAberto, setImportAberto] = useState(false);
@@ -1229,6 +1250,12 @@ function CustoObraApp({ usuario }) {
   const obraAtiva = obras.find((o) => o.id === obraAtivaId);
   const obraConcluida = obraEstaConcluida(obraAtiva);
   const catalogoAtivo = catalogoPorCategoria(categoriaAtiva, produtos, lancamentos);
+  // lista que a tela do Catálogo mostra: o catálogo inteiro passado pela
+  // busca e pela ordenação escolhidas na própria tela.
+  const produtosDoCatalogo = filtrarOrdenarProdutos(produtos, buscaCatalogo, ordemCatalogo);
+  // catálogo oferecido no crediário: produtos cadastrados + tabela de
+  // madeiras, que são as duas listas de itens que a loja já tem.
+  const catalogoCrediario = catalogoParaRetirada(produtos, CATALOGO_VENDA);
   const paginaAtual = (view === 'obra' || view === 'resumo') && obraAtiva
     ? {
         titulo: obraAtiva.nome,
@@ -1821,6 +1848,39 @@ function CustoObraApp({ usuario }) {
               )}
             </div>
 
+            <div className="eco-card p-3 flex flex-col sm:flex-row gap-3 sm:items-center">
+              <div className="relative flex-1 min-w-0">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300" />
+                <input
+                  value={buscaCatalogo}
+                  onChange={(e) => setBuscaCatalogo(e.target.value)}
+                  placeholder="Pesquisar produto pelo nome ou unidade…"
+                  className="eco-input pl-9"
+                />
+                {buscaCatalogo && (
+                  <button
+                    onClick={() => setBuscaCatalogo('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 eco-icon-btn"
+                    title="Limpar busca"
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-stone-500 whitespace-nowrap">Ordenar por</label>
+                <select
+                  value={ordemCatalogo}
+                  onChange={(e) => setOrdemCatalogo(e.target.value)}
+                  className="eco-input sm:w-56"
+                >
+                  {ORDENS_CATALOGO.map((o) => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="eco-card overflow-hidden">
               <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[560px]">
@@ -1837,7 +1897,10 @@ function CustoObraApp({ usuario }) {
                   {produtos.length === 0 && (
                     <tr><td colSpan={5} className="px-3 py-6 text-center text-stone-400">Nenhum produto cadastrado ainda.</td></tr>
                   )}
-                  {produtos.slice().sort((a, b) => a.nome.localeCompare(b.nome)).map((p) => {
+                  {produtos.length > 0 && produtosDoCatalogo.length === 0 && (
+                    <tr><td colSpan={5} className="px-3 py-6 text-center text-stone-400">Nenhum produto encontrado para "{buscaCatalogo.trim()}".</td></tr>
+                  )}
+                  {produtosDoCatalogo.map((p) => {
                     const anterior = p.historico && p.historico.length > 0 ? p.historico[p.historico.length - 1] : null;
                     const variacao = anterior && anterior.preco > 0 ? ((p.preco - anterior.preco) / anterior.preco) * 100 : null;
                     return (
@@ -1868,6 +1931,13 @@ function CustoObraApp({ usuario }) {
                 </tbody>
               </table>
               </div>
+              {produtos.length > 0 && (
+                <p className="px-3 py-2 border-t border-stone-100 text-xs text-stone-400">
+                  {buscaCatalogo.trim()
+                    ? `${produtosDoCatalogo.length} de ${produtos.length} produto(s) encontrado(s)`
+                    : `${produtos.length} produto(s) no catálogo`}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -2103,6 +2173,21 @@ function CustoObraApp({ usuario }) {
             onReabrirBoleto={reabrirBoletoPagamento}
             onCancelarBoleto={cancelarBoleto}
             onRemoverBoleto={removerBoleto}
+            onAviso={setAviso}
+            onErro={setErro}
+            onConfirmar={confirmar}
+          />
+        )}
+
+        {/* ---------------- CREDIÁRIO DOS MONTADORES ---------------- */}
+        {view === 'crediario' && (
+          <Crediario
+            montadores={montadores}
+            movimentos={crediario}
+            obras={obras}
+            catalogoProdutos={catalogoCrediario}
+            onSalvarMontadores={salvarMontadores}
+            onSalvarMovimentos={salvarCrediario}
             onAviso={setAviso}
             onErro={setErro}
             onConfirmar={confirmar}
@@ -2799,7 +2884,7 @@ function CustoObraApp({ usuario }) {
       <BuscaGlobal
         aberto={buscaAberta}
         onFechar={() => setBuscaAberta(false)}
-        dados={{ obras, clientes, produtos, fornecedores, boletos, contratos, lancamentos, contas }}
+        dados={{ obras, clientes, produtos, fornecedores, boletos, contratos, lancamentos, contas, montadores, crediario }}
         onIr={(destino) => {
           if (destino.view === 'obra' && destino.obraId) {
             setObraAtivaId(destino.obraId);

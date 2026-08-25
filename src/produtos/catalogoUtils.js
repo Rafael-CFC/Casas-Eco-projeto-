@@ -7,6 +7,36 @@
 // isso o catálogo dessas duas categorias é derivado dos próprios
 // lançamentos (nome, última unidade e último preço usados), em vez de
 // inventar uma lista de materiais que não está nos dados do sistema.
+import { combinaBusca } from '../textUtils';
+
+// Ordenações oferecidas na tela do Catálogo. `nome` continua sendo o
+// padrão (é como a lista sempre apareceu); as outras existem porque o
+// catálogo importado do PDV é grande demais para procurar no olho.
+export const ORDENS_CATALOGO = [
+  { key: 'nome', label: 'Nome (A-Z)' },
+  { key: 'atualizado', label: 'Atualizado recentemente' },
+  { key: 'preco_maior', label: 'Preço: maior primeiro' },
+  { key: 'preco_menor', label: 'Preço: menor primeiro' },
+];
+
+// Filtra o catálogo pelo texto digitado (sem acento, palavras em qualquer
+// ordem, procurando no nome e na unidade) e ordena do jeito escolhido.
+// Não altera a lista original.
+export function filtrarOrdenarProdutos(produtos, busca = '', ordem = 'nome') {
+  const filtrados = produtos.filter((p) => combinaBusca(busca, p.nome, p.unidade));
+  const ordenados = filtrados.slice();
+  if (ordem === 'preco_maior') {
+    ordenados.sort((a, b) => (Number(b.preco) || 0) - (Number(a.preco) || 0));
+  } else if (ordem === 'preco_menor') {
+    ordenados.sort((a, b) => (Number(a.preco) || 0) - (Number(b.preco) || 0));
+  } else if (ordem === 'atualizado') {
+    ordenados.sort((a, b) => String(b.atualizadoEm || '').localeCompare(String(a.atualizadoEm || '')));
+  } else {
+    ordenados.sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'));
+  }
+  return ordenados;
+}
+
 export function catalogoPorCategoria(categoria, produtos, lancamentos) {
   if (categoria === 'produto_loja') {
     const usoCount = {};
@@ -53,9 +83,9 @@ export function catalogoPorCategoria(categoria, produtos, lancamentos) {
 // suficiente para fazer sentido (senão ficam ocultas, como pedido).
 export function selecionarSecoes(itens, busca, opcoes = {}) {
   const { minMaisUtilizados = 3, minRecentes = 2, limiteSecao = 5 } = opcoes;
-  const termo = busca.trim().toLowerCase();
+  const termo = busca.trim();
   const filtrados = termo
-    ? itens.filter((it) => it.nome.toLowerCase().includes(termo))
+    ? itens.filter((it) => combinaBusca(termo, it.nome, it.unidade))
     : itens.slice();
   filtrados.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 
