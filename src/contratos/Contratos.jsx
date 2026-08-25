@@ -4,7 +4,6 @@ import {
   ArrowLeft, AlertTriangle, Wallet,
 } from 'lucide-react';
 import { formatMoney, formatDateBR, todayISO } from '../domain';
-import { MODELOS_OBRA } from '../config/configStore';
 import {
   STATUS_CONTRATO, novoContratoRascunho, duplicarContrato, congelarContrato,
   resumoParcelas, totalParcelas,
@@ -30,7 +29,7 @@ export default function Contratos({
       .filter((c) => filtroStatus === 'todos' || c.status === filtroStatus)
       .filter((c) => {
         if (!termo) return true;
-        return [c.numero, c.cliente?.nome, c.cliente?.cpfCnpj, c.obra?.nome, String(c.valorTotal)]
+        return [c.numero, c.cliente?.nome, c.cliente?.cpfCnpj, String(c.valorTotal)]
           .filter(Boolean).join(' ').toLowerCase().includes(termo);
       })
       .sort((a, b) => (b.atualizadoEm || '').localeCompare(a.atualizadoEm || ''));
@@ -143,7 +142,7 @@ export default function Contratos({
               </div>
               <p className="text-xs text-stone-400 mt-0.5">
                 {c.numero ? `Contrato nº ${c.numero} · ` : ''}
-                {c.obra?.nome || 'obra não informada'}
+                {(obras.find((o) => o.id === c.obraId) || {}).nome || 'sem obra vinculada'}
                 {c.geradoEm ? ` · gerado em ${formatDateBR(c.geradoEm)}` : ''}
                 {c.versaoModelo ? ` · modelo v${c.versaoModelo}` : ''}
               </p>
@@ -270,7 +269,7 @@ export default function Contratos({
             {rascunhos.map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-2">
                 <span className="text-xs text-amber-800 truncate">
-                  {r.cliente?.nome || 'Sem cliente'} · {r.obra?.nome || 'sem obra'} · atualizado {formatDateBR(r.atualizadoEm)}
+                  {r.cliente?.nome || 'Sem cliente'} · atualizado {formatDateBR(r.atualizadoEm)}
                 </span>
                 <button onClick={() => continuarRascunho(r)} className="eco-btn-primary eco-btn-xs flex-shrink-0">
                   Continuar
@@ -343,8 +342,7 @@ export default function Contratos({
                   </div>
                   <p className="text-xs text-stone-400 mt-0.5 truncate">
                     {c.numero ? `nº ${c.numero} · ` : ''}
-                    {c.obra?.nome || 'obra não informada'}
-                    {' · '}{MODELOS_OBRA.find((m) => m.key === c.modeloObra)?.label || ''}
+                    {(obras.find((o) => o.id === c.obraId) || {}).nome || 'sem obra vinculada'}
                   </p>
                 </div>
                 <p className="text-sm font-semibold text-stone-800 flex-shrink-0">{formatMoney(c.valorTotal)}</p>

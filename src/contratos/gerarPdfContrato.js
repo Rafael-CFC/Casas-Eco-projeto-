@@ -1,199 +1,257 @@
-// Gera o PDF do CONTRATO e do MEMORIAL DESCRITIVO.
+// Gera o PDF do CONTRATO e do MEMORIAL DESCRITIVO reproduzindo o
+// documento que a Casas Eco já usa: mesma sequência de parágrafos, mesma
+// tabela de parcelas e mesmo bloco de assinaturas.
 //
-// Todo o conteúdo vem do modelo salvo em Configurações + dos dados do
-// contrato. Nenhum texto jurídico é inventado aqui: as cláusulas são
-// exatamente o que estiver cadastrado no modelo da empresa, com os
-// marcadores {{...}} trocados pelos dados reais do cliente/obra.
-import { formatMoney, formatDateBR, todayISO } from '../domain';
-import { valorPorExtenso } from './numeroPorExtenso';
-import { clausulasResolvidas, memorialResolvido } from './contratosStore';
-import { MODELOS_OBRA } from '../config/configStore';
-import {
-  criarDocumento, cabecalhoDocumento, tituloSecao, paragrafo, linhaChaveValor,
-  caixaDestaque, tabela, blocoAssinaturas, rodapeTodasPaginas, nomeArquivo,
-  garantirEspaco, novaPagina, COR,
-} from './pdfDocumento';
+// O conteúdo vem inteiro do modelo salvo (src/contratos/modeloCasasEco.js
+// + edições feitas em Configurações). Aqui só cuidamos do desenho.
+import { jsPDF } from 'jspdf';
+import { formatMoney } from '../domain';
+import { blocosContratoResolvidos, blocosMemorialResolvidos, montarValoresMarcadores } from './contratosStore';
 
-const NUMERO_CLAUSULA = ['PRIMEIRA', 'SEGUNDA', 'TERCEIRA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÉTIMA', 'OITAVA', 'NONA', 'DÉCIMA', 'DÉCIMA PRIMEIRA', 'DÉCIMA SEGUNDA', 'DÉCIMA TERCEIRA', 'DÉCIMA QUARTA', 'DÉCIMA QUINTA'];
+const MARGEM = 62;
+const RODAPE_Y = 800;
+const ALTURA_LINHA = 13.5;
+const TAMANHO_TEXTO = 10;
 
-function labelModelo(chave) {
-  return MODELOS_OBRA.find((m) => m.key === chave)?.label || '';
+const COR = {
+  preto: [0, 0, 0],
+  cinza: [90, 90, 90],
+  linha: [160, 160, 160],
+  fundoTabela: [242, 242, 242],
+};
+
+function criar() {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const largura = doc.internal.pageSize.getWidth() - MARGEM * 2;
+  return { doc, x: MARGEM, largura, y: MARGEM };
 }
 
-// ---- corpo do contrato (reaproveitado no PDF combinado) ----
-async function escreverContrato(ctx, contrato, config) {
-  const contratada = contrato.contratadaSnapshot || config.contratada || {};
+// A fonte padrão do PDF (Helvetica) só desenha os caracteres da tabela
+// WinAnsi. Qualquer coisa fora dela — bolinhas, aspas curvas, reticências
+// de um texto colado do Word — sairia como lixo na página. Aqui trocamos
+// esses caracteres por equivalentes que a fonte tem.
+const SUBSTITUICOES = {
+  '\u25cf': '\u2022', '\u25cb': '\u2022', '\u25aa': '\u2022', '\u25e6': '\u2022',
+  '\u2018': "'", '\u2019': "'", '\u201a': "'",
+  '\u201c': '"', '\u201d': '"', '\u201e': '"',
+  '\u2026': '...', '\u00a0': ' ', '\u200b': '',
+  '\u2212': '-', '\u2010': '-', '\u2011': '-', '\u2713': 'v',
+};
 
-  await cabecalhoDocumento(ctx, {
-    titulo: 'Contrato de Prestação de Serviços de Construção',
-    subtitulo: 'Contrato de empreitada',
-    numero: contrato.numero,
-  });
+function limparTexto(texto) {
+  return String(texto == null ? '' : texto)
+    .replace(/[\u25cf\u25cb\u25aa\u25e6\u2018\u2019\u201a\u201c\u201d\u201e\u2026\u00a0\u200b\u2212\u2010\u2011\u2713]/g,
+      (c) => (SUBSTITUICOES[c] !== undefined ? SUBSTITUICOES[c] : c))
+    // qualquer outro caractere que a fonte nao tem vira "?" em vez de lixo
+    .replace(/[^\n\u0020-\u00ff\u2013\u2014\u2022]/g, '?');
+}
 
-  // ---- qualificação das partes ----
-  tituloSecao(ctx, 'DAS PARTES');
-  paragrafo(ctx, 'CONTRATADA', { negrito: true, tamanho: 9.5, espacoDepois: 4, cor: COR.preto });
-  linhaChaveValor(ctx, 'Razão social', contratada.razaoSocial);
-  linhaChaveValor(ctx, 'CNPJ', contratada.cnpj);
-  linhaChaveValor(ctx, 'Endereço', contratada.endereco);
-  linhaChaveValor(ctx, 'Representante', contratada.representante);
-  linhaChaveValor(ctx, 'CPF', contratada.cpfRepresentante);
-  linhaChaveValor(ctx, 'Telefone', contratada.telefone);
-  linhaChaveValor(ctx, 'E-mail', contratada.email);
-  ctx.y += 10;
-
-  paragrafo(ctx, 'CONTRATANTE', { negrito: true, tamanho: 9.5, espacoDepois: 4, cor: COR.preto });
-  linhaChaveValor(ctx, 'Nome', contrato.cliente.nome);
-  linhaChaveValor(ctx, 'CPF/CNPJ', contrato.cliente.cpfCnpj);
-  linhaChaveValor(ctx, 'Endereço', contrato.cliente.endereco);
-  linhaChaveValor(ctx, 'Cidade/UF', [contrato.cliente.cidade, contrato.cliente.estado].filter(Boolean).join(' / '));
-  linhaChaveValor(ctx, 'Telefone', contrato.cliente.telefone);
-  linhaChaveValor(ctx, 'E-mail', contrato.cliente.email);
-  ctx.y += 12;
-
-  // ---- dados da obra ----
-  tituloSecao(ctx, 'DA OBRA');
-  linhaChaveValor(ctx, 'Identificação', contrato.obra.nome);
-  linhaChaveValor(ctx, 'Endereço', contrato.obra.endereco);
-  linhaChaveValor(ctx, 'Cidade/UF', [contrato.obra.cidade, contrato.obra.estado].filter(Boolean).join(' / '));
-  linhaChaveValor(ctx, 'Modelo', labelModelo(contrato.modeloObra));
-  linhaChaveValor(ctx, 'Área construída', contrato.obra.area ? `${contrato.obra.area} m²` : '');
-  linhaChaveValor(ctx, 'Varanda', contrato.obra.varanda ? `${contrato.obra.varanda} m²` : '');
-  linhaChaveValor(ctx, 'Deck', contrato.obra.deck ? `${contrato.obra.deck} m²` : '');
-  linhaChaveValor(ctx, 'Pavimentos', contrato.obra.pavimentos);
-  linhaChaveValor(ctx, 'Início previsto', contrato.obra.dataInicio ? formatDateBR(contrato.obra.dataInicio) : '');
-  linhaChaveValor(ctx, 'Prazo de execução', contrato.obra.prazo);
-  if (contrato.obra.observacoes) {
-    ctx.y += 4;
-    paragrafo(ctx, contrato.obra.observacoes, { tamanho: 9 });
+function garantirEspaco(ctx, altura) {
+  if (ctx.y + altura > RODAPE_Y) {
+    ctx.doc.addPage();
+    ctx.y = MARGEM;
   }
+}
+
+// Escreve texto com quebra de linha e de página, permitindo destacar em
+// negrito o começo de um parágrafo (ex.: "CLAUSULA PRIMEIRA:").
+function escreverParagrafo(ctx, texto, opcoes = {}) {
+  const tamanho = opcoes.tamanho || TAMANHO_TEXTO;
+  const recuo = opcoes.recuo || 0;
+  const larguraUtil = ctx.largura - recuo;
+  ctx.doc.setFontSize(tamanho);
+  ctx.doc.setTextColor(...(opcoes.cor || COR.preto));
+
+  limparTexto(texto).split('\n').forEach((bloco) => {
+    if (bloco.trim() === '') { ctx.y += ALTURA_LINHA * 0.5; return; }
+
+    // destaque em negrito até os dois pontos, quando o parágrafo começa
+    // com um rótulo de cláusula/parágrafo
+    const m = opcoes.semDestaque ? null : bloco.match(/^((?:CL[ÁA]USULA\s+\w+|Par[áa]grafo\s+\w+|Obs\.?:?|Observação:)[^:;]*[:;])\s*/i);
+    let prefixo = '';
+    let resto = bloco;
+    if (m) { prefixo = m[1]; resto = bloco.slice(m[0].length); }
+
+    ctx.doc.setFont('helvetica', 'normal');
+    const linhas = ctx.doc.splitTextToSize(prefixo ? `${prefixo} ${resto}` : bloco, larguraUtil);
+
+    linhas.forEach((linha, i) => {
+      garantirEspaco(ctx, ALTURA_LINHA);
+      if (i === 0 && prefixo) {
+        ctx.doc.setFont('helvetica', 'bold');
+        ctx.doc.text(prefixo, ctx.x + recuo, ctx.y);
+        const larguraPrefixo = ctx.doc.getTextWidth(prefixo + ' ');
+        ctx.doc.setFont('helvetica', 'normal');
+        ctx.doc.text(linha.slice(prefixo.length).trimStart(), ctx.x + recuo + larguraPrefixo, ctx.y);
+      } else {
+        ctx.doc.setFont('helvetica', opcoes.negrito ? 'bold' : 'normal');
+        ctx.doc.text(linha, ctx.x + recuo, ctx.y);
+      }
+      ctx.y += ALTURA_LINHA;
+    });
+  });
+  ctx.y += opcoes.espacoDepois != null ? opcoes.espacoDepois : 9;
+}
+
+function escreverLista(ctx, texto) {
+  ctx.doc.setFontSize(TAMANHO_TEXTO);
+  ctx.doc.setFont('helvetica', 'normal');
+  ctx.doc.setTextColor(...COR.preto);
+  limparTexto(texto).split('\n').filter((l) => l.trim()).forEach((item) => {
+    const linhas = ctx.doc.splitTextToSize(item.trim(), ctx.largura - 22);
+    linhas.forEach((linha, i) => {
+      garantirEspaco(ctx, ALTURA_LINHA);
+      if (i === 0) ctx.doc.text('•', ctx.x + 6, ctx.y);
+      ctx.doc.text(linha, ctx.x + 22, ctx.y);
+      ctx.y += ALTURA_LINHA;
+    });
+    ctx.y += 3;
+  });
   ctx.y += 6;
+}
 
-  // ---- valor ----
-  caixaDestaque(ctx, 'VALOR TOTAL DA OBRA', [
-    formatMoney(contrato.valorTotal),
-    `(${valorPorExtenso(contrato.valorTotal)})`,
-  ]);
+// Tabela de parcelas: Parcela N | valor | etapa — como no documento atual.
+function escreverTabelaParcelas(ctx, parcelas) {
+  const alturaLinha = 26;
+  garantirEspaco(ctx, alturaLinha * Math.min(parcelas.length, 3) + 10);
+  const colValor = ctx.x + ctx.largura * 0.42;
+  const colEtapa = ctx.x + ctx.largura * 0.70;
 
-  // ---- parcelas ----
-  if ((contrato.parcelas || []).length > 0) {
-    tituloSecao(ctx, 'DAS PARCELAS E ETAPAS DE PAGAMENTO');
-    tabela(
-      ctx,
-      [
-        { titulo: 'Nº', chave: 'ordem', offset: 4 },
-        { titulo: 'ETAPA', chave: 'etapa', offset: 34, largura: ctx.largura - 200 },
-        { titulo: 'VENCIMENTO', chave: 'venc', offset: ctx.largura - 90, alinhamento: 'right' },
-        { titulo: 'VALOR', chave: 'valorFmt', offset: ctx.largura - 4, alinhamento: 'right', negrito: true },
-      ],
-      contrato.parcelas.map((p) => ({
-        ordem: p.ordem,
-        etapa: p.etapa || 'Parcela',
-        venc: p.vencimento ? formatDateBR(p.vencimento) : '—',
-        valorFmt: formatMoney(p.valor),
-      }))
-    );
-    garantirEspaco(ctx, 22);
+  parcelas.forEach((p, i) => {
+    garantirEspaco(ctx, alturaLinha);
+    if (i % 2 === 1) {
+      ctx.doc.setFillColor(...COR.fundoTabela);
+      ctx.doc.rect(ctx.x, ctx.y - 13, ctx.largura, alturaLinha, 'F');
+    }
+    ctx.doc.setDrawColor(...COR.linha);
+    ctx.doc.setLineWidth(0.4);
+    ctx.doc.rect(ctx.x, ctx.y - 13, ctx.largura, alturaLinha, 'S');
+    ctx.doc.line(colValor, ctx.y - 13, colValor, ctx.y - 13 + alturaLinha);
+    ctx.doc.line(colEtapa, ctx.y - 13, colEtapa, ctx.y - 13 + alturaLinha);
+
+    ctx.doc.setFontSize(TAMANHO_TEXTO);
+    ctx.doc.setTextColor(...COR.preto);
+    ctx.doc.setFont('helvetica', 'normal');
+    ctx.doc.text(`Parcela ${p.ordem}`, ctx.x + 14, ctx.y + 4);
     ctx.doc.setFont('helvetica', 'bold');
-    ctx.doc.setFontSize(10);
-    ctx.doc.setTextColor(...COR.verdeEscuro);
-    ctx.doc.text('TOTAL', ctx.x, ctx.y);
     ctx.doc.text(
-      formatMoney(contrato.parcelas.reduce((a, p) => a + (Number(p.valor) || 0), 0)),
-      ctx.x + ctx.largura, ctx.y, { align: 'right' }
+      `R$${(Number(p.valor) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      colValor + 14, ctx.y + 4
     );
-    ctx.y += 22;
-  }
+    ctx.doc.setFont('helvetica', 'normal');
+    ctx.doc.text(limparTexto(p.etapa), colEtapa + 12, ctx.y + 4, { maxWidth: ctx.largura - (colEtapa - ctx.x) - 18 });
+    ctx.y += alturaLinha;
+  });
+  ctx.y += 14;
+}
 
-  // ---- cláusulas do modelo da empresa ----
-  const clausulas = clausulasResolvidas(contrato, config);
-  if (clausulas.length > 0) {
-    clausulas.forEach((c, i) => {
-      const numero = NUMERO_CLAUSULA[i] || `${i + 1}ª`;
-      tituloSecao(ctx, `CLÁUSULA ${numero} — ${c.titulo}`);
-      paragrafo(ctx, c.texto);
-    });
-  } else {
-    // Não inventa texto jurídico: avisa no próprio documento que o modelo
-    // ainda não foi cadastrado, para ninguém assinar um contrato incompleto.
-    tituloSecao(ctx, 'CLÁUSULAS');
-    paragrafo(
-      ctx,
-      'ATENÇÃO: o texto das cláusulas ainda não foi cadastrado no sistema. Acesse Configurações → Modelo de contrato e cole o texto do contrato padrão da Casas Eco. Enquanto isso não for feito, este documento NÃO deve ser utilizado para assinatura.',
-      { cor: [180, 30, 30], negrito: true }
-    );
-  }
+function escreverAssinaturas(ctx, { cidadeData, nomeContratada, nomeContratante }) {
+  garantirEspaco(ctx, 120);
+  ctx.y += 24;
+  ctx.doc.setFont('helvetica', 'normal');
+  ctx.doc.setFontSize(TAMANHO_TEXTO);
+  ctx.doc.setTextColor(...COR.preto);
+  ctx.doc.text(limparTexto(cidadeData), ctx.x, ctx.y);
+  ctx.y += 56;
 
-  blocoAssinaturas(ctx, {
-    cidade: contrato.cidadeContrato || contratada.cidade,
-    data: formatDateBR(contrato.geradoEm || todayISO()),
-    contratada: { nome: contratada.razaoSocial, documento: contratada.cnpj ? `CNPJ ${contratada.cnpj}` : '' },
-    contratante: { nome: contrato.cliente.nome, documento: contrato.cliente.cpfCnpj ? `CPF/CNPJ ${contrato.cliente.cpfCnpj}` : '' },
-    comTestemunhas: true,
+  const larguraLinha = ctx.largura * 0.42;
+  const xDireita = ctx.x + ctx.largura - larguraLinha;
+  ctx.doc.setDrawColor(...COR.preto);
+  ctx.doc.setLineWidth(0.7);
+  ctx.doc.line(ctx.x, ctx.y, ctx.x + larguraLinha, ctx.y);
+  ctx.doc.line(xDireita, ctx.y, xDireita + larguraLinha, ctx.y);
+  ctx.y += 14;
+  ctx.doc.text(limparTexto(nomeContratada), ctx.x, ctx.y);
+  ctx.doc.text(limparTexto(nomeContratante), xDireita, ctx.y);
+  ctx.y += 24;
+}
+
+// ---- CONTRATO ----
+function escreverContrato(ctx, contrato, config) {
+  const blocos = blocosContratoResolvidos(contrato, config);
+  const valores = montarValoresMarcadores(contrato, config);
+  const contratada = contrato.contratadaSnapshot || config.contratada || {};
+
+  ctx.doc.setFont('helvetica', 'bold');
+  ctx.doc.setFontSize(13);
+  ctx.doc.setTextColor(...COR.preto);
+  ctx.doc.text('CONTRATO PARTICULAR DE COMPRA E VENDA', ctx.x + ctx.largura / 2, ctx.y + 6, { align: 'center' });
+  ctx.y += 34;
+
+  blocos.forEach((b) => {
+    if (b.tabelaParcelas) { escreverTabelaParcelas(ctx, contrato.parcelas || []); return; }
+    if (b.lista) { escreverLista(ctx, b.texto); return; }
+    escreverParagrafo(ctx, b.texto);
+  });
+
+  escreverAssinaturas(ctx, {
+    cidadeData: valores['{{CIDADE_DATA}}'],
+    nomeContratada: contratada.representante,
+    nomeContratante: contrato.cliente.nome,
   });
 }
 
-// ---- corpo do memorial ----
-async function escreverMemorial(ctx, contrato, config) {
-  await cabecalhoDocumento(ctx, {
-    titulo: 'Memorial Descritivo',
-    subtitulo: 'Especificação técnica da obra',
-    numero: contrato.numero,
-  });
-
-  tituloSecao(ctx, 'IDENTIFICAÇÃO');
-  linhaChaveValor(ctx, 'Cliente', contrato.cliente.nome);
-  linhaChaveValor(ctx, 'Obra', contrato.obra.nome);
-  linhaChaveValor(ctx, 'Endereço', contrato.obra.endereco);
-  linhaChaveValor(ctx, 'Cidade/UF', [contrato.obra.cidade, contrato.obra.estado].filter(Boolean).join(' / '));
-  linhaChaveValor(ctx, 'Modelo', labelModelo(contrato.modeloObra));
-  linhaChaveValor(ctx, 'Área construída', contrato.obra.area ? `${contrato.obra.area} m²` : '');
-  ctx.y += 10;
-
-  const itens = memorialResolvido(contrato, config);
-  if (itens.length === 0) {
-    paragrafo(
-      ctx,
-      'ATENÇÃO: o memorial descritivo ainda não foi preenchido. Acesse Configurações → Memorial padrão e cadastre o texto de cada categoria — a partir daí todo contrato novo já virá com o memorial preenchido.',
-      { cor: [180, 30, 30], negrito: true }
-    );
-  } else {
-    itens.forEach((item) => {
-      tituloSecao(ctx, item.titulo);
-      paragrafo(ctx, item.texto);
-    });
-  }
-
+// ---- MEMORIAL ----
+function escreverMemorial(ctx, contrato, config) {
+  const blocos = blocosMemorialResolvidos(contrato, config);
+  const valores = montarValoresMarcadores(contrato, config);
   const contratada = contrato.contratadaSnapshot || config.contratada || {};
-  blocoAssinaturas(ctx, {
-    cidade: contrato.cidadeContrato || contratada.cidade,
-    data: formatDateBR(contrato.geradoEm || todayISO()),
-    contratada: { nome: contratada.razaoSocial, documento: contratada.cnpj ? `CNPJ ${contratada.cnpj}` : '' },
-    contratante: { nome: contrato.cliente.nome, documento: contrato.cliente.cpfCnpj ? `CPF/CNPJ ${contrato.cliente.cpfCnpj}` : '' },
-    comTestemunhas: false,
+
+  ctx.doc.setFont('helvetica', 'bold');
+  ctx.doc.setFontSize(13);
+  ctx.doc.setTextColor(...COR.preto);
+  ctx.doc.text('MEMORIAL DESCRITIVO', ctx.x + ctx.largura / 2, ctx.y + 6, { align: 'center' });
+  ctx.y += 34;
+
+  blocos.forEach((b) => {
+    if (b.titulo) {
+      garantirEspaco(ctx, 26);
+      ctx.doc.setFont('helvetica', 'bold');
+      ctx.doc.setFontSize(TAMANHO_TEXTO);
+      ctx.doc.setTextColor(...COR.preto);
+      // marcador desenhado como círculo: a fonte padrão do PDF (Helvetica)
+      // não tem o caractere "●" e ele sairia como lixo na página
+      ctx.doc.setFillColor(...COR.preto);
+      ctx.doc.circle(ctx.x + 9, ctx.y - 3, 2.4, 'F');
+      ctx.doc.text(limparTexto(b.titulo), ctx.x + 22, ctx.y);
+      ctx.y += ALTURA_LINHA + 2;
+      escreverParagrafo(ctx, b.texto, { semDestaque: true });
+    } else {
+      escreverParagrafo(ctx, b.texto, { semDestaque: true });
+    }
   });
+
+  escreverAssinaturas(ctx, {
+    cidadeData: valores['{{CIDADE_DATA}}'],
+    nomeContratada: contratada.representante,
+    nomeContratante: contrato.cliente.nome,
+  });
+}
+
+function nomeArquivo(prefixo, nome) {
+  const limpo = String(nome || 'documento')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return `${prefixo}_${limpo}.pdf`;
 }
 
 export async function gerarPdfContrato(contrato, config) {
-  const ctx = criarDocumento();
-  await escreverContrato(ctx, contrato, config);
-  rodapeTodasPaginas(ctx.doc, `Contrato ${contrato.numero || ''} · Casas Eco`.trim());
-  ctx.doc.save(nomeArquivo('CONTRATO', contrato.cliente.nome));
+  const ctx = criar();
+  escreverContrato(ctx, contrato, config);
+  ctx.doc.save(nomeArquivo('contrato', contrato.cliente.nome));
 }
 
 export async function gerarPdfMemorial(contrato, config) {
-  const ctx = criarDocumento();
-  await escreverMemorial(ctx, contrato, config);
-  rodapeTodasPaginas(ctx.doc, `Memorial descritivo ${contrato.numero || ''} · Casas Eco`.trim());
-  ctx.doc.save(nomeArquivo('MEMORIAL', contrato.cliente.nome));
+  const ctx = criar();
+  escreverMemorial(ctx, contrato, config);
+  ctx.doc.save(nomeArquivo('memorial', contrato.cliente.nome));
 }
 
-// Documento único com contrato + memorial, para enviar tudo de uma vez.
 export async function gerarPdfContratoEMemorial(contrato, config) {
-  const ctx = criarDocumento();
-  await escreverContrato(ctx, contrato, config);
-  novaPagina(ctx);
-  await escreverMemorial(ctx, contrato, config);
-  rodapeTodasPaginas(ctx.doc, `Contrato e memorial ${contrato.numero || ''} · Casas Eco`.trim());
-  ctx.doc.save(nomeArquivo('CONTRATO_E_MEMORIAL', contrato.cliente.nome));
+  const ctx = criar();
+  escreverContrato(ctx, contrato, config);
+  ctx.doc.addPage();
+  ctx.y = MARGEM;
+  escreverMemorial(ctx, contrato, config);
+  ctx.doc.save(nomeArquivo('contrato_e_memorial', contrato.cliente.nome));
 }
