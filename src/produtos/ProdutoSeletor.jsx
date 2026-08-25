@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ChevronDown, Search, Star, Clock, Plus, X } from 'lucide-react';
 import { formatMoney } from '../domain';
 import { selecionarSecoes } from './catalogoUtils';
+import usarLayoutMobile from '../ui/usarLayoutMobile';
 
 // Seletor de produto/material reutilizável: um input de texto comum (então
 // digitar continua funcionando exatamente como antes) mais um painel de
@@ -19,17 +20,6 @@ import { selecionarSecoes } from './catalogoUtils';
 // vira "containing block" dos filhos com position:fixed, quebrando o
 // posicionamento do painel. Fora da árvore, o painel sempre se posiciona
 // contra o viewport de verdade.
-function usarLayoutMobile() {
-  const consulta = '(max-width: 639px)';
-  const [mobile, setMobile] = useState(() => window.matchMedia(consulta).matches);
-  useEffect(() => {
-    const mq = window.matchMedia(consulta);
-    const handler = (e) => setMobile(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-  return mobile;
-}
 
 export default function ProdutoSeletor({
   value,

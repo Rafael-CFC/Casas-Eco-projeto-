@@ -1,21 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Package, Plus, Trash2, AlertCircle,
   ArrowLeft,
   Upload, ArrowUpRight, ArrowDownRight, CheckCircle2, X, Pencil, Copy,
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
+  Landmark, FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search, NotebookPen, Trees,
+  LogOut, KeyRound,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
 import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
 import ToastStack from './ui/Toast';
+import TrocarSenha from './auth/TrocarSenha';
+import { sair } from './auth/authStore';
 import { DashboardSkeleton } from './ui/Skeleton';
 import FinalizarObraModal from './obra/FinalizarObraModal';
 import SucessoFinalizacaoModal from './obra/SucessoFinalizacaoModal';
 import ResumoFinalObra from './obra/ResumoFinalObra';
 import ProdutoSeletor from './produtos/ProdutoSeletor';
-import { catalogoPorCategoria } from './produtos/catalogoUtils';
+import { catalogoPorCategoria, filtrarOrdenarProdutos, ORDENS_CATALOGO } from './produtos/catalogoUtils';
+import OrcamentoVenda from './venda/OrcamentoVenda';
+import Boletos from './boletos/Boletos';
+import { novoBoleto, atualizarCamposBoleto, registrarPagamento, reabrirBoleto, cancelarBoletoObj, mapearCategoriaBoletoParaLancamento } from './boletos/boletosStore';
+import { totalBoletosPorObra } from './boletos/boletosCalc';
+import Contratos from './contratos/Contratos';
+import Configuracoes from './config/Configuracoes';
+import { normalizarConfiguracao, configuracaoVazia } from './config/configStore';
+import { resumoParcelasDaObra, resumoParcelas } from './contratos/contratosStore';
+import Crediario from './crediario/Crediario';
+import { catalogoParaRetirada } from './crediario/crediarioCalc';
+import { CATALOGO_VENDA } from './venda/catalogoVenda';
+import Materiais from './analise/Materiais';
+import BuscaGlobal from './analise/BuscaGlobal';
+import { resumoDoMes, rankingMateriais, estatisticasMaterial } from './analise/analiseCalc';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -41,10 +60,10 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-export default function CustoObraAppBoundary() {
+export default function CustoObraAppBoundary({ usuario }) {
   return (
     <ErrorBoundary>
-      <CustoObraApp />
+      <CustoObraApp usuario={usuario} />
     </ErrorBoundary>
   );
 }
@@ -68,35 +87,71 @@ function parseImportado(texto) {
   return { itens, invalidas };
 }
 
+// `primario` marca os itens que aparecem direto na barra de baixo do
+// celular; os demais ficam no botão "Mais". No computador a barra lateral
+// mostra todos, sempre nesta ordem.
+//
+// `ordemMobile` decide a ordem só da barra do celular: "Madeiras" fica
+// logo depois de "Início" porque é a tela que mais se abre no balcão,
+// pelo celular, e antes ela ficava escondida dentro do "Mais". O
+// Financeiro saiu da barra (continua no "Mais"): é tela de gráfico, de
+// olhar no computador.
 const NAV_ITEMS = [
-  { key: 'home', label: 'Início', icon: Home },
+  { key: 'home', label: 'Início', icon: Home, primario: true, ordemMobile: 1 },
   { key: 'financeiro', label: 'Financeiro', icon: LayoutDashboard },
+  { key: 'boletos', label: 'Boletos', icon: Landmark, primario: true, ordemMobile: 3 },
+  { key: 'contratos', label: 'Contratos', icon: FileSignature, primario: true, ordemMobile: 4 },
   { key: 'catalogo', label: 'Catálogo', icon: Package },
+  { key: 'crediario', label: 'Crediário', icon: NotebookPen },
+  { key: 'materiais', label: 'Materiais', icon: Boxes },
   { key: 'fornecedores', label: 'Fornecedores', icon: Users },
   { key: 'contas', label: 'Contas', icon: Receipt },
+  { key: 'venda', label: 'Madeiras', icon: Trees, primario: true, ordemMobile: 2 },
   { key: 'relatorios', label: 'Relatórios', icon: FileText },
+  { key: 'configuracoes', label: 'Configurações', icon: Settings },
 ];
 
 const PAGINA_META = {
   home: { titulo: 'Início', subtitulo: 'Visão geral de todas as obras' },
   financeiro: { titulo: 'Financeiro', subtitulo: 'Indicadores, gráficos e alertas de custo' },
   catalogo: { titulo: 'Catálogo', subtitulo: 'Produtos e preços cadastrados' },
+  crediario: { titulo: 'Crediário dos montadores', subtitulo: 'Anotação do que cada um pegou — não é venda, não gera nota nem imposto' },
+  materiais: { titulo: 'Materiais', subtitulo: 'Preço médio, histórico e comparação entre fornecedores' },
   fornecedores: { titulo: 'Fornecedores', subtitulo: 'Cadastro e histórico de compras' },
   contas: { titulo: 'Contas a pagar', subtitulo: 'Vencimentos e parcelas' },
+  boletos: { titulo: 'Boletos', subtitulo: 'Boletos bancários por obra, categoria e vencimento' },
+  contratos: { titulo: 'Contratos', subtitulo: 'Contratos, memoriais e parcelas a receber' },
+  venda: { titulo: 'Madeiras', subtitulo: 'Tabela de preços das madeiras e orçamento em PDF' },
   relatorios: { titulo: 'Relatórios', subtitulo: 'Exportações e resumos gerais' },
+  configuracoes: { titulo: 'Configurações', subtitulo: 'Dados da empresa e modelos de contrato/memorial' },
 };
 
-function CustoObraApp() {
+function CustoObraApp({ usuario }) {
   const [obras, setObras] = useState([]);
   const [produtos, setProdutos] = useState([]);
   const [lancamentos, setLancamentos] = useState([]);
   const [etapas, setEtapas] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [contas, setContas] = useState([]);
+  const [boletos, setBoletos] = useState([]);
+  const [contratos, setContratos] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const [montadores, setMontadores] = useState([]);
+  const [crediario, setCrediario] = useState([]);
+  const [configuracao, setConfiguracao] = useState(configuracaoVazia);
+  const [menuMaisAberto, setMenuMaisAberto] = useState(false);
+  const [trocandoSenha, setTrocandoSenha] = useState(false);
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const [materialFoco, setMaterialFoco] = useState(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
   const [dialogo, setDialogo] = useState(null); // { tipo: 'confirm'|'prompt', mensagem, valor, onConfirmar }
+
+  const backupInputRef = useRef(null);
+  const [ultimoBackup, setUltimoBackup] = useState(() => {
+    try { return localStorage.getItem('casaseco-ultimo-backup') || null; } catch (e) { return null; }
+  });
 
   function confirmar(mensagem, onConfirmar) {
     setDialogo({ tipo: 'confirm', mensagem, onConfirmar });
@@ -133,13 +188,19 @@ function CustoObraApp() {
         return;
       }
       try {
-        const [o, p, l, et, fo, co] = await Promise.all([
+        const [o, p, l, et, fo, co, bo, ct, cl, cf, mt, cr] = await Promise.all([
           window.storage.get('obras', false).catch(() => null),
           window.storage.get('produtos', false).catch(() => null),
           window.storage.get('lancamentos', false).catch(() => null),
           window.storage.get('etapas', false).catch(() => null),
           window.storage.get('fornecedores', false).catch(() => null),
           window.storage.get('contas', false).catch(() => null),
+          window.storage.get('boletos', false).catch(() => null),
+          window.storage.get('contratos', false).catch(() => null),
+          window.storage.get('clientes', false).catch(() => null),
+          window.storage.get('configuracao', false).catch(() => null),
+          window.storage.get('montadores', false).catch(() => null),
+          window.storage.get('crediario', false).catch(() => null),
         ]);
 
         // Migração não destrutiva: padroniza nome/unidade de produtos e
@@ -171,6 +232,12 @@ function CustoObraApp() {
         setEtapas(et ? JSON.parse(et.value) : []);
         setFornecedores(fo ? JSON.parse(fo.value) : []);
         setContas(co ? JSON.parse(co.value) : []);
+        setBoletos(bo ? JSON.parse(bo.value) : []);
+        setContratos(ct ? JSON.parse(ct.value) : []);
+        setClientes(cl ? JSON.parse(cl.value) : []);
+        setConfiguracao(normalizarConfiguracao(cf ? JSON.parse(cf.value) : null));
+        setMontadores(mt ? JSON.parse(mt.value) : []);
+        setCrediario(cr ? JSON.parse(cr.value) : []);
 
         if (produtosMudaram) {
           window.storage.set('produtos', JSON.stringify(produtosNormalizados), false).catch(() => {});
@@ -219,6 +286,14 @@ function CustoObraApp() {
   const salvarEtapas = (l) => persist('etapas', l, setEtapas);
   const salvarFornecedores = (l) => persist('fornecedores', l, setFornecedores);
   const salvarContas = (l) => persist('contas', l, setContas);
+  const salvarBoletos = (l) => persist('boletos', l, setBoletos);
+  const salvarContratos = (l) => persist('contratos', l, setContratos);
+  const salvarClientes = (l) => persist('clientes', l, setClientes);
+  const salvarConfiguracao = (c) => persist('configuracao', c, setConfiguracao);
+  // O crediário mora em duas chaves próprias, separadas de `lancamentos`:
+  // é anotação interna, não custo de obra nem venda.
+  const salvarMontadores = (l) => persist('montadores', l, setMontadores);
+  const salvarCrediario = (l) => persist('crediario', l, setCrediario);
 
   async function criarObra(e) {
     if (e && e.preventDefault) e.preventDefault();
@@ -344,29 +419,89 @@ function CustoObraApp() {
     return lancamentos.filter((l) => l.data >= limiteISO).reduce((a, l) => a + l.total, 0);
   }
 
+  // Faixas de alerta de orçamento: 70% avisa, 85% alerta, 95% crítico,
+  // 100% estourado.
+  function faixaOrcamento(pct) {
+    if (pct >= 100) return { tipo: 'red', rotulo: 'ultrapassou o orçamento' };
+    if (pct >= 95) return { tipo: 'red', rotulo: 'em nível crítico' };
+    if (pct >= 85) return { tipo: 'yellow', rotulo: 'em alerta' };
+    if (pct >= 70) return { tipo: 'yellow', rotulo: 'em atenção' };
+    return null;
+  }
+
   function gerarAlertas() {
     const alertas = [];
+    const hoje = todayISO();
+
     obras.forEach((o) => {
+      if (o.status === 'concluida') return;
       const gasto = totalObra(o.id);
       if (o.orcamento) {
         const pct = (gasto / o.orcamento) * 100;
-        if (pct >= 100) alertas.push({ tipo: 'red', texto: `"${o.nome}" já ultrapassou o orçamento total em ${formatMoney(gasto - o.orcamento)}.` });
-        else if (pct >= 80) alertas.push({ tipo: 'yellow', texto: `"${o.nome}" já consumiu ${pct.toFixed(0)}% do orçamento total.` });
+        const faixa = faixaOrcamento(pct);
+        if (faixa) {
+          alertas.push({
+            tipo: faixa.tipo,
+            texto: pct >= 100
+              ? `"${o.nome}" ultrapassou o orçamento em ${formatMoney(gasto - o.orcamento)} (${pct.toFixed(0)}% utilizado).`
+              : `"${o.nome}" está ${faixa.rotulo}: ${pct.toFixed(0)}% do orçamento utilizado (restam ${formatMoney(o.orcamento - gasto)}).`,
+          });
+        }
       }
       if (o.orcamentoCategorias) {
         Object.entries(o.orcamentoCategorias).forEach(([cat, valor]) => {
           if (!valor) return;
           const gastoCat = totalObraCategoria(o.id, cat);
           const pct = (gastoCat / valor) * 100;
-          if (pct >= 100) alertas.push({ tipo: 'red', texto: `"${o.nome}": ${CATEGORIAS[cat].label} ultrapassou o orçamento em ${formatMoney(gastoCat - valor)}.` });
-          else if (pct >= 80) alertas.push({ tipo: 'yellow', texto: `"${o.nome}": ${CATEGORIAS[cat].label} já consumiu ${pct.toFixed(0)}% do orçamento.` });
+          const faixa = faixaOrcamento(pct);
+          if (faixa) {
+            alertas.push({
+              tipo: faixa.tipo,
+              texto: pct >= 100
+                ? `"${o.nome}": ${CATEGORIAS[cat].label} ultrapassou o orçamento em ${formatMoney(gastoCat - valor)}.`
+                : `"${o.nome}": ${CATEGORIAS[cat].label} ${faixa.rotulo} — ${pct.toFixed(0)}% do orçamento.`,
+            });
+          }
         });
       }
     });
-    const vencidas = contas.filter((c) => c.status !== 'pago' && c.vencimento < todayISO());
+
+    // contas a pagar
+    const vencidas = contas.filter((c) => c.status !== 'pago' && c.vencimento < hoje);
     if (vencidas.length > 0) {
       alertas.unshift({ tipo: 'red', texto: `${vencidas.length} conta(s) vencida(s), totalizando ${formatMoney(vencidas.reduce((a, c) => a + c.valor, 0))}.` });
     }
+
+    // boletos vencidos e a vencer nos próximos 3 dias
+    const em3 = new Date(); em3.setDate(em3.getDate() + 3);
+    const em3ISO = em3.toISOString().slice(0, 10);
+    const boletosVencidos = boletos.filter((b) => b.status === 'pendente' && b.vencimento < hoje);
+    if (boletosVencidos.length > 0) {
+      alertas.unshift({ tipo: 'red', texto: `${boletosVencidos.length} boleto(s) vencido(s), totalizando ${formatMoney(boletosVencidos.reduce((a, b) => a + (Number(b.valor) || 0), 0))}.` });
+    }
+    const boletosProximos = boletos.filter((b) => b.status === 'pendente' && b.vencimento >= hoje && b.vencimento <= em3ISO);
+    if (boletosProximos.length > 0) {
+      alertas.unshift({ tipo: 'yellow', texto: `${boletosProximos.length} boleto(s) vencem nos próximos 3 dias (${formatMoney(boletosProximos.reduce((a, b) => a + (Number(b.valor) || 0), 0))}).` });
+    }
+
+    // parcelas de contrato atrasadas (dinheiro a receber do cliente)
+    const parcelasAtrasadas = contratos
+      .filter((c) => c.status !== 'cancelado' && c.status !== 'rascunho')
+      .flatMap((c) => (c.parcelas || []).map((p) => ({ ...p, cliente: c.cliente?.nome })))
+      .filter((p) => p.status !== 'pago' && p.vencimento && p.vencimento < hoje);
+    if (parcelasAtrasadas.length > 0) {
+      alertas.unshift({
+        tipo: 'yellow',
+        texto: `${parcelasAtrasadas.length} parcela(s) de contrato em atraso a receber, totalizando ${formatMoney(parcelasAtrasadas.reduce((a, p) => a + (Number(p.valor) || 0), 0))}.`,
+      });
+    }
+
+    // contratos parados em rascunho
+    const rascunhos = contratos.filter((c) => c.status === 'rascunho');
+    if (rascunhos.length > 0) {
+      alertas.push({ tipo: 'yellow', texto: `${rascunhos.length} contrato(s) em rascunho aguardando conclusão.` });
+    }
+
     return alertas;
   }
 
@@ -450,28 +585,164 @@ function CustoObraApp() {
     return 'futuro';
   }
 
+  // ---- boletos ----
+  // Wrappers "só persistem": diálogos de confirmação e avisos ficam por
+  // conta da tela (src/boletos/Boletos.jsx), que já recebe `confirmar` como
+  // prop — mesmo padrão usado por OrcamentoVenda.jsx.
+  async function criarBoleto(campos) {
+    return salvarBoletos([novoBoleto(campos), ...boletos]);
+  }
+
+  async function atualizarBoleto(id, campos) {
+    return salvarBoletos(boletos.map((b) => (b.id === id ? atualizarCamposBoleto(b, campos) : b)));
+  }
+
+  async function marcarBoletoPago(id, dados) {
+    const boleto = boletos.find((b) => b.id === id);
+    if (!boleto) return false;
+    const boletoPago = registrarPagamento(boleto, dados);
+    let lancamentoId = null;
+    if (dados.lancarComoDespesa && boleto.obraId && !boleto.lancamentoGeradoId) {
+      lancamentoId = crypto.randomUUID();
+      const item = {
+        id: lancamentoId,
+        obraId: boleto.obraId,
+        categoria: mapearCategoriaBoletoParaLancamento(boleto.categoria),
+        produtoId: null,
+        descricao: boleto.descricao || boleto.beneficiario,
+        unidade: 'UN',
+        quantidade: 1,
+        preco: boletoPago.valorPago,
+        total: boletoPago.valorPago,
+        data: boletoPago.dataPagamento,
+        observacao: `Lançado a partir do boleto de ${boleto.beneficiario} (categoria original: ${boleto.categoria}).`,
+        etapaId: null,
+        fornecedorNome: boleto.beneficiario,
+      };
+      const okLancamento = await salvarLancamentos([item, ...lancamentos]);
+      if (!okLancamento) lancamentoId = null;
+    }
+    const boletoFinal = lancamentoId ? { ...boletoPago, lancamentoGeradoId: lancamentoId } : boletoPago;
+    return salvarBoletos(boletos.map((b) => (b.id === id ? boletoFinal : b)));
+  }
+
+  async function reabrirBoletoPagamento(id) {
+    return salvarBoletos(boletos.map((b) => (b.id === id ? reabrirBoleto(b) : b)));
+  }
+
+  async function cancelarBoleto(id) {
+    return salvarBoletos(boletos.map((b) => (b.id === id ? cancelarBoletoObj(b, '') : b)));
+  }
+
+  async function removerBoleto(id) {
+    return salvarBoletos(boletos.filter((b) => b.id !== id));
+  }
+
+  // ---- contratos ----
+  // Salvar um contrato também mantém o cadastro de clientes e a obra em dia,
+  // para o mesmo dado nunca precisar ser digitado duas vezes.
+  async function salvarContrato(contrato) {
+    const existe = contratos.some((c) => c.id === contrato.id);
+    const lista = existe
+      ? contratos.map((c) => (c.id === contrato.id ? contrato : c))
+      : [contrato, ...contratos];
+    const ok = await salvarContratos(lista);
+    if (!ok) return false;
+
+    // cliente: cria/atualiza no cadastro a partir dos dados do contrato
+    const nomeCliente = (contrato.cliente?.nome || '').trim();
+    if (nomeCliente) {
+      const existente = clientes.find(
+        (c) => c.id === contrato.clienteId || c.nome.trim().toLowerCase() === nomeCliente.toLowerCase()
+      );
+      const dados = {
+        nome: nomeCliente,
+        cpfCnpj: contrato.cliente.cpfCnpj || '',
+        endereco: contrato.cliente.endereco || '',
+        cidade: contrato.cliente.cidade || '',
+        estado: contrato.cliente.estado || '',
+        telefone: contrato.cliente.telefone || '',
+        email: contrato.cliente.email || '',
+      };
+      if (existente) {
+        salvarClientes(clientes.map((c) => (c.id === existente.id ? { ...c, ...dados } : c)));
+      } else {
+        salvarClientes([...clientes, { id: crypto.randomUUID(), ...dados, criadoEm: todayISO() }]);
+      }
+    }
+
+    // obra: ao GERAR um contrato sem obra vinculada, cria a obra já com
+    // cliente, endereço e orçamento vindos do próprio contrato.
+    if (contrato.status !== 'rascunho' && !contrato.obraId && nomeCliente) {
+      const novaObra = {
+        id: crypto.randomUUID(),
+        nome: `CASA ${nomeCliente}`.toUpperCase(),
+        criadoEm: contrato.dataContrato || todayISO(),
+        orcamento: Number(contrato.valorTotal) || null,
+        cliente: nomeCliente,
+        endereco: contrato.cliente.endereco || null,
+        status: 'em_andamento',
+      };
+      const okObra = await salvarObras([...obras, novaObra]);
+      if (okObra) {
+        await salvarContratos(
+          lista.map((c) => (c.id === contrato.id ? { ...c, obraId: novaObra.id } : c))
+        );
+        setAviso(`Obra "${novaObra.nome}" criada automaticamente a partir do contrato.`);
+      }
+    }
+    return true;
+  }
+
+  async function removerContrato(id) {
+    return salvarContratos(contratos.filter((c) => c.id !== id));
+  }
+
+  async function atualizarParcelaContrato(contratoId, parcelaId, campos) {
+    return salvarContratos(contratos.map((c) => (
+      c.id === contratoId
+        ? {
+            ...c,
+            parcelas: (c.parcelas || []).map((p) => (p.id === parcelaId ? { ...p, ...campos } : p)),
+            atualizadoEm: todayISO(),
+          }
+        : c
+    )));
+  }
+
   // ---- formulário: cadastro/edição de fornecedor ----
   const [fnNome, setFnNome] = useState('');
   const [fnTelefone, setFnTelefone] = useState('');
   const [fnCategoria, setFnCategoria] = useState('');
+  const [fnCnpj, setFnCnpj] = useState('');
+  const [fnEmail, setFnEmail] = useState('');
+  const [fnCidade, setFnCidade] = useState('');
+
+  function limparFormFornecedor() {
+    setFnNome(''); setFnTelefone(''); setFnCategoria('');
+    setFnCnpj(''); setFnEmail(''); setFnCidade('');
+  }
 
   async function cadastrarFornecedor() {
     setErro('');
     const nome = fnNome.trim();
     if (!nome) { setErro('Informe o nome do fornecedor.'); return; }
+    const campos = {
+      telefone: fnTelefone.trim(), categoria: fnCategoria.trim(),
+      cnpj: fnCnpj.trim(), email: fnEmail.trim(), cidade: fnCidade.trim(),
+    };
     const existente = fornecedores.find((f) => f.nome.toLowerCase() === nome.toLowerCase());
     let ok;
     if (existente) {
-      ok = await atualizarFornecedor(existente.id, { telefone: fnTelefone.trim(), categoria: fnCategoria.trim() });
+      ok = await atualizarFornecedor(existente.id, campos);
       if (ok) setAviso(`"${nome}" atualizado.`);
     } else {
       ok = await salvarFornecedores([...fornecedores, {
-        id: crypto.randomUUID(), nome, telefone: fnTelefone.trim(), categoria: fnCategoria.trim(),
-        observacoes: '', criadoEm: todayISO(),
+        id: crypto.randomUUID(), nome, ...campos, observacoes: '', criadoEm: todayISO(),
       }]);
       if (ok) setAviso(`"${nome}" cadastrado.`);
     }
-    if (ok) { setFnNome(''); setFnTelefone(''); setFnCategoria(''); }
+    if (ok) limparFormFornecedor();
   }
 
   // ---- formulário: nova conta a pagar ----
@@ -548,6 +819,143 @@ function CustoObraApp() {
       linhas.push([c.descricao, c.valor, formatDateBR(c.vencimento), c.status === 'pago' ? 'Paga' : 'Pendente', o ? o.nome : '', c.fornecedorNome || '']);
     });
     baixarCSV('contas-a-pagar.csv', linhas);
+  }
+
+  function exportarContratosCSV() {
+    const linhas = [['Número', 'Status', 'Cliente', 'CPF/CNPJ', 'Obra', 'Valor', 'Parcelas', 'Recebido', 'A receber', 'Gerado em']];
+    contratos.forEach((c) => {
+      const r = resumoParcelas(c.parcelas);
+      linhas.push([
+        c.numero || '(rascunho)', c.status, c.cliente?.nome || '', c.cliente?.cpfCnpj || '',
+        (obras.find((ob) => ob.id === c.obraId) || {}).nome || '', c.valorTotal, (c.parcelas || []).length, r.recebido, r.aReceber,
+        c.geradoEm ? formatDateBR(c.geradoEm) : '',
+      ]);
+    });
+    baixarCSV('contratos.csv', linhas);
+  }
+
+  function exportarParcelasCSV() {
+    const linhas = [['Contrato', 'Cliente', 'Obra', 'Parcela', 'Etapa', 'Valor', 'Vencimento', 'Status', 'Recebido em']];
+    contratos.forEach((c) => {
+      (c.parcelas || []).forEach((p) => {
+        linhas.push([
+          c.numero || '(rascunho)', c.cliente?.nome || '', (obras.find((ob) => ob.id === c.obraId) || {}).nome || '',
+          p.ordem, p.etapa || '', p.valor, p.vencimento ? formatDateBR(p.vencimento) : '',
+          p.status === 'pago' ? 'Recebida' : 'A receber',
+          p.dataPagamento ? formatDateBR(p.dataPagamento) : '',
+        ]);
+      });
+    });
+    baixarCSV('parcelas-a-receber.csv', linhas);
+  }
+
+  function exportarMateriaisCSV() {
+    const linhas = [['Material', 'Unidade', 'Quantidade', 'Compras', 'Total gasto', 'Preço médio', 'Menor preço', 'Maior preço', 'Último preço']];
+    rankingMateriais(lancamentos).forEach((m) => {
+      const st = estatisticasMaterial(lancamentos, m.descricao);
+      linhas.push([
+        m.descricao, m.unidade, m.quantidade, m.compras,
+        st.totalGasto, st.precoMedio.toFixed(2), st.menorPreco, st.maiorPreco, st.ultimoPreco,
+      ]);
+    });
+    baixarCSV('materiais.csv', linhas);
+  }
+
+  function exportarBoletosCSV() {
+    const linhas = [['Beneficiário', 'CNPJ', 'Valor', 'Vencimento', 'Status', 'Categoria', 'Obra', 'Fornecedor', 'Documento']];
+    boletos.forEach((b) => {
+      const o = b.obraId ? obras.find((ob) => ob.id === b.obraId) : null;
+      linhas.push([
+        b.beneficiario, b.cnpjCpfBeneficiario || '', b.valor, formatDateBR(b.vencimento), b.status,
+        b.categoria, o ? o.nome : 'Despesa geral', b.fornecedorNome || '', b.numeroDocumento || '',
+      ]);
+    });
+    baixarCSV('boletos.csv', linhas);
+  }
+
+  // ---- backup completo do sistema (baixar / restaurar) ----
+  function exportarBackupCompleto() {
+    const backup = {
+      sistema: 'casaseco-custo-obra',
+      versaoBackup: 1,
+      geradoEm: new Date().toISOString(),
+      dados: { obras, produtos, lancamentos, etapas, fornecedores, contas, boletos, contratos, clientes, montadores, crediario, configuracao },
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const carimbo = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup-casaseco-${carimbo}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    try { localStorage.setItem('casaseco-ultimo-backup', new Date().toISOString()); } catch (e) { /* ignora */ }
+    setUltimoBackup(new Date().toISOString());
+    setAviso('Backup completo baixado. Guarde esse arquivo em um lugar seguro (e-mail, Google Drive, pendrive).');
+  }
+
+  function abrirSeletorRestauracao() {
+    if (backupInputRef.current) backupInputRef.current.click();
+  }
+
+  function handleArquivoRestauracao(e) {
+    const arquivo = e.target.files && e.target.files[0];
+    e.target.value = ''; // permite escolher o mesmo arquivo de novo depois, se precisar
+    if (!arquivo) return;
+
+    const leitor = new FileReader();
+    leitor.onload = () => {
+      let backup;
+      try {
+        backup = JSON.parse(leitor.result);
+      } catch (err) {
+        setErro('Esse arquivo não é um backup válido (não é um JSON legível).');
+        return;
+      }
+      const dados = backup && backup.dados;
+      // "boletos" é opcional aqui de propósito: backups feitos antes desse
+      // módulo existir não têm essa chave, e continuam válidos (restauram
+      // sem boletos, em vez de serem rejeitados).
+      const chavesObrigatorias = ['obras', 'produtos', 'lancamentos', 'etapas', 'fornecedores', 'contas'];
+      const listasOpcionais = ['boletos', 'contratos', 'clientes', 'montadores', 'crediario'];
+      const valido = dados
+        && chavesObrigatorias.every((k) => Array.isArray(dados[k]))
+        && listasOpcionais.every((k) => dados[k] === undefined || Array.isArray(dados[k]));
+      if (!valido) {
+        setErro('Esse arquivo não parece um backup do Casas Eco (faltam dados esperados).');
+        return;
+      }
+      confirmar(
+        `Restaurar este backup vai SUBSTITUIR todos os dados atuais (obras, lançamentos, catálogo, fornecedores e contas) pelos dados do arquivo${backup.geradoEm ? ` de ${formatDateBR(backup.geradoEm.slice(0, 10))}` : ''}. O que está salvo agora será perdido. Tem certeza?`,
+        () => aplicarRestauracao(dados)
+      );
+    };
+    leitor.onerror = () => setErro('Não foi possível ler o arquivo selecionado.');
+    leitor.readAsText(arquivo);
+  }
+
+  async function aplicarRestauracao(dados) {
+    const resultados = await Promise.all([
+      salvarObras(dados.obras),
+      salvarProdutos(dados.produtos),
+      salvarLancamentos(dados.lancamentos),
+      salvarEtapas(dados.etapas),
+      salvarFornecedores(dados.fornecedores),
+      salvarContas(dados.contas),
+      salvarBoletos(dados.boletos || []),
+      salvarContratos(dados.contratos || []),
+      salvarClientes(dados.clientes || []),
+      salvarMontadores(dados.montadores || []),
+      salvarCrediario(dados.crediario || []),
+      salvarConfiguracao(normalizarConfiguracao(dados.configuracao || null)),
+    ]);
+    if (resultados.every(Boolean)) {
+      setAviso('Backup restaurado com sucesso.');
+    } else {
+      setErro('Alguns dados podem não ter sido restaurados. Confira e tente novamente se necessário.');
+    }
   }
 
   function gastosPorCategoriaGeral() {
@@ -691,6 +1099,10 @@ function CustoObraApp() {
       if (npEditandoId === id) cancelarEdicaoProduto();
     });
   }
+
+  // ---- busca do catálogo ----
+  const [buscaCatalogo, setBuscaCatalogo] = useState('');
+  const [ordemCatalogo, setOrdemCatalogo] = useState('nome');
 
   // ---- importação do PDV ----
   const [importAberto, setImportAberto] = useState(false);
@@ -844,6 +1256,12 @@ function CustoObraApp() {
   const obraAtiva = obras.find((o) => o.id === obraAtivaId);
   const obraConcluida = obraEstaConcluida(obraAtiva);
   const catalogoAtivo = catalogoPorCategoria(categoriaAtiva, produtos, lancamentos);
+  // lista que a tela do Catálogo mostra: o catálogo inteiro passado pela
+  // busca e pela ordenação escolhidas na própria tela.
+  const produtosDoCatalogo = filtrarOrdenarProdutos(produtos, buscaCatalogo, ordemCatalogo);
+  // catálogo oferecido no crediário: produtos cadastrados + tabela de
+  // madeiras, que são as duas listas de itens que a loja já tem.
+  const catalogoCrediario = catalogoParaRetirada(produtos, CATALOGO_VENDA);
   const paginaAtual = (view === 'obra' || view === 'resumo') && obraAtiva
     ? {
         titulo: obraAtiva.nome,
@@ -899,6 +1317,27 @@ function CustoObraApp() {
               </span>
             </div>
           )}
+          {!sidebarColapsada && usuario?.email && (
+            <p className="text-[11px] text-stone-400 px-2 truncate" title={usuario.email}>{usuario.email}</p>
+          )}
+          <div className={`flex gap-1 ${sidebarColapsada ? 'flex-col' : ''}`}>
+            <button
+              onClick={() => setTrocandoSenha(true)}
+              title="Trocar minha senha"
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors duration-150"
+            >
+              <KeyRound size={16} />
+              {!sidebarColapsada && <span className="text-xs">Senha</span>}
+            </button>
+            <button
+              onClick={sair}
+              title="Sair"
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors duration-150"
+            >
+              <LogOut size={16} />
+              {!sidebarColapsada && <span className="text-xs">Sair</span>}
+            </button>
+          </div>
           <button
             onClick={() => setSidebarColapsada((v) => !v)}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors duration-150"
@@ -908,23 +1347,100 @@ function CustoObraApp() {
         </div>
       </aside>
 
-      {/* barra de navegação fixa embaixo, só no celular */}
+      {/* barra de navegação fixa embaixo, só no celular: os itens principais
+          ficam à mão e o resto abre no botão "Mais" */}
       <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-stone-200 flex z-20">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter((i) => i.primario).sort((a, b) => a.ordemMobile - b.ordemMobile).map((item) => {
           const Icon = item.icon;
           const ativo = view === item.key || (item.key === 'home' && (view === 'obra' || view === 'resumo'));
           return (
             <button
               key={item.key}
               onClick={() => { setView(item.key); if (item.key === 'home') setObraAtivaId(null); }}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-xs transition-colors duration-150 ${ativo ? 'text-green-700' : 'text-stone-400'}`}
+              className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] leading-tight transition-colors duration-150 ${ativo ? 'text-green-700' : 'text-stone-400'}`}
             >
               <Icon size={18} />
-              {item.label}
+              <span className="truncate max-w-full px-0.5">{item.label}</span>
             </button>
           );
         })}
+        {(() => {
+          const secundarios = NAV_ITEMS.filter((i) => !i.primario);
+          const ativoNoMais = secundarios.some((i) => i.key === view);
+          return (
+            <button
+              onClick={() => setMenuMaisAberto(true)}
+              className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] leading-tight transition-colors duration-150 ${ativoNoMais ? 'text-green-700' : 'text-stone-400'}`}
+            >
+              <MoreHorizontal size={18} />
+              <span className="truncate max-w-full px-0.5">Mais</span>
+            </button>
+          );
+        })()}
       </nav>
+
+      {/* painel "Mais" (celular) */}
+      {menuMaisAberto && createPortal(
+        <>
+          <div className="fixed inset-0 bg-black/30 z-40 animate-fade-in sm:hidden" onClick={() => setMenuMaisAberto(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl shadow-popover bg-white animate-sheet-up sm:hidden">
+            <div className="flex justify-center pt-2 pb-1">
+              <span className="w-10 h-1 rounded-full bg-stone-200" />
+            </div>
+            <div className="flex items-center justify-between px-4 pb-2 border-b border-stone-100">
+              <p className="text-sm font-semibold text-stone-700">Todas as áreas</p>
+              <button onClick={() => setMenuMaisAberto(false)} className="eco-icon-btn -mr-1.5">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-2 grid grid-cols-3 gap-1.5">
+              {NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const ativo = view === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => {
+                      setView(item.key);
+                      if (item.key === 'home') setObraAtivaId(null);
+                      setMenuMaisAberto(false);
+                    }}
+                    className={`flex flex-col items-center justify-center gap-1.5 py-3.5 rounded-xl border text-[11px] font-medium transition-colors ${
+                      ativo ? 'bg-green-50 border-green-200 text-green-800' : 'bg-white border-stone-200 text-stone-600'
+                    }`}
+                  >
+                    <Icon size={20} />
+                    <span className="truncate max-w-full px-1">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="px-4 pb-6 mb-16 border-t border-stone-100 pt-3 flex items-center gap-2">
+              {usuario?.email && (
+                <p className="text-[11px] text-stone-400 truncate flex-1" title={usuario.email}>{usuario.email}</p>
+              )}
+              <button
+                onClick={() => { setMenuMaisAberto(false); setTrocandoSenha(true); }}
+                className="eco-btn-secondary eco-btn-xs flex-shrink-0"
+              >
+                <KeyRound size={12} /> Senha
+              </button>
+              <button onClick={sair} className="eco-btn-secondary eco-btn-xs flex-shrink-0">
+                <LogOut size={12} /> Sair
+              </button>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+
+      {trocandoSenha && createPortal(
+        <TrocarSenha
+          onFechar={() => setTrocandoSenha(false)}
+          onPronto={() => { setTrocandoSenha(false); setAviso('Senha trocada.'); }}
+        />,
+        document.body
+      )}
 
       {/* ---- coluna principal ---- */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -939,6 +1455,14 @@ function CustoObraApp() {
             <h1 className="text-base sm:text-lg font-semibold text-stone-900 truncate">{paginaAtual.titulo}</h1>
             <p className="text-xs text-stone-400 truncate hidden sm:block">{paginaAtual.subtitulo}</p>
           </div>
+          <button
+            onClick={() => setBuscaAberta(true)}
+            className="flex items-center gap-2 flex-shrink-0 text-stone-400 hover:text-stone-700 sm:border sm:border-stone-200 sm:rounded-lg sm:px-3 sm:py-1.5 sm:hover:border-stone-300 transition-colors"
+            title="Buscar em todo o sistema"
+          >
+            <Search size={17} />
+            <span className="hidden sm:inline text-xs">Buscar…</span>
+          </button>
           <span className="sm:hidden inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: window.storage ? '#22c55e' : '#ef4444' }}></span>
         </header>
 
@@ -993,6 +1517,63 @@ function CustoObraApp() {
                       <p className="text-lg font-semibold text-stone-900">{contasProx7.length}</p>
                     </div>
                   </div>
+                  {/* ---- resumo do mês ---- */}
+                  {(() => {
+                    const r = resumoDoMes({ lancamentos, obras, contas, boletos, CATEGORIAS }, hoje);
+                    if (r.lancamentosNoMes === 0 && r.totalAnterior === 0) return null;
+                    const subiu = r.variacaoPct != null && r.variacaoPct > 0;
+                    return (
+                      <div className="eco-card p-4">
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <p className="text-sm font-semibold text-stone-700">Resumo do mês</p>
+                          {r.variacaoPct != null && (
+                            <span className={`eco-badge border ${subiu ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+                              {subiu ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+                              {Math.abs(r.variacaoPct).toFixed(0)}% vs. mês anterior
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                          <div>
+                            <p className="text-xs text-stone-400">Gasto no mês</p>
+                            <p className="text-base font-semibold text-stone-900">{formatMoney(r.total)}</p>
+                            <p className="text-[11px] text-stone-400">{r.lancamentosNoMes} lançamentos</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-stone-400">Obra que mais gastou</p>
+                            <p className="text-sm font-semibold text-stone-900 truncate">{r.topObra?.nome || '—'}</p>
+                            {r.topObra && <p className="text-[11px] text-stone-400">{formatMoney(r.topObra.valor)}</p>}
+                          </div>
+                          <div>
+                            <p className="text-xs text-stone-400">Categoria que mais consumiu</p>
+                            <p className="text-sm font-semibold text-stone-900 truncate">{r.topCategoria?.label || '—'}</p>
+                            {r.topCategoria && <p className="text-[11px] text-stone-400">{formatMoney(r.topCategoria.valor)}</p>}
+                          </div>
+                          <div>
+                            <p className="text-xs text-stone-400">Fornecedor que mais recebeu</p>
+                            <p className="text-sm font-semibold text-stone-900 truncate">{r.topFornecedor?.nome || '—'}</p>
+                            {r.topFornecedor && <p className="text-[11px] text-stone-400">{formatMoney(r.topFornecedor.valor)}</p>}
+                          </div>
+                        </div>
+                        {r.variacoesMateriais.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-stone-100">
+                            <p className="text-xs text-stone-400 mb-1.5">Materiais que mudaram de preço em relação ao mês passado</p>
+                            <div className="space-y-1">
+                              {r.variacoesMateriais.map((v) => (
+                                <div key={v.descricao} className="flex items-center justify-between gap-2 text-xs">
+                                  <span className="text-stone-600 truncate">{v.descricao}</span>
+                                  <span className={`font-medium flex-shrink-0 ${v.pct > 0 ? 'text-red-600' : 'text-green-700'}`}>
+                                    {v.pct > 0 ? '+' : ''}{v.pct.toFixed(0)}% ({formatMoney(v.de)} → {formatMoney(v.para)})
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {alertas.length > 0 && (
                     <div className="space-y-1.5 eco-stagger">
                       {alertas.map((a, i) => (
@@ -1273,6 +1854,39 @@ function CustoObraApp() {
               )}
             </div>
 
+            <div className="eco-card p-3 flex flex-col sm:flex-row gap-3 sm:items-center">
+              <div className="relative flex-1 min-w-0">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300" />
+                <input
+                  value={buscaCatalogo}
+                  onChange={(e) => setBuscaCatalogo(e.target.value)}
+                  placeholder="Pesquisar produto pelo nome ou unidade…"
+                  className="eco-input pl-9"
+                />
+                {buscaCatalogo && (
+                  <button
+                    onClick={() => setBuscaCatalogo('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 eco-icon-btn"
+                    title="Limpar busca"
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-stone-500 whitespace-nowrap">Ordenar por</label>
+                <select
+                  value={ordemCatalogo}
+                  onChange={(e) => setOrdemCatalogo(e.target.value)}
+                  className="eco-input sm:w-56"
+                >
+                  {ORDENS_CATALOGO.map((o) => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="eco-card overflow-hidden">
               <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[560px]">
@@ -1289,7 +1903,10 @@ function CustoObraApp() {
                   {produtos.length === 0 && (
                     <tr><td colSpan={5} className="px-3 py-6 text-center text-stone-400">Nenhum produto cadastrado ainda.</td></tr>
                   )}
-                  {produtos.slice().sort((a, b) => a.nome.localeCompare(b.nome)).map((p) => {
+                  {produtos.length > 0 && produtosDoCatalogo.length === 0 && (
+                    <tr><td colSpan={5} className="px-3 py-6 text-center text-stone-400">Nenhum produto encontrado para "{buscaCatalogo.trim()}".</td></tr>
+                  )}
+                  {produtosDoCatalogo.map((p) => {
                     const anterior = p.historico && p.historico.length > 0 ? p.historico[p.historico.length - 1] : null;
                     const variacao = anterior && anterior.preco > 0 ? ((p.preco - anterior.preco) / anterior.preco) * 100 : null;
                     return (
@@ -1320,6 +1937,13 @@ function CustoObraApp() {
                 </tbody>
               </table>
               </div>
+              {produtos.length > 0 && (
+                <p className="px-3 py-2 border-t border-stone-100 text-xs text-stone-400">
+                  {buscaCatalogo.trim()
+                    ? `${produtosDoCatalogo.length} de ${produtos.length} produto(s) encontrado(s)`
+                    : `${produtos.length} produto(s) no catálogo`}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -1349,6 +1973,21 @@ function CustoObraApp() {
                   <input value={fnCategoria} onChange={(e) => setFnCategoria(e.target.value)} placeholder="Ex: Materiais"
                     className="eco-input" />
                 </div>
+                <div className="w-full sm:w-44">
+                  <label className="text-xs text-stone-500 block mb-1">CNPJ</label>
+                  <input value={fnCnpj} onChange={(e) => setFnCnpj(e.target.value)} placeholder="00.000.000/0001-00"
+                    className="eco-input" />
+                </div>
+                <div className="w-full sm:w-36">
+                  <label className="text-xs text-stone-500 block mb-1">Cidade</label>
+                  <input value={fnCidade} onChange={(e) => setFnCidade(e.target.value)} placeholder="Cidade"
+                    className="eco-input" />
+                </div>
+                <div className="w-full sm:flex-1 sm:min-w-[180px]">
+                  <label className="text-xs text-stone-500 block mb-1">E-mail</label>
+                  <input value={fnEmail} onChange={(e) => setFnEmail(e.target.value)} placeholder="contato@fornecedor.com"
+                    className="eco-input" />
+                </div>
                 <button type="button" onClick={cadastrarFornecedor} className="eco-btn-primary w-full sm:w-auto">
                   <Plus size={15} /> {nomeExistente ? 'Atualizar' : 'Salvar'}
                 </button>
@@ -1363,18 +2002,37 @@ function CustoObraApp() {
                     return (
                       <div key={f.id} className="eco-card p-4 transition-colors duration-150 hover:border-stone-300">
                         <div className="flex items-start justify-between">
-                          <div>
+                          <div className="min-w-0">
                             <p className="font-semibold text-stone-900">{f.nome}</p>
-                            {(f.telefone || f.categoria) && (
-                              <p className="text-xs text-stone-400 flex items-center gap-2 mt-0.5">
+                            {(f.telefone || f.categoria || f.cidade) && (
+                              <p className="text-xs text-stone-400 flex items-center gap-2 mt-0.5 flex-wrap">
                                 {f.telefone && <span className="flex items-center gap-1"><Phone size={11} /> {f.telefone}</span>}
+                                {f.cidade && <span>{f.cidade}</span>}
                                 {f.categoria && <span>{f.categoria}</span>}
                               </p>
                             )}
+                            {(f.cnpj || f.email) && (
+                              <p className="text-xs text-stone-400 mt-0.5 truncate">
+                                {[f.cnpj, f.email].filter(Boolean).join(' · ')}
+                              </p>
+                            )}
                           </div>
-                          <button onClick={() => removerFornecedor(f.id, f.nome)} className="eco-icon-btn-danger" title="Remover fornecedor">
-                            <Trash2 size={14} />
-                          </button>
+                          <div className="flex flex-shrink-0">
+                            <button
+                              onClick={() => {
+                                setFnNome(f.nome); setFnTelefone(f.telefone || ''); setFnCategoria(f.categoria || '');
+                                setFnCnpj(f.cnpj || ''); setFnEmail(f.email || ''); setFnCidade(f.cidade || '');
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }}
+                              className="eco-icon-btn"
+                              title="Editar fornecedor"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button onClick={() => removerFornecedor(f.id, f.nome)} className="eco-icon-btn-danger" title="Remover fornecedor">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2 mt-3 text-sm">
                           <div>
@@ -1509,6 +2167,80 @@ function CustoObraApp() {
           );
         })()}
 
+        {/* ---------------- BOLETOS ---------------- */}
+        {view === 'boletos' && (
+          <Boletos
+            boletos={boletos}
+            obras={obras}
+            fornecedores={fornecedores}
+            onCriarBoleto={criarBoleto}
+            onAtualizarBoleto={atualizarBoleto}
+            onMarcarPago={marcarBoletoPago}
+            onReabrirBoleto={reabrirBoletoPagamento}
+            onCancelarBoleto={cancelarBoleto}
+            onRemoverBoleto={removerBoleto}
+            onAviso={setAviso}
+            onErro={setErro}
+            onConfirmar={confirmar}
+          />
+        )}
+
+        {/* ---------------- CREDIÁRIO DOS MONTADORES ---------------- */}
+        {view === 'crediario' && (
+          <Crediario
+            montadores={montadores}
+            movimentos={crediario}
+            obras={obras}
+            catalogoProdutos={catalogoCrediario}
+            onSalvarMontadores={salvarMontadores}
+            onSalvarMovimentos={salvarCrediario}
+            onAviso={setAviso}
+            onErro={setErro}
+            onConfirmar={confirmar}
+          />
+        )}
+
+        {/* ---------------- MATERIAIS ---------------- */}
+        {view === 'materiais' && (
+          <Materiais
+            lancamentos={lancamentos}
+            obras={obras}
+            materialInicial={materialFoco}
+            onLimparMaterialInicial={() => setMaterialFoco(null)}
+          />
+        )}
+
+        {/* ---------------- CONTRATOS ---------------- */}
+        {view === 'contratos' && (
+          <Contratos
+            contratos={contratos}
+            config={configuracao}
+            obras={obras}
+            clientes={clientes}
+            onSalvarContrato={salvarContrato}
+            onRemoverContrato={removerContrato}
+            onAtualizarParcela={atualizarParcelaContrato}
+            onAviso={setAviso}
+            onErro={setErro}
+            onConfirmar={confirmar}
+          />
+        )}
+
+        {/* ---------------- CONFIGURAÇÕES ---------------- */}
+        {view === 'configuracoes' && (
+          <Configuracoes
+            config={configuracao}
+            onSalvarConfig={salvarConfiguracao}
+            onAviso={setAviso}
+            onErro={setErro}
+          />
+        )}
+
+        {/* ---------------- MADEIRAS (tabela de preços e orçamento ao cliente) ---------------- */}
+        {view === 'venda' && (
+          <OrcamentoVenda onAviso={setAviso} onErro={setErro} />
+        )}
+
         {/* ---------------- RELATÓRIOS ---------------- */}
         {view === 'relatorios' && (() => {
           const porCategoria = gastosPorCategoriaGeral();
@@ -1525,6 +2257,18 @@ function CustoObraApp() {
                   <button onClick={exportarContasCSV} className="eco-btn-secondary eco-btn-sm">
                     <Download size={14} /> Contas a pagar (CSV)
                   </button>
+                  <button onClick={exportarBoletosCSV} className="eco-btn-secondary eco-btn-sm">
+                    <Download size={14} /> Boletos (CSV)
+                  </button>
+                  <button onClick={exportarMateriaisCSV} className="eco-btn-secondary eco-btn-sm">
+                    <Download size={14} /> Materiais e preços (CSV)
+                  </button>
+                  <button onClick={exportarContratosCSV} className="eco-btn-secondary eco-btn-sm">
+                    <Download size={14} /> Contratos (CSV)
+                  </button>
+                  <button onClick={exportarParcelasCSV} className="eco-btn-secondary eco-btn-sm">
+                    <Download size={14} /> Parcelas a receber (CSV)
+                  </button>
                 </div>
                 {obras.length > 0 && (
                   <>
@@ -1540,6 +2284,47 @@ function CustoObraApp() {
                 )}
                 <p className="text-xs text-stone-400 mt-3">Os arquivos CSV abrem direto no Excel, Google Sheets ou similar.</p>
               </div>
+
+              {(() => {
+                const dias = ultimoBackup ? Math.floor((Date.now() - new Date(ultimoBackup).getTime()) / 86400000) : null;
+                const atrasado = dias === null || dias >= 7;
+                return (
+                  <div className={`eco-card p-4 ${atrasado ? 'border-amber-300 bg-amber-50/40' : 'border-green-200'}`}>
+                    <div className="flex items-start gap-2.5 mb-3">
+                      <ShieldCheck size={20} className={`flex-shrink-0 mt-0.5 ${atrasado ? 'text-amber-500' : 'text-green-600'}`} />
+                      <div>
+                        <p className="text-sm font-semibold text-stone-700">Backup completo do sistema</p>
+                        <p className="text-xs text-stone-500 mt-0.5">
+                          Baixa um arquivo com TODOS os dados (obras, lançamentos, catálogo, fornecedores e contas). Guarde esse arquivo fora do site — no e-mail, Google Drive, pendrive — como uma cópia de segurança independente do site.
+                        </p>
+                        <p className={`text-xs mt-1.5 font-medium ${atrasado ? 'text-amber-700' : 'text-green-700'}`}>
+                          {ultimoBackup
+                            ? `Último backup: ${formatDateBR(ultimoBackup.slice(0, 10))} (${dias === 0 ? 'hoje' : dias === 1 ? 'há 1 dia' : `há ${dias} dias`})${atrasado ? ' — considere fazer um novo' : ''}`
+                            : 'Nenhum backup feito ainda neste navegador — recomendado fazer o primeiro agora.'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button onClick={exportarBackupCompleto} className="eco-btn-primary eco-btn-sm">
+                        <Download size={14} /> Baixar backup completo
+                      </button>
+                      <button onClick={abrirSeletorRestauracao} className="eco-btn-secondary eco-btn-sm">
+                        <Upload size={14} /> Restaurar backup
+                      </button>
+                      <input
+                        ref={backupInputRef}
+                        type="file"
+                        accept="application/json,.json"
+                        onChange={handleArquivoRestauracao}
+                        className="hidden"
+                      />
+                    </div>
+                    <p className="text-xs text-stone-400 mt-3">
+                      "Restaurar backup" substitui todos os dados atuais pelos do arquivo escolhido — use só se precisar recuperar dados perdidos.
+                    </p>
+                  </div>
+                );
+              })()}
 
               <div className="eco-stagger grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="eco-card p-4">
@@ -1682,6 +2467,89 @@ function CustoObraApp() {
                 <Pencil size={12} /> Definir orçamento para esta obra
               </button>
             ) : null}
+
+            {(() => {
+              const resumoBoletos = totalBoletosPorObra(boletos, obraAtiva.id);
+              if (resumoBoletos.quantidade === 0) return null;
+              return (
+                <div className="eco-card p-4">
+                  <p className="text-sm font-semibold text-stone-700 mb-1">Boletos vinculados a esta obra</p>
+                  <p className="text-xs text-stone-500">
+                    {formatMoney(resumoBoletos.pendente)} pendente · {formatMoney(resumoBoletos.pago)} pago
+                    {' · '}
+                    <button onClick={() => setView('boletos')} className="underline hover:text-green-700">ver boletos</button>
+                  </p>
+                  <p className="text-[11px] text-stone-400 mt-1">
+                    Este valor é informativo e não entra na soma de "Total da obra" acima.
+                  </p>
+                </div>
+              );
+            })()}
+
+            {/* ---- contrato e parcelas a receber desta obra ---- */}
+            {(() => {
+              const contratosDaObra = contratos.filter((c) => c.obraId === obraAtiva.id && c.status !== 'cancelado');
+              const resumoRec = resumoParcelasDaObra(contratos, obraAtiva.id);
+              if (contratosDaObra.length === 0) {
+                return (
+                  <div className="eco-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <FileSignature size={20} className="text-stone-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-stone-700">Contrato</p>
+                        <p className="text-xs text-stone-400">
+                          Esta obra ainda não tem contrato. Ao gerar, os dados da obra já vão preenchidos.
+                        </p>
+                      </div>
+                    </div>
+                    <button onClick={() => setView('contratos')} className="eco-btn-secondary eco-btn-sm flex-shrink-0">
+                      <FileSignature size={14} /> Gerar contrato
+                    </button>
+                  </div>
+                );
+              }
+              return (
+                <div className="eco-card p-4">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <p className="text-sm font-semibold text-stone-700 flex items-center gap-1.5">
+                      <Wallet size={15} /> Contrato e recebimentos
+                    </p>
+                    <button onClick={() => setView('contratos')} className="text-xs text-stone-500 underline hover:text-green-700 flex-shrink-0">
+                      abrir contratos
+                    </button>
+                  </div>
+                  {contratosDaObra.map((c) => (
+                    <p key={c.id} className="text-xs text-stone-500 mb-1.5">
+                      {c.numero ? `Contrato nº ${c.numero}` : 'Contrato (rascunho)'} · {formatMoney(c.valorTotal)}
+                      {' · '}<span className="uppercase">{c.status}</span>
+                    </p>
+                  ))}
+                  {resumoRec.quantidade > 0 && (
+                    <div className="grid grid-cols-3 gap-2 mt-2">
+                      <div className="bg-stone-50 rounded-lg p-2">
+                        <p className="text-[11px] text-stone-400">Contratado</p>
+                        <p className="text-sm font-semibold text-stone-800">{formatMoney(resumoRec.total)}</p>
+                      </div>
+                      <div className="bg-green-50 rounded-lg p-2">
+                        <p className="text-[11px] text-green-700/70">Recebido</p>
+                        <p className="text-sm font-semibold text-green-800">{formatMoney(resumoRec.recebido)}</p>
+                      </div>
+                      <div className={`rounded-lg p-2 ${resumoRec.vencidas > 0 ? 'bg-red-50' : 'bg-amber-50'}`}>
+                        <p className={`text-[11px] ${resumoRec.vencidas > 0 ? 'text-red-700/70' : 'text-amber-700/70'}`}>
+                          A receber{resumoRec.vencidas > 0 ? ` (${resumoRec.vencidas} atrasada${resumoRec.vencidas > 1 ? 's' : ''})` : ''}
+                        </p>
+                        <p className={`text-sm font-semibold ${resumoRec.vencidas > 0 ? 'text-red-700' : 'text-amber-700'}`}>
+                          {formatMoney(resumoRec.aReceber)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-stone-400 mt-2">
+                    Parcelas são o que o cliente paga à Casas Eco (receita) — não se misturam com o custo da obra acima.
+                  </p>
+                </div>
+              );
+            })()}
 
             <nav className="grid grid-cols-3 gap-2">
               {Object.entries(CATEGORIAS).map(([key, cat]) => {
@@ -2018,6 +2886,21 @@ function CustoObraApp() {
           </div>
         </div>
       )}
+
+      <BuscaGlobal
+        aberto={buscaAberta}
+        onFechar={() => setBuscaAberta(false)}
+        dados={{ obras, clientes, produtos, fornecedores, boletos, contratos, lancamentos, contas, montadores, crediario }}
+        onIr={(destino) => {
+          if (destino.view === 'obra' && destino.obraId) {
+            setObraAtivaId(destino.obraId);
+            setView('obra');
+          } else {
+            if (destino.material) setMaterialFoco(destino.material);
+            setView(destino.view);
+          }
+        }}
+      />
 
       <ToastStack
         aviso={aviso}

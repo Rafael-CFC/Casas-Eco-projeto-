@@ -23,3 +23,23 @@ export function normalizeUnit(value) {
   if (value === null || value === undefined) return '';
   return String(value).trim().toUpperCase();
 }
+
+// Comparação "à prova de digitação": tira acentos e caixa, para que
+// "MOERAO" encontre "MOERÃO" e "cimento" encontre "CIMENTO". Usada nas
+// buscas do catálogo e do crediário.
+export function semAcento(value) {
+  return String(value === null || value === undefined ? '' : value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+// Um termo de busca casa quando TODAS as palavras digitadas aparecem em
+// algum dos campos — assim "cimento 50" acha "CIMENTO CP-II 50KG" mesmo
+// fora de ordem.
+export function combinaBusca(termo, ...campos) {
+  const palavras = semAcento(termo).trim().split(/\s+/).filter(Boolean);
+  if (palavras.length === 0) return true;
+  const alvo = campos.map((c) => semAcento(c)).join(' ');
+  return palavras.every((p) => alvo.includes(p));
+}
