@@ -369,6 +369,7 @@
 .dark .bg-blue-50 { background-color: var(--azul-fraco); }
 .dark .bg-blue-50\/40 { background-color: rgba(96,165,250,0.07); }
 .dark .bg-orange-50 { background-color: rgba(251,146,60,0.10); }
+.dark .bg-fuchsia-50 { background-color: rgba(232,121,249,0.10); }
 
 /* textos */
 .dark .text-stone-900 { color: var(--titulo); }
@@ -403,6 +404,9 @@
 
 .dark .text-blue-600,
 .dark .text-blue-700 { color: var(--azul-texto); }
+
+.dark .text-fuchsia-600,
+.dark .text-fuchsia-700 { color: #e879f9; }
 .dark .text-blue-800,
 .dark .text-blue-900 { color: #93c5fd; }
 .dark .text-blue-800\/80 { color: rgba(147,197,253,0.85); }
@@ -426,6 +430,7 @@
 .dark .border-red-300 { border-color: var(--vermelho-linha); }
 .dark .border-blue-200 { border-color: var(--azul-linha); }
 .dark .border-orange-200 { border-color: rgba(251,146,60,0.26); }
+.dark .border-fuchsia-200 { border-color: rgba(232,121,249,0.26); }
 
 /* mesmas cores, na hora de passar o mouse */
 .dark .hover\:bg-stone-50:hover { background-color: var(--realce); }

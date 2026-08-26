@@ -22,7 +22,7 @@ import SucessoFinalizacaoModal from './obra/SucessoFinalizacaoModal';
 import ResumoFinalObra from './obra/ResumoFinalObra';
 import ProdutoSeletor from './produtos/ProdutoSeletor';
 import { catalogoPorCategoria, filtrarOrdenarProdutos, ORDENS_CATALOGO } from './produtos/catalogoUtils';
-import { ehMadeira, fornecedorDasMadeiras, madeirasSemFornecedor, vincularMadeirasAoFornecedor } from './produtos/madeiras';
+import { ehMadeira, fornecedorDasMadeiras, madeirasParaOrganizar, organizarMadeiras } from './produtos/madeiras';
 import OrcamentoVenda from './venda/OrcamentoVenda';
 import Boletos from './boletos/Boletos';
 import { novoBoleto, atualizarCamposBoleto, registrarPagamento, reabrirBoleto, cancelarBoletoObj, mapearCategoriaBoletoParaLancamento } from './boletos/boletosStore';
@@ -976,14 +976,19 @@ function CustoObraApp({ usuario }) {
     return Object.entries(porNome).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total);
   }
 
-  async function vincularMadeirasAntigas(distribuidora) {
-    const atualizados = vincularMadeirasAoFornecedor(lancamentos, distribuidora);
+  // Passa os lançamentos de madeira antigos para a categoria "Madeiras" e
+  // preenche o fornecedor de quem está sem. Nada além disso muda: valor,
+  // quantidade, obra e data continuam iguais.
+  async function organizarMadeirasAntigas(distribuidora) {
+    const atualizados = organizarMadeiras(lancamentos, distribuidora);
     const quantos = atualizados.filter((l, i) => l !== lancamentos[i]).length;
     if (quantos === 0) return;
     const ok = await salvarLancamentos(atualizados);
     if (!ok) return;
-    salvarFornecedores(upsertFornecedor(fornecedores, distribuidora));
-    setAviso(`${quantos} lançamento(s) de madeira vinculado(s) a ${distribuidora}.`);
+    if (String(distribuidora || '').trim()) {
+      salvarFornecedores(upsertFornecedor(fornecedores, distribuidora.trim()));
+    }
+    setAviso(`${quantos} lançamento(s) de madeira organizado(s) na categoria Madeiras.`);
   }
 
   async function copiarResumoObra(obra) {
@@ -1207,14 +1212,20 @@ function CustoObraApp({ usuario }) {
     setLdDescricao(nome);
     const catalogo = catalogoPorCategoria(categoriaAtiva, produtos, lancamentos);
     const item = catalogo.find((it) => it.nome.toLowerCase() === nome.trim().toLowerCase());
-    if (item) { setLdPreco(String(item.preco)); setLdUnidade(item.unidade); }
+    if (item) {
+      // preço nulo = nome que veio da tabela de madeiras e ainda não foi
+      // comprado nenhuma vez; aí o valor fica em branco para a pessoa
+      // digitar quanto pagou de verdade
+      if (item.preco != null) setLdPreco(String(item.preco));
+      if (item.unidade) setLdUnidade(item.unidade);
+    }
     ajustarFornecedorMadeira(nome, categoriaAtiva);
   }
 
   function selecionarItemCatalogo(item) {
     setLdDescricao(item.nome);
-    setLdUnidade(item.unidade);
-    setLdPreco(String(item.preco));
+    if (item.unidade) setLdUnidade(item.unidade);
+    setLdPreco(item.preco != null ? String(item.preco) : '');
     ajustarFornecedorMadeira(item.nome, categoriaAtiva);
   }
 
@@ -1301,10 +1312,10 @@ function CustoObraApp({ usuario }) {
   // catálogo oferecido no crediário: produtos cadastrados + tabela de
   // madeiras, que são as duas listas de itens que a loja já tem.
   const catalogoCrediario = catalogoParaRetirada(produtos, CATALOGO_VENDA);
-  // lançamentos de madeira que ficaram sem fornecedor (os de antes do
-  // vínculo com a distribuidora existir) — a tela de Configurações
-  // oferece corrigir todos de uma vez
-  const madeirasPendentes = madeirasSemFornecedor(lancamentos);
+  // lançamentos de madeira que ainda estão fora da categoria "Madeiras"
+  // ou sem fornecedor (os de antes dessa organização existir) — a tela de
+  // Configurações oferece arrumar todos de uma vez
+  const madeirasPendentes = madeirasParaOrganizar(lancamentos, fornecedorDasMadeiras(configuracao));
   const paginaAtual = (view === 'obra' || view === 'resumo') && obraAtiva
     ? {
         titulo: obraAtiva.nome,
@@ -2281,7 +2292,7 @@ function CustoObraApp({ usuario }) {
             config={configuracao}
             madeirasPendentes={madeirasPendentes}
             onSalvarConfig={salvarConfiguracao}
-            onVincularMadeiras={vincularMadeirasAntigas}
+            onOrganizarMadeiras={organizarMadeirasAntigas}
             onAviso={setAviso}
             onErro={setErro}
             onConfirmar={confirmar}
@@ -2722,7 +2733,7 @@ function CustoObraApp({ usuario }) {
             <div className="eco-card p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 items-end">
               <div className="col-span-2 sm:col-span-4 lg:col-span-2">
                 <label className="text-xs text-stone-500 block mb-1">
-                  {categoriaAtiva === 'produto_loja' ? 'Produto' : 'Descrição'}
+                  {categoriaAtiva === 'produto_loja' ? 'Produto' : categoriaAtiva === 'madeiras' ? 'Madeira' : 'Descrição'}
                 </label>
                 <ProdutoSeletor
                   value={ldDescricao}
@@ -2733,6 +2744,7 @@ function CustoObraApp({ usuario }) {
                   placeholder={
                     categoriaAtiva === 'produto_loja'
                       ? 'Digite ou escolha — se já existir, o preço vem sozinho'
+                      : categoriaAtiva === 'madeiras' ? 'Escolha na tabela de madeiras ou digite'
                       : categoriaAtiva === 'mao_de_obra' ? 'Ex: Pedreiro - diária' : 'Ex: Areia lavada'
                   }
                 />

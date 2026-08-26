@@ -131,11 +131,12 @@ export function encontrarPossivelDuplicata(novoBoletoObj, boletosExistentes, idI
   return null;
 }
 
-// A obra usa só 3 categorias de custo (ver CATEGORIAS em src/domain.js).
-// Só "MÃO DE OBRA" tem correspondência direta; as demais caem em
+// As categorias de custo da obra estão em CATEGORIAS (src/domain.js).
+// "MÃO DE OBRA" e "MADEIRA" têm correspondência direta; as demais caem em
 // "material_bruto" como categoria genérica de custo, preservando a
 // categoria original do boleto na observação do lançamento gerado.
 export function mapearCategoriaBoletoParaLancamento(categoriaBoleto) {
   if (categoriaBoleto === 'MÃO DE OBRA') return 'mao_de_obra';
+  if (categoriaBoleto === 'MADEIRA') return 'madeiras';
   return 'material_bruto';
 }

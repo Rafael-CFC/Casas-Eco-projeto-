@@ -15,7 +15,7 @@ const ABAS = [
 ];
 
 export default function Configuracoes({
-  config, madeirasPendentes = [], onSalvarConfig, onVincularMadeiras, onAviso, onErro, onConfirmar,
+  config, madeirasPendentes = [], onSalvarConfig, onOrganizarMadeiras, onAviso, onErro, onConfirmar,
 }) {
   const [aba, setAba] = useState('contratada');
   const [rascunho, setRascunho] = useState(config);
@@ -48,17 +48,19 @@ export default function Configuracoes({
     }));
   }
 
-  // Vincula de uma vez os lançamentos de madeira que ficaram sem
-  // fornecedor (os de antes desse vínculo existir). Usa o que está
-  // SALVO, não o rascunho: vincular a uma distribuidora que ainda nem foi
-  // salva deixaria as duas coisas fora de sintonia.
-  function vincularAntigos() {
+  // Arruma de uma vez as madeiras lançadas antes da categoria existir:
+  // passa para a categoria "Madeiras" e preenche o fornecedor de quem
+  // está sem. Usa o que está SALVO, não o rascunho — vincular a uma
+  // distribuidora que ainda nem foi salva deixaria as duas coisas fora de
+  // sintonia.
+  function organizarAntigos() {
+    if (madeirasPendentes.length === 0) return;
     const distribuidora = String(config.fornecedorMadeiras || '').trim();
-    if (!distribuidora || madeirasPendentes.length === 0) return;
     onConfirmar(
-      `Vincular ${madeirasPendentes.length} lançamento(s) de madeira ao fornecedor "${distribuidora}"? `
-      + 'Só muda os que estão sem fornecedor anotado — nenhum valor de obra é alterado.',
-      () => onVincularMadeiras(distribuidora)
+      `Passar ${madeirasPendentes.length} lançamento(s) para a categoria "Madeiras"`
+      + (distribuidora ? ` e preencher o fornecedor "${distribuidora}" em quem está sem?` : '?')
+      + ' Valor, quantidade, obra e data continuam iguais.',
+      () => onOrganizarMadeiras(distribuidora)
     );
   }
 
@@ -254,18 +256,21 @@ export default function Configuracoes({
           </div>
 
           <div className="border-t border-stone-100 pt-4">
-            <p className="text-sm font-semibold text-stone-700">Madeiras lançadas antes disso</p>
+            <p className="text-sm font-semibold text-stone-700">Madeiras lançadas antes da categoria existir</p>
             {madeirasPendentes.length === 0 ? (
               <p className="text-xs text-stone-500 mt-1">
-                Nenhum lançamento de madeira está sem fornecedor — está tudo vinculado.
+                Nenhuma madeira solta por aí — está tudo na categoria Madeiras e com fornecedor.
               </p>
             ) : (
               <>
                 <p className="text-xs text-stone-500 mt-1">
-                  Encontrei <strong>{madeirasPendentes.length}</strong> lançamento(s) de madeira sem
-                  fornecedor anotado. Dá para vincular todos de uma vez a{' '}
-                  <strong>{String(config.fornecedorMadeiras || '').trim() || '—'}</strong>, e assim eles
-                  entram no relatório por fornecedor. Quem já tem fornecedor anotado não é tocado.
+                  Encontrei <strong>{madeirasPendentes.length}</strong> lançamento(s) que parecem madeira
+                  mas estão em outra categoria (ou sem fornecedor). Dá para passar todos de uma vez para
+                  a categoria <strong>Madeiras</strong>
+                  {String(config.fornecedorMadeiras || '').trim()
+                    ? <> e preencher o fornecedor <strong>{String(config.fornecedorMadeiras).trim()}</strong> em quem está sem</>
+                    : null}
+                  . Valor, quantidade, obra e data não mudam, e quem já tem fornecedor anotado continua com o dele.
                 </p>
                 <ul className="text-xs text-stone-400 mt-2 space-y-0.5 max-h-32 overflow-y-auto">
                   {madeirasPendentes.slice(0, 12).map((l) => (
@@ -273,16 +278,9 @@ export default function Configuracoes({
                   ))}
                   {madeirasPendentes.length > 12 && <li>· e mais {madeirasPendentes.length - 12}…</li>}
                 </ul>
-                <button
-                  onClick={vincularAntigos}
-                  disabled={!String(config.fornecedorMadeiras || '').trim()}
-                  className="eco-btn-secondary eco-btn-sm mt-3"
-                >
-                  <Link2 size={14} /> Vincular {madeirasPendentes.length} lançamento(s)
+                <button onClick={organizarAntigos} className="eco-btn-secondary eco-btn-sm mt-3">
+                  <Link2 size={14} /> Organizar {madeirasPendentes.length} lançamento(s)
                 </button>
-                {!String(config.fornecedorMadeiras || '').trim() && (
-                  <p className="text-[11px] text-amber-700 mt-1">Salve uma distribuidora acima primeiro.</p>
-                )}
               </>
             )}
           </div>

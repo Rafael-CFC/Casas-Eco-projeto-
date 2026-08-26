@@ -8,6 +8,7 @@
 // lançamentos (nome, última unidade e último preço usados), em vez de
 // inventar uma lista de materiais que não está nos dados do sistema.
 import { combinaBusca } from '../textUtils';
+import { CATALOGO_VENDA } from '../venda/catalogoVenda';
 
 // Ordenações oferecidas na tela do Catálogo. `nome` continua sendo o
 // padrão (é como a lista sempre apareceu); as outras existem porque o
@@ -58,13 +59,32 @@ export function catalogoPorCategoria(categoria, produtos, lancamentos) {
   }
 
   const porChave = {};
+
+  // "Madeiras": além do histórico, a lista já vem com os nomes da tabela
+  // de madeiras da loja — assim não precisa digitar o nome inteiro nem
+  // arriscar escrever diferente a cada vez. Esses nomes entram SEM preço
+  // de propósito: o preço da tabela é o de VENDA ao cliente, e aqui o que
+  // vale é quanto a obra pagou. Assim que o item é lançado uma vez, o
+  // preço real passa a vir do próprio histórico (abaixo).
+  if (categoria === 'madeiras') {
+    CATALOGO_VENDA.forEach((m) => {
+      const chave = m.nome.trim().toLowerCase();
+      porChave[chave] = {
+        chave, nome: m.nome, unidade: m.formato, preco: null,
+        produtoId: null, usoCount: 0, ultimaData: null,
+      };
+    });
+  }
+
   lancamentos
     .filter((l) => l.categoria === categoria)
     .forEach((l) => {
       const chave = (l.descricao || '').trim().toLowerCase();
       if (!chave) return;
       const atual = porChave[chave];
-      if (!atual) {
+      if (!atual || atual.ultimaData === null) {
+        // `ultimaData === null` é um nome que veio da tabela de madeiras e
+        // ainda não tinha compra: agora passa a valer o que foi pago.
         porChave[chave] = { chave, nome: l.descricao, unidade: l.unidade, preco: l.preco, produtoId: null, usoCount: 1, ultimaData: l.data };
       } else {
         atual.usoCount += 1;

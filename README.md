@@ -59,25 +59,33 @@ Siga na ordem. Não precisa saber programar nem usar linha de comando — tudo �
 
 ## Como usar as telas principais
 
-### Madeira e a distribuidora (Albertina)
+### Madeiras: categoria própria e a distribuidora (Albertina)
 
-A madeira vem toda de uma distribuidora só. Quando você lança madeira numa obra, o campo
-**Fornecedor** já vem preenchido com ela — aparece um aviso em verde embaixo do campo
-dizendo que foi o sistema que preencheu. Com isso o gasto entra sozinho no **Financeiro**,
-em "Fornecedores que mais geram custo", e nos relatórios por fornecedor.
+Dentro da obra existem **quatro** categorias de gasto: Mão de obra, Materiais Brutos,
+Produtos da Loja e **Madeiras**. Toda madeira que entra na obra vai na aba Madeiras — assim
+ela fica separada dos produtos da loja e aparece sozinha em todo lugar: no total da obra,
+no gráfico "Gastos por categoria", no resumo final e no PDF.
 
-O campo continua editável: se aquela compra foi em outro lugar, é só trocar na hora de
-lançar, e o que você digitar à mão o sistema nunca apaga.
+O que a aba Madeiras faz de diferente:
 
-O que conta como madeira sai da própria **tabela de madeiras da loja** — os nomes dela
-(DECK, ASSOALHO, FORRO, RIPA, TABOA, PRANCHA, EUCALIPTO, MOERÃO...), com ou sem complemento,
-e as bitolas soltas (5X10X3M, 10X20X4M...). Mão de obra nunca conta: "MONTAGEM DO DECK"
-é serviço, não compra.
+- **O fornecedor já vem preenchido** com a distribuidora (ALBERTINA), com um aviso em verde
+  embaixo do campo dizendo que foi o sistema que preencheu. O gasto entra sozinho no
+  Financeiro, em "Fornecedores que mais geram custo". Se aquela compra foi em outro lugar,
+  é só trocar — o que você digita à mão o sistema nunca apaga.
+- **A lista de madeiras já vem pronta** no campo Produto: são os nomes da tabela de madeiras
+  da loja. O **valor fica em branco** de propósito — o preço da tabela é o de venda ao
+  cliente, e aqui vale o que a obra pagou. Depois da primeira compra, o valor daquele item
+  passa a vir do seu próprio histórico.
 
-Em **Configurações → Madeiras** você pode:
-- trocar o nome da distribuidora (ou deixar em branco, e aí o sistema não preenche nada);
-- vincular de uma vez os lançamentos de madeira antigos que ficaram sem fornecedor — a tela
-  mostra quantos são e quais, e só mexe nos que estão sem fornecedor anotado.
+Em **Configurações → Madeiras**:
+- troque o nome da distribuidora (ou deixe em branco, e o sistema não preenche nada);
+- **organize as madeiras antigas**: o botão acha os lançamentos que parecem madeira mas
+  ficaram em outra categoria (ou sem fornecedor), mostra quantos e quais são, e passa todos
+  para a categoria Madeiras de uma vez. Valor, quantidade, obra e data não mudam, e quem já
+  tem fornecedor anotado continua com o dele.
+
+Boleto também tem a categoria **MADEIRA**: ao marcar um boleto como pago e lançar como
+despesa da obra, ele cai direto na categoria Madeiras.
 
 O crediário dos montadores não entra nessa conta: lá não é compra da distribuidora.
 

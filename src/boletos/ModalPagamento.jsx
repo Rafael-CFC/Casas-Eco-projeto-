@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, X } from 'lucide-react';
-import { formatMoney, parsePrecoBR, todayISO } from '../domain';
+import { formatMoney, parsePrecoBR, todayISO, CATEGORIAS } from '../domain';
 import { mapearCategoriaBoletoParaLancamento } from './boletosStore';
 
 // Renderizado num portal em document.body pelo mesmo motivo do painel de
@@ -74,7 +74,7 @@ export default function ModalPagamento({ boleto, onCancelar, onConfirmar }) {
                   className="mt-0.5 text-green-700 focus:ring-green-500/40"
                 />
                 <span>
-                  Também lançar como despesa da obra (categoria "{boleto.categoria}" → {mapearCategoriaBoletoParaLancamento(boleto.categoria) === 'mao_de_obra' ? 'Mão de obra' : 'Materiais Brutos'})
+                  Também lançar como despesa da obra (categoria "{boleto.categoria}" → {CATEGORIAS[mapearCategoriaBoletoParaLancamento(boleto.categoria)].label})
                 </span>
               </label>
             )
