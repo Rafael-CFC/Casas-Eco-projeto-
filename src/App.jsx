@@ -16,6 +16,7 @@ import ToastStack from './ui/Toast';
 import TrocarSenha from './auth/TrocarSenha';
 import { sair } from './auth/authStore';
 import { DashboardSkeleton } from './ui/Skeleton';
+import SeletorTema from './ui/SeletorTema';
 import FinalizarObraModal from './obra/FinalizarObraModal';
 import SucessoFinalizacaoModal from './obra/SucessoFinalizacaoModal';
 import ResumoFinalObra from './obra/ResumoFinalObra';
@@ -1309,6 +1310,9 @@ function CustoObraApp({ usuario }) {
         </nav>
 
         <div className="p-2.5 border-t border-stone-100 space-y-1">
+          {sidebarColapsada
+            ? <div className="flex justify-center pb-1"><SeletorTema modo="botao" /></div>
+            : <SeletorTema className="mb-1.5" />}
           {!sidebarColapsada && (
             <div className="flex items-center gap-1.5 text-xs px-2 py-1.5">
               <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${window.storage ? 'bg-green-500' : 'bg-red-500'}`}></span>
@@ -1415,7 +1419,10 @@ function CustoObraApp({ usuario }) {
                 );
               })}
             </div>
-            <div className="px-4 pb-6 mb-16 border-t border-stone-100 pt-3 flex items-center gap-2">
+            <div className="px-4 pt-3 border-t border-stone-100">
+              <SeletorTema />
+            </div>
+            <div className="px-4 pb-6 mb-16 pt-3 flex items-center gap-2">
               {usuario?.email && (
                 <p className="text-[11px] text-stone-400 truncate flex-1" title={usuario.email}>{usuario.email}</p>
               )}

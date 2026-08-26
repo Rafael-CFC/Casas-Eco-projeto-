@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { LogOut, KeyRound } from 'lucide-react';
 import OrcamentoVenda from './OrcamentoVenda';
 import TrocarSenha from '../auth/TrocarSenha';
+import SeletorTema from '../ui/SeletorTema';
 import { sair } from '../auth/authStore';
 
 // Tela do funcionário: só a tabela de preços das madeiras e o orçamento.
@@ -24,6 +25,7 @@ export default function AppVenda({ email }) {
           <h1 className="text-base font-semibold text-stone-900 truncate">Orçamento de madeiras</h1>
           <p className="text-xs text-stone-400 truncate">{email}</p>
         </div>
+        <SeletorTema modo="botao" />
         <button onClick={() => setTrocandoSenha(true)} className="eco-icon-btn flex-shrink-0" title="Trocar minha senha">
           <KeyRound size={16} />
         </button>

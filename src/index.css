@@ -2,30 +2,188 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =====================================================================
+   TEMA CLARO E ESCURO
+
+   As cores do site saem todas das variáveis abaixo. `:root` é o tema
+   claro; `.dark` (classe posta no <html> pelo src/ui/temaStore.js) é o
+   escuro. Quem quiser mudar a cara do sistema mexe aqui, num lugar só —
+   não precisa caçar cor espalhada pelas telas.
+   ===================================================================== */
 @layer base {
+  :root {
+    color-scheme: light;
+
+    /* superfícies */
+    --fundo: #fafaf9;              /* fundo da página */
+    --superficie: #ffffff;         /* cartões, barras, menus */
+    --superficie-2: #f5f5f4;       /* faixas internas, trilhos, cabeçalho de tabela */
+    --superficie-3: #e7e5e4;       /* preenchimentos mais firmes */
+    --superficie-inversa: #292524; /* botão escuro */
+    --superficie-inversa-hover: #44403c;
+    --realce: #f5f5f4;             /* passar o mouse por cima */
+    --realce-forte: #ebe9e7;
+
+    /* linhas */
+    --borda: #e7e5e4;
+    --borda-suave: #f5f5f4;
+    --borda-forte: #d6d3d1;
+
+    /* texto, do mais forte ao mais apagado */
+    --titulo: #1c1917;
+    --texto: #292524;
+    --texto-2: #44403c;
+    --texto-3: #57534e;
+    --texto-4: #78716c;
+    --texto-5: #a8a29e;
+    --texto-6: #d6d3d1;
+
+    /* verde da marca */
+    --verde-texto: #15803d;
+    --verde-texto-forte: #166534;
+    --verde-fraco: #f0fdf4;
+    --verde-linha: #bbf7d0;
+    --verde-solido: #15803d;
+    --verde-solido-hover: #166534;
+
+    /* avisos */
+    --ambar-texto: #b45309;
+    --ambar-fraco: #fffbeb;
+    --ambar-linha: #fde68a;
+    --vermelho-texto: #b91c1c;
+    --vermelho-fraco: #fef2f2;
+    --vermelho-linha: #fecaca;
+    --azul-texto: #1d4ed8;
+    --azul-fraco: #eff6ff;
+    --azul-linha: #bfdbfe;
+
+    /* sombras (no claro a sombra é cinza; no escuro, preta e mais funda) */
+    --sombra-suave: 0 1px 2px 0 rgba(28,25,23,0.04), 0 1px 3px 0 rgba(28,25,23,0.06);
+    --sombra-alta: 0 4px 10px -2px rgba(28,25,23,0.10), 0 2px 6px -2px rgba(28,25,23,0.06);
+    --sombra-flutuante: 0 12px 32px -8px rgba(28,25,23,0.18), 0 4px 12px -4px rgba(28,25,23,0.10);
+    --veu: rgba(0,0,0,0.40);
+    --brilho: rgba(255,255,255,0.70);   /* brilho que corre no carregando */
+  }
+
+  .dark {
+    color-scheme: dark;
+
+    --fundo: #12100f;
+    --superficie: #1c1917;
+    --superficie-2: #262220;
+    --superficie-3: #332f2c;
+    --superficie-inversa: #3a3532;
+    --superficie-inversa-hover: #47413d;
+    --realce: #262220;
+    --realce-forte: #302b28;
+
+    --borda: #332f2c;
+    --borda-suave: #262220;
+    --borda-forte: #47413d;
+
+    --titulo: #faf9f7;
+    --texto: #eceae7;
+    --texto-2: #ddd9d4;
+    --texto-3: #c2bcb6;
+    --texto-4: #a29a94;
+    --texto-5: #857d77;
+    --texto-6: #6a625d;
+
+    --verde-texto: #4ade80;
+    --verde-texto-forte: #86efac;
+    --verde-fraco: rgba(74,222,128,0.10);
+    --verde-linha: rgba(74,222,128,0.26);
+    --verde-solido: #15803d;
+    --verde-solido-hover: #1a9c4b;
+
+    --ambar-texto: #fbbf24;
+    --ambar-fraco: rgba(251,191,36,0.10);
+    --ambar-linha: rgba(251,191,36,0.26);
+    --vermelho-texto: #f87171;
+    --vermelho-fraco: rgba(248,113,113,0.10);
+    --vermelho-linha: rgba(248,113,113,0.26);
+    --azul-texto: #60a5fa;
+    --azul-fraco: rgba(96,165,250,0.10);
+    --azul-linha: rgba(96,165,250,0.26);
+
+    --sombra-suave: 0 1px 2px 0 rgba(0,0,0,0.40), 0 1px 3px 0 rgba(0,0,0,0.30);
+    --sombra-alta: 0 4px 12px -2px rgba(0,0,0,0.50), 0 2px 6px -2px rgba(0,0,0,0.40);
+    --sombra-flutuante: 0 16px 40px -10px rgba(0,0,0,0.66), 0 6px 16px -6px rgba(0,0,0,0.50);
+    --veu: rgba(0,0,0,0.60);
+    --brilho: rgba(255,255,255,0.06);
+  }
+
   html {
     scroll-behavior: smooth;
   }
-  ::selection {
-    @apply bg-green-200 text-green-900;
+
+  body {
+    background-color: var(--fundo);
+    color: var(--texto);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+
+  ::selection {
+    background-color: var(--verde-linha);
+    color: var(--titulo);
+  }
+
+  /* Contorno de foco (quem navega pelo teclado). É `outline` de propósito:
+     acompanha o arredondamento do próprio elemento e não precisa saber a
+     cor do fundo atrás dele, então funciona igual dentro de um cartão, de
+     um menu ou de uma janela. */
   :focus-visible {
-    @apply outline-none ring-2 ring-green-500/50 ring-offset-1;
+    outline: 2px solid rgba(34,197,94,0.75);
+    outline-offset: 2px;
+  }
+
+  /* barra de rolagem discreta, do tom do tema */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--borda-forte) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--borda-forte);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--texto-5);
+    background-clip: content-box;
   }
 }
 
 @layer components {
   /* ---- campos de formulário ---- */
   .eco-input {
-    @apply w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white text-stone-800
-      placeholder:text-stone-400 transition-all duration-150 ease-out
-      focus:outline-none focus:ring-2 focus:ring-green-500/40 focus:border-green-500;
+    @apply w-full rounded-lg px-3 py-2 text-sm transition-all duration-150 ease-out;
+    background-color: var(--superficie);
+    color: var(--texto);
+    border: 1px solid var(--borda-forte);
+  }
+  .eco-input::placeholder {
+    color: var(--texto-5);
+  }
+  .eco-input:focus {
+    outline: none;
+    border-color: #22c55e;
+    box-shadow: 0 0 0 3px rgba(34,197,94,0.22);
   }
   .eco-input-sm {
     @apply eco-input px-2.5 py-1.5;
   }
   .eco-label {
-    @apply text-xs font-medium text-stone-500 block mb-1;
+    @apply text-xs font-medium block mb-1;
+    color: var(--texto-4);
   }
 
   /* ---- botões ----
@@ -40,26 +198,62 @@
       active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none disabled:active:scale-100;
   }
   .eco-btn-primary {
-    @apply eco-btn bg-green-700 text-white shadow-sm hover:bg-green-800 hover:shadow;
+    @apply eco-btn text-white;
+    background-color: var(--verde-solido);
+    box-shadow: var(--sombra-suave);
+  }
+  .eco-btn-primary:hover {
+    background-color: var(--verde-solido-hover);
+    box-shadow: var(--sombra-alta);
   }
   .eco-btn-secondary {
-    @apply eco-btn border border-stone-300 text-stone-600 bg-white hover:bg-stone-50 hover:border-stone-400;
+    @apply eco-btn;
+    background-color: var(--superficie);
+    color: var(--texto-3);
+    border: 1px solid var(--borda-forte);
+  }
+  .eco-btn-secondary:hover {
+    background-color: var(--realce);
+    border-color: var(--texto-5);
+    color: var(--texto);
   }
   .eco-btn-danger {
-    @apply eco-btn bg-red-600 text-white shadow-sm hover:bg-red-700 hover:shadow;
+    @apply eco-btn bg-red-600 text-white;
+    box-shadow: var(--sombra-suave);
+  }
+  .eco-btn-danger:hover {
+    @apply bg-red-700;
+    box-shadow: var(--sombra-alta);
   }
   .eco-btn-dark {
-    @apply eco-btn bg-stone-800 text-white shadow-sm hover:bg-stone-700 hover:shadow;
+    @apply eco-btn text-white;
+    background-color: var(--superficie-inversa);
+    box-shadow: var(--sombra-suave);
+  }
+  .eco-btn-dark:hover {
+    background-color: var(--superficie-inversa-hover);
+    box-shadow: var(--sombra-alta);
   }
   .eco-btn-ghost {
-    @apply eco-btn text-stone-500 hover:bg-stone-100;
+    @apply eco-btn;
+    color: var(--texto-4);
+  }
+  .eco-btn-ghost:hover {
+    background-color: var(--realce);
+    color: var(--texto);
   }
   .eco-icon-btn {
-    @apply inline-flex items-center justify-center w-8 h-8 rounded-lg text-stone-400
-      transition-all duration-150 ease-out hover:bg-stone-100 hover:text-stone-700 active:scale-90;
+    @apply inline-flex items-center justify-center w-8 h-8 rounded-lg
+      transition-all duration-150 ease-out active:scale-90;
+    color: var(--texto-5);
   }
-  .eco-icon-btn-danger {
-    @apply eco-icon-btn hover:bg-red-50 hover:text-red-600;
+  .eco-icon-btn:hover {
+    background-color: var(--realce);
+    color: var(--texto-2);
+  }
+  .eco-icon-btn-danger:hover {
+    background-color: var(--vermelho-fraco);
+    color: var(--vermelho-texto);
   }
 
   /* tamanhos — sempre depois das variantes de cor acima (ver nota) */
@@ -72,15 +266,25 @@
 
   /* ---- cards ---- */
   .eco-card {
-    @apply bg-white border border-stone-200 rounded-xl shadow-soft;
+    @apply rounded-xl;
+    background-color: var(--superficie);
+    border: 1px solid var(--borda);
+    box-shadow: var(--sombra-suave);
   }
   .eco-card-hover {
-    @apply transition-all duration-200 ease-out hover:shadow-elevated hover:-translate-y-0.5 hover:border-stone-300;
+    @apply transition-all duration-200 ease-out hover:-translate-y-0.5;
+  }
+  .eco-card-hover:hover {
+    box-shadow: var(--sombra-alta);
+    border-color: var(--borda-forte);
   }
 
   /* ---- tabelas ---- */
   .eco-table-row {
-    @apply transition-colors duration-150 hover:bg-stone-50;
+    @apply transition-colors duration-150;
+  }
+  .eco-table-row:hover {
+    background-color: var(--realce);
   }
 
   /* ---- badges ---- */
@@ -90,8 +294,9 @@
 
   /* ---- skeleton ---- */
   .eco-skeleton {
-    @apply relative overflow-hidden bg-stone-200/70 rounded-md;
-    background-image: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.7) 50%, rgba(255,255,255,0) 100%);
+    @apply relative overflow-hidden rounded-md;
+    background-color: var(--superficie-3);
+    background-image: linear-gradient(90deg, rgba(255,255,255,0) 0%, var(--brilho) 50%, rgba(255,255,255,0) 100%);
     background-size: 200% 100%;
   }
 }
@@ -112,6 +317,149 @@
 .eco-sidebar {
   transition: width 0.22s cubic-bezier(0.16,1,0.3,1);
 }
+
+/* Fade curtinho na hora de trocar de tema (some sozinho depois da troca) */
+.tema-trocando,
+.tema-trocando *,
+.tema-trocando *::before,
+.tema-trocando *::after {
+  transition: background-color 0.22s ease, border-color 0.22s ease,
+              color 0.22s ease, fill 0.22s ease, stroke 0.22s ease,
+              box-shadow 0.22s ease !important;
+}
+
+/* =====================================================================
+   PONTE DO MODO ESCURO
+
+   As telas foram escritas com as cores literais do Tailwind (bg-white,
+   text-stone-500, border-green-200...). Em vez de reescrever milhares de
+   linhas, cada uma dessas classes ganha aqui o valor equivalente do tema
+   escuro. Assim uma tela nova escrita no padrão antigo já nasce
+   funcionando nos dois temas.
+   ===================================================================== */
+
+/* superfícies e fundos */
+.dark .bg-white { background-color: var(--superficie); }
+.dark .bg-white\/90 { background-color: rgba(28,25,23,0.92); }
+.dark .bg-white\/95 { background-color: rgba(28,25,23,0.95); }
+.dark .bg-stone-50 { background-color: var(--fundo); }
+.dark .bg-stone-50\/50 { background-color: rgba(18,16,15,0.55); }
+.dark .bg-stone-100 { background-color: var(--superficie-2); }
+.dark .bg-stone-200 { background-color: var(--superficie-3); }
+.dark .bg-stone-200\/70 { background-color: var(--superficie-3); }
+.dark .bg-stone-300 { background-color: var(--borda-forte); }
+.dark .bg-stone-700 { background-color: var(--superficie-inversa-hover); }
+.dark .bg-stone-800 { background-color: var(--superficie-inversa); }
+.dark .bg-stone-900 { background-color: var(--superficie-2); }
+.dark .bg-stone-900\/60 { background-color: rgba(0,0,0,0.60); }
+.dark .bg-black\/30 { background-color: var(--veu); }
+.dark .bg-black\/40 { background-color: var(--veu); }
+
+/* fundos coloridos fraquinhos (avisos, destaques) */
+.dark .bg-green-50 { background-color: var(--verde-fraco); }
+.dark .bg-green-50\/40,
+.dark .bg-green-50\/60 { background-color: rgba(74,222,128,0.07); }
+.dark .bg-green-100 { background-color: rgba(74,222,128,0.18); }
+.dark .bg-green-200 { background-color: rgba(74,222,128,0.28); }
+.dark .bg-amber-50 { background-color: var(--ambar-fraco); }
+.dark .bg-amber-50\/40 { background-color: rgba(251,191,36,0.07); }
+.dark .bg-red-50 { background-color: var(--vermelho-fraco); }
+.dark .bg-red-50\/40,
+.dark .bg-red-50\/50 { background-color: rgba(248,113,113,0.07); }
+.dark .bg-blue-50 { background-color: var(--azul-fraco); }
+.dark .bg-blue-50\/40 { background-color: rgba(96,165,250,0.07); }
+.dark .bg-orange-50 { background-color: rgba(251,146,60,0.10); }
+
+/* textos */
+.dark .text-stone-900 { color: var(--titulo); }
+.dark .text-stone-800 { color: var(--texto); }
+.dark .text-stone-700 { color: var(--texto-2); }
+.dark .text-stone-600 { color: var(--texto-3); }
+.dark .text-stone-500 { color: var(--texto-4); }
+.dark .text-stone-400 { color: var(--texto-5); }
+.dark .text-stone-300 { color: var(--texto-6); }
+
+.dark .text-green-600,
+.dark .text-green-700 { color: var(--verde-texto); }
+.dark .text-green-800,
+.dark .text-green-900 { color: var(--verde-texto-forte); }
+.dark .text-green-700\/70 { color: rgba(74,222,128,0.75); }
+.dark .text-green-700\/80 { color: rgba(74,222,128,0.85); }
+
+.dark .text-amber-500,
+.dark .text-amber-600,
+.dark .text-amber-700 { color: var(--ambar-texto); }
+.dark .text-amber-800,
+.dark .text-amber-900 { color: #fcd34d; }
+.dark .text-amber-700\/70 { color: rgba(251,191,36,0.75); }
+
+.dark .text-red-500,
+.dark .text-red-600,
+.dark .text-red-700 { color: var(--vermelho-texto); }
+.dark .text-red-700\/70 { color: rgba(248,113,113,0.75); }
+
+.dark .text-orange-600,
+.dark .text-orange-700 { color: #fb923c; }
+
+.dark .text-blue-600,
+.dark .text-blue-700 { color: var(--azul-texto); }
+.dark .text-blue-800,
+.dark .text-blue-900 { color: #93c5fd; }
+.dark .text-blue-800\/80 { color: rgba(147,197,253,0.85); }
+
+/* linhas */
+.dark .border-stone-100 { border-color: var(--borda-suave); }
+.dark .border-stone-200 { border-color: var(--borda); }
+.dark .border-stone-300 { border-color: var(--borda-forte); }
+.dark .border-stone-400 { border-color: var(--texto-5); }
+.dark .border-stone-800 { border-color: var(--superficie-inversa); }
+.dark .divide-stone-100 > :not([hidden]) ~ :not([hidden]) { border-color: var(--borda-suave); }
+
+.dark .border-green-200,
+.dark .border-green-300 { border-color: var(--verde-linha); }
+.dark .border-green-400,
+.dark .border-green-500,
+.dark .border-green-700 { border-color: rgba(74,222,128,0.45); }
+.dark .border-amber-200,
+.dark .border-amber-300 { border-color: var(--ambar-linha); }
+.dark .border-red-200,
+.dark .border-red-300 { border-color: var(--vermelho-linha); }
+.dark .border-blue-200 { border-color: var(--azul-linha); }
+.dark .border-orange-200 { border-color: rgba(251,146,60,0.26); }
+
+/* mesmas cores, na hora de passar o mouse */
+.dark .hover\:bg-stone-50:hover { background-color: var(--realce); }
+.dark .hover\:bg-stone-100:hover { background-color: var(--realce-forte); }
+.dark .hover\:bg-stone-700:hover { background-color: var(--superficie-inversa-hover); }
+.dark .hover\:bg-green-50:hover { background-color: var(--verde-fraco); }
+.dark .hover\:bg-green-50\/60:hover { background-color: rgba(74,222,128,0.08); }
+.dark .hover\:bg-green-100:hover { background-color: rgba(74,222,128,0.20); }
+.dark .hover\:bg-red-50:hover { background-color: var(--vermelho-fraco); }
+.dark .hover\:text-stone-500:hover { color: var(--texto-4); }
+.dark .hover\:text-stone-600:hover { color: var(--texto-3); }
+.dark .hover\:text-stone-700:hover { color: var(--texto-2); }
+.dark .hover\:text-stone-800:hover { color: var(--texto); }
+.dark .hover\:text-green-700:hover { color: var(--verde-texto); }
+.dark .hover\:text-green-800:hover { color: var(--verde-texto-forte); }
+.dark .hover\:text-red-600:hover { color: var(--vermelho-texto); }
+.dark .hover\:border-stone-200:hover { border-color: var(--borda); }
+.dark .hover\:border-stone-300:hover { border-color: var(--borda-forte); }
+.dark .hover\:border-stone-400:hover { border-color: var(--texto-5); }
+
+/* sombras: no escuro a sombra tem que ser preta, senão some no fundo */
+.dark .shadow-soft { box-shadow: var(--sombra-suave); }
+.dark .shadow-elevated { box-shadow: var(--sombra-alta); }
+.dark .shadow-popover { box-shadow: var(--sombra-flutuante); }
+.dark .hover\:shadow-elevated:hover { box-shadow: var(--sombra-alta); }
+
+/* gráficos do Financeiro (recharts desenha em SVG, com cor fixa) */
+.dark .recharts-cartesian-grid line { stroke: var(--borda); }
+.dark .recharts-cartesian-axis-line,
+.dark .recharts-cartesian-axis-tick-line { stroke: var(--borda-forte); }
+.dark .recharts-text { fill: var(--texto-4); }
+.dark .recharts-tooltip-cursor { fill: rgba(255,255,255,0.06); }
+.dark .recharts-pie-sector path,
+.dark .recharts-sector { stroke: var(--superficie); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

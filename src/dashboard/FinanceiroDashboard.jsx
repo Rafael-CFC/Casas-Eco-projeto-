@@ -8,6 +8,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
 import { formatMoney, formatDateBR, todayISO, CATEGORIAS, CLS, CORES_CATEGORIA, formatPct } from '../domain';
+import { usarEstaEscuro } from '../ui/usarTema';
 import useCountUp from '../ui/useCountUp';
 import {
   PERIODOS, getPeriodoRange, filtrarLancamentos, filtrarContas, somarTotal,
@@ -17,7 +18,12 @@ import {
 
 const VERDE = '#16a34a';
 const VERMELHO = '#dc2626';
-const CINZA_REF = '#d6d3d1';
+// A barra cinza de referência (orçamento) precisa mudar com o tema: o
+// cinza claro que funciona no fundo branco vira um borrão claro demais no
+// modo escuro. O resto das cores dos gráficos (eixos, grade, texto) é
+// resolvido no CSS — ver a seção "PONTE DO MODO ESCURO" em index.css.
+const CINZA_REF_CLARO = '#d6d3d1';
+const CINZA_REF_ESCURO = '#484240';
 
 export function StatCard({ label, valor, numero, formatar, sub, icon: Icon, tone = 'default' }) {
   const tones = {
@@ -180,6 +186,8 @@ function BadgeOrcamento({ pctDiff }) {
 }
 
 function GraficoOrcamentoRealizado({ dados }) {
+  const escuro = usarEstaEscuro();
+  const cinzaRef = escuro ? CINZA_REF_ESCURO : CINZA_REF_CLARO;
   if (dados.length === 0) {
     return <p className="text-xs text-stone-400 py-6 text-center">Nenhuma obra com orçamento definido neste recorte.</p>;
   }
@@ -193,8 +201,8 @@ function GraficoOrcamentoRealizado({ dados }) {
           <YAxis type="category" dataKey="nome" width={110} tick={{ fontSize: 12, fill: '#44403c' }} axisLine={{ stroke: '#e7e5e4' }} tickLine={false} />
           <Tooltip content={<CustomTooltip formatter={formatMoney} />} cursor={{ fill: '#f5f5f4' }} />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Bar dataKey="orcamento" name="Orçamento" fill={CINZA_REF} radius={[0, 4, 4, 0]} barSize={18} />
-          <Bar dataKey="realizado" name="Realizado" radius={[0, 4, 4, 0]} barSize={18}>
+          <Bar dataKey="orcamento" name="Orçamento" fill={cinzaRef} radius={[0, 4, 4, 0]} barSize={18} />
+          <Bar dataKey="realizado" name="Realizado" fill={VERDE} radius={[0, 4, 4, 0]} barSize={18}>
             {dados.map((d) => <Cell key={d.obraId} fill={d.realizado > d.orcamento ? VERMELHO : VERDE} />)}
           </Bar>
         </BarChart>
