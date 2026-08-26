@@ -6,6 +6,7 @@
 // Casas Eco (ver src/contratos/modeloCasasEco.js). Aqui só ficam guardadas
 // as edições que a empresa fizer no modelo daqui pra frente.
 import { todayISO } from '../domain';
+import { FORNECEDOR_MADEIRAS_PADRAO } from '../produtos/madeiras';
 import { BLOCOS_CONTRATO, BLOCOS_MEMORIAL, CONTRATADA_PADRAO } from '../contratos/modeloCasasEco';
 import { semMarcacao } from '../contratos/textoRico';
 
@@ -13,6 +14,10 @@ export function configuracaoVazia() {
   return {
     contratada: { ...CONTRATADA_PADRAO },
     cidadeContrato: CONTRATADA_PADRAO.cidade,
+    // Distribuidora de quem a loja compra a madeira. Todo lançamento de
+    // madeira numa obra já entra com esse fornecedor, para o gasto
+    // aparecer no Financeiro. Em branco = não vincular nada sozinho.
+    fornecedorMadeiras: FORNECEDOR_MADEIRAS_PADRAO,
     // `blocos` guarda SÓ o que a empresa reescreveu. O que nunca foi
     // mexido continua vindo do modelo — assim uma correção no modelo
     // (ortografia, negrito, formatação) chega sozinha nos contratos novos,
@@ -69,6 +74,11 @@ export function normalizarConfiguracao(bruta) {
     ...bruta,
     contratada: { ...base.contratada, ...(bruta.contratada || {}) },
     cidadeContrato: bruta.cidadeContrato || base.cidadeContrato,
+    // string vazia é uma escolha ("não vincular"), então só cai no padrão
+    // quando o campo nunca existiu na configuração salva
+    fornecedorMadeiras: bruta.fornecedorMadeiras === undefined
+      ? base.fornecedorMadeiras
+      : String(bruta.fornecedorMadeiras || '').trim(),
     modeloContrato: {
       versao: bruta.modeloContrato?.versao || 1,
       atualizadoEm: bruta.modeloContrato?.atualizadoEm || base.modeloContrato.atualizadoEm,

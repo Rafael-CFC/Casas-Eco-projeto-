@@ -59,6 +59,28 @@ Siga na ordem. Não precisa saber programar nem usar linha de comando — tudo �
 
 ## Como usar as telas principais
 
+### Madeira e a distribuidora (Albertina)
+
+A madeira vem toda de uma distribuidora só. Quando você lança madeira numa obra, o campo
+**Fornecedor** já vem preenchido com ela — aparece um aviso em verde embaixo do campo
+dizendo que foi o sistema que preencheu. Com isso o gasto entra sozinho no **Financeiro**,
+em "Fornecedores que mais geram custo", e nos relatórios por fornecedor.
+
+O campo continua editável: se aquela compra foi em outro lugar, é só trocar na hora de
+lançar, e o que você digitar à mão o sistema nunca apaga.
+
+O que conta como madeira sai da própria **tabela de madeiras da loja** — os nomes dela
+(DECK, ASSOALHO, FORRO, RIPA, TABOA, PRANCHA, EUCALIPTO, MOERÃO...), com ou sem complemento,
+e as bitolas soltas (5X10X3M, 10X20X4M...). Mão de obra nunca conta: "MONTAGEM DO DECK"
+é serviço, não compra.
+
+Em **Configurações → Madeiras** você pode:
+- trocar o nome da distribuidora (ou deixar em branco, e aí o sistema não preenche nada);
+- vincular de uma vez os lançamentos de madeira antigos que ficaram sem fornecedor — a tela
+  mostra quantos são e quais, e só mexe nos que estão sem fornecedor anotado.
+
+O crediário dos montadores não entra nessa conta: lá não é compra da distribuidora.
+
 ### Modo escuro
 
 O site abre no **modo escuro**. Para trocar, use o seletor **Escuro / Claro / Automático**:
