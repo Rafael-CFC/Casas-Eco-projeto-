@@ -26,6 +26,9 @@ const NOMES_DO_CATALOGO = new Set(CATALOGO_VENDA.map((m) => chave(m.nome)));
 // genéricas demais ("VISTA", "CINTA"), que sozinhas podem ser outra coisa
 // — essas continuam sendo reconhecidas pelo nome exato do catálogo.
 const FAMILIAS = [
+  // a própria palavra: muita compra é lançada só como "MADEIRA" ou
+  // "MADEIRA PARA O TELHADO", sem dizer a peça
+  'madeira', 'madeiras', 'madeiramento', 'kit madeira', 'kit de madeira',
   'assoalho', 'deck', 'forro', 'ripa', 'taboa', 'tabua', 'prancha',
   'eucalipto', 'moerao', 'moirao', 'palanque', 'espelho beiral', 'frontal',
   'meia cana', 'mata junta', 'montante', 'roda pe', 'rodape', 'travessa',

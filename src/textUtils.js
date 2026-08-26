@@ -43,3 +43,14 @@ export function combinaBusca(termo, ...campos) {
   const alvo = campos.map((c) => semAcento(c)).join(' ');
   return palavras.every((p) => alvo.includes(p));
 }
+
+// Chave de comparação de nome de FORNECEDOR/DISTRIBUIDORA.
+//
+// O nome é digitado em lugares diferentes e de jeitos diferentes: no
+// cadastro pode estar "Albertina", no lançamento de madeira o sistema
+// grava "ALBERTINA". Sem uma chave comum o Financeiro filtrava por
+// "Albertina" e não achava nada, e o ranking mostrava a mesma
+// distribuidora duas vezes.
+export function chaveFornecedor(nome) {
+  return semAcento(nome).replace(/\s+/g, ' ').trim();
+}
