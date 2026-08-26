@@ -7,12 +7,14 @@ import {
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
   FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search, NotebookPen, Trees,
-  LogOut, KeyRound,
+  LogOut, KeyRound, BarChart3,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit, chaveFornecedor } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
 import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
 import ToastStack from './ui/Toast';
+import RelatorioContas from './contas/RelatorioContas';
+import { nomeDaConta } from './contas/contasCalc';
 import TrocarSenha from './auth/TrocarSenha';
 import { sair } from './auth/authStore';
 import { DashboardSkeleton } from './ui/Skeleton';
@@ -137,6 +139,8 @@ function CustoObraApp({ usuario }) {
   const [configuracao, setConfiguracao] = useState(configuracaoVazia);
   const [menuMaisAberto, setMenuMaisAberto] = useState(false);
   const [trocandoSenha, setTrocandoSenha] = useState(false);
+  // 'registrar' = formulário do dia a dia | 'relatorio' = gráficos e filtros
+  const [abaContas, setAbaContas] = useState('registrar');
   const [buscaAberta, setBuscaAberta] = useState(false);
   const [materialFoco, setMaterialFoco] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -521,12 +525,6 @@ function CustoObraApp({ usuario }) {
   // A distribuidora sai da mesma lista dos fornecedores, então basta
   // cadastrar uma vez e depois é só escolher.
 
-  // Nome que aparece na lista. Contas antigas (feitas quando o formulário
-  // tinha descrição) continuam legíveis pela descrição delas.
-  function nomeDaConta(c) {
-    return c.fornecedorNome || c.descricao || 'Conta';
-  }
-
   async function criarConta({ fornecedorNome, valor, vencimento }) {
     const nova = {
       id: crypto.randomUUID(),
@@ -738,9 +736,11 @@ function CustoObraApp({ usuario }) {
     baixarCSV('extrato-completo.csv', linhas);
   }
 
-  function exportarContasCSV() {
+  // Recebe a lista já filtrada quando vem do relatório; sem argumento
+  // (o botão de Relatórios) exporta tudo.
+  function exportarContasCSV(lista) {
     const linhas = [['Distribuidora', 'Valor', 'Vencimento', 'Status']];
-    contas.forEach((c) => {
+    (Array.isArray(lista) ? lista : contas).forEach((c) => {
       linhas.push([nomeDaConta(c), c.valor, formatDateBR(c.vencimento), c.status === 'pago' ? 'Paga' : 'Pendente']);
     });
     baixarCSV('contas-a-pagar.csv', linhas);
@@ -2037,8 +2037,29 @@ function CustoObraApp({ usuario }) {
           Object.keys(grupos).forEach((g) => { contasPorGrupo[g] = []; });
           contas.forEach((c) => { contasPorGrupo[classificarConta(c)].push(c); });
 
+          const abas = [['registrar', 'Registrar', Plus], ['relatorio', 'Relatório', BarChart3]];
+
           return (
             <div className="space-y-6">
+              <div className="flex gap-1.5">
+                {abas.map(([key, label, Icon]) => (
+                  <button
+                    key={key}
+                    onClick={() => setAbaContas(key)}
+                    className={`flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border whitespace-nowrap transition-colors ${
+                      abaContas === key ? 'bg-green-700 text-white border-green-700' : 'bg-white text-stone-600 border-stone-200 hover:border-stone-300'
+                    }`}
+                  >
+                    <Icon size={15} /> {label}
+                  </button>
+                ))}
+              </div>
+
+              {abaContas === 'relatorio' && (
+                <RelatorioContas contas={contas} onExportarCSV={exportarContasCSV} />
+              )}
+
+              {abaContas === 'registrar' && (<>
               <div className="eco-card p-4 flex flex-col sm:flex-row flex-wrap gap-3 items-end">
                 <div className="w-full sm:flex-1 sm:min-w-[220px]">
                   <label className="text-xs text-stone-500 block mb-1">Distribuidora</label>
@@ -2127,6 +2148,7 @@ function CustoObraApp({ usuario }) {
                   );
                 })
               )}
+              </>)}
             </div>
           );
         })()}
