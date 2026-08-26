@@ -215,7 +215,7 @@ export function duplicarContrato(contrato) {
 
 // ---- parcelas como cronograma financeiro (valores A RECEBER do cliente) ----
 // Parcelas de contrato são RECEITA (dinheiro que entra); lançamentos,
-// contas e boletos são CUSTO. Por isso nunca são somadas ao custo da obra.
+// as contas a pagar são CUSTO. Por isso nunca são somadas ao custo da obra.
 export function resumoParcelas(parcelas, hojeISO = todayISO()) {
   const lista = parcelas || [];
   const recebido = lista.filter((p) => p.status === 'pago').reduce((a, p) => a + (Number(p.valor) || 0), 0);

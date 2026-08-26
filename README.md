@@ -25,8 +25,7 @@ Siga na ordem. Não precisa saber programar nem usar linha de comando — tudo �
      sem alterar nada e explica o que faltou.
    - No fim aparece uma tabelinha com quem tem acesso a quê. Confira se o seu e-mail
      aparece como `dono`.
-7. Rode também o `schema-boletos.sql`, do mesmo jeito (esse não precisa de nenhuma troca).
-8. Vá em **"Settings"** (ícone de engrenagem) → **"API"**. Você vai precisar de dois valores nessa página:
+7. Vá em **"Settings"** (ícone de engrenagem) → **"API"**. Você vai precisar de dois valores nessa página:
    - **Project URL** (algo como `https://xxxxx.supabase.co`)
    - **anon public** key (uma chave longa)
    - Guarde os dois — vai usar no passo 3.
@@ -176,5 +175,5 @@ on conflict (user_id) do update set papel = 'dono';
 - A chave `VITE_SUPABASE_ANON_KEY` é pública de propósito e sozinha não abre nada — quem protege são as regras de acesso do banco (RLS), criadas pelo `schema.sql`.
 - **Dois níveis de acesso:**
   - `dono` — enxerga e mexe em tudo.
-  - `funcionario` — só a tela de orçamento de madeiras. Não consegue ler obras, contratos, boletos nem lançamentos, e isso é bloqueado no banco, não só na tela.
+  - `funcionario` — só a tela de orçamento de madeiras. Não consegue ler obras, contratos, contas nem lançamentos, e isso é bloqueado no banco, não só na tela.
 - Conta nova sem configuração vale como `funcionario`. É de propósito: ninguém nasce enxergando tudo por engano.

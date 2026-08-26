@@ -6,7 +6,7 @@ import {
   Upload, ArrowUpRight, ArrowDownRight, CheckCircle2, X, Pencil, Copy,
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
-  Landmark, FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search, NotebookPen, Trees,
+  FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search, NotebookPen, Trees,
   LogOut, KeyRound,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit } from './textUtils';
@@ -24,9 +24,6 @@ import ProdutoSeletor from './produtos/ProdutoSeletor';
 import { catalogoPorCategoria, filtrarOrdenarProdutos, ORDENS_CATALOGO } from './produtos/catalogoUtils';
 import { ehMadeira, fornecedorDasMadeiras, madeirasSemFornecedor, vincularMadeirasAoFornecedor } from './produtos/madeiras';
 import OrcamentoVenda from './venda/OrcamentoVenda';
-import Boletos from './boletos/Boletos';
-import { novoBoleto, atualizarCamposBoleto, registrarPagamento, reabrirBoleto, cancelarBoletoObj, mapearCategoriaBoletoParaLancamento } from './boletos/boletosStore';
-import { totalBoletosPorObra } from './boletos/boletosCalc';
 import Contratos from './contratos/Contratos';
 import Configuracoes from './config/Configuracoes';
 import { normalizarConfiguracao, configuracaoVazia } from './config/configStore';
@@ -101,13 +98,12 @@ function parseImportado(texto) {
 const NAV_ITEMS = [
   { key: 'home', label: 'Início', icon: Home, primario: true, ordemMobile: 1 },
   { key: 'financeiro', label: 'Financeiro', icon: LayoutDashboard },
-  { key: 'boletos', label: 'Boletos', icon: Landmark, primario: true, ordemMobile: 3 },
   { key: 'contratos', label: 'Contratos', icon: FileSignature, primario: true, ordemMobile: 4 },
   { key: 'catalogo', label: 'Catálogo', icon: Package },
   { key: 'crediario', label: 'Crediário', icon: NotebookPen },
   { key: 'materiais', label: 'Materiais', icon: Boxes },
   { key: 'fornecedores', label: 'Fornecedores', icon: Users },
-  { key: 'contas', label: 'Contas', icon: Receipt },
+  { key: 'contas', label: 'Contas', icon: Receipt, primario: true, ordemMobile: 3 },
   { key: 'venda', label: 'Madeiras', icon: Trees, primario: true, ordemMobile: 2 },
   { key: 'relatorios', label: 'Relatórios', icon: FileText },
   { key: 'configuracoes', label: 'Configurações', icon: Settings },
@@ -120,8 +116,7 @@ const PAGINA_META = {
   crediario: { titulo: 'Crediário dos montadores', subtitulo: 'Anotação do que cada um pegou — não é venda, não gera nota nem imposto' },
   materiais: { titulo: 'Materiais', subtitulo: 'Preço médio, histórico e comparação entre fornecedores' },
   fornecedores: { titulo: 'Fornecedores', subtitulo: 'Cadastro e histórico de compras' },
-  contas: { titulo: 'Contas a pagar', subtitulo: 'Vencimentos e parcelas' },
-  boletos: { titulo: 'Boletos', subtitulo: 'Boletos bancários por obra, categoria e vencimento' },
+  contas: { titulo: 'Contas a pagar', subtitulo: 'Distribuidora, valor e vencimento' },
   contratos: { titulo: 'Contratos', subtitulo: 'Contratos, memoriais e parcelas a receber' },
   venda: { titulo: 'Madeiras', subtitulo: 'Tabela de preços das madeiras e orçamento em PDF' },
   relatorios: { titulo: 'Relatórios', subtitulo: 'Exportações e resumos gerais' },
@@ -135,7 +130,6 @@ function CustoObraApp({ usuario }) {
   const [etapas, setEtapas] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [contas, setContas] = useState([]);
-  const [boletos, setBoletos] = useState([]);
   const [contratos, setContratos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [montadores, setMontadores] = useState([]);
@@ -197,7 +191,6 @@ function CustoObraApp({ usuario }) {
           window.storage.get('etapas', false).catch(() => null),
           window.storage.get('fornecedores', false).catch(() => null),
           window.storage.get('contas', false).catch(() => null),
-          window.storage.get('boletos', false).catch(() => null),
           window.storage.get('contratos', false).catch(() => null),
           window.storage.get('clientes', false).catch(() => null),
           window.storage.get('configuracao', false).catch(() => null),
@@ -234,7 +227,6 @@ function CustoObraApp({ usuario }) {
         setEtapas(et ? JSON.parse(et.value) : []);
         setFornecedores(fo ? JSON.parse(fo.value) : []);
         setContas(co ? JSON.parse(co.value) : []);
-        setBoletos(bo ? JSON.parse(bo.value) : []);
         setContratos(ct ? JSON.parse(ct.value) : []);
         setClientes(cl ? JSON.parse(cl.value) : []);
         setConfiguracao(normalizarConfiguracao(cf ? JSON.parse(cf.value) : null));
@@ -288,7 +280,6 @@ function CustoObraApp({ usuario }) {
   const salvarEtapas = (l) => persist('etapas', l, setEtapas);
   const salvarFornecedores = (l) => persist('fornecedores', l, setFornecedores);
   const salvarContas = (l) => persist('contas', l, setContas);
-  const salvarBoletos = (l) => persist('boletos', l, setBoletos);
   const salvarContratos = (l) => persist('contratos', l, setContratos);
   const salvarClientes = (l) => persist('clientes', l, setClientes);
   const salvarConfiguracao = (c) => persist('configuracao', c, setConfiguracao);
@@ -474,18 +465,6 @@ function CustoObraApp({ usuario }) {
       alertas.unshift({ tipo: 'red', texto: `${vencidas.length} conta(s) vencida(s), totalizando ${formatMoney(vencidas.reduce((a, c) => a + c.valor, 0))}.` });
     }
 
-    // boletos vencidos e a vencer nos próximos 3 dias
-    const em3 = new Date(); em3.setDate(em3.getDate() + 3);
-    const em3ISO = em3.toISOString().slice(0, 10);
-    const boletosVencidos = boletos.filter((b) => b.status === 'pendente' && b.vencimento < hoje);
-    if (boletosVencidos.length > 0) {
-      alertas.unshift({ tipo: 'red', texto: `${boletosVencidos.length} boleto(s) vencido(s), totalizando ${formatMoney(boletosVencidos.reduce((a, b) => a + (Number(b.valor) || 0), 0))}.` });
-    }
-    const boletosProximos = boletos.filter((b) => b.status === 'pendente' && b.vencimento >= hoje && b.vencimento <= em3ISO);
-    if (boletosProximos.length > 0) {
-      alertas.unshift({ tipo: 'yellow', texto: `${boletosProximos.length} boleto(s) vencem nos próximos 3 dias (${formatMoney(boletosProximos.reduce((a, b) => a + (Number(b.valor) || 0), 0))}).` });
-    }
-
     // parcelas de contrato atrasadas (dinheiro a receber do cliente)
     const parcelasAtrasadas = contratos
       .filter((c) => c.status !== 'cancelado' && c.status !== 'rascunho')
@@ -536,32 +515,31 @@ function CustoObraApp({ usuario }) {
   }
 
   // ---- contas a pagar ----
-  async function criarContas({ descricao, valor, vencimento, obraId, fornecedorNome, parcelas }) {
-    const hoje = todayISO();
-    const n = Math.max(1, parseInt(parcelas, 10) || 1);
-    const grupoId = n > 1 ? crypto.randomUUID() : null;
-    const novas = [];
-    for (let i = 0; i < n; i++) {
-      const dataVenc = new Date(vencimento + 'T00:00:00');
-      dataVenc.setMonth(dataVenc.getMonth() + i);
-      novas.push({
-        id: crypto.randomUUID(),
-        descricao: n > 1 ? `${descricao} (${i + 1}/${n})` : descricao,
-        valor: n > 1 ? Math.round((valor / n) * 100) / 100 : valor,
-        vencimento: dataVenc.toISOString().slice(0, 10),
-        obraId: obraId || null,
-        fornecedorNome: fornecedorNome || '',
-        status: 'pendente',
-        grupoParcelamento: grupoId,
-        criadoEm: hoje,
-      });
-    }
-    const ok = await salvarContas([...contas, ...novas]);
+  //
+  // De propósito só tem três campos: distribuidora, valor e vencimento. É
+  // o que o dono quer controlar — quem ele tem que pagar, quanto e quando.
+  // A distribuidora sai da mesma lista dos fornecedores, então basta
+  // cadastrar uma vez e depois é só escolher.
+
+  // Nome que aparece na lista. Contas antigas (feitas quando o formulário
+  // tinha descrição) continuam legíveis pela descrição delas.
+  function nomeDaConta(c) {
+    return c.fornecedorNome || c.descricao || 'Conta';
+  }
+
+  async function criarConta({ fornecedorNome, valor, vencimento }) {
+    const nova = {
+      id: crypto.randomUUID(),
+      fornecedorNome,
+      valor,
+      vencimento,
+      status: 'pendente',
+      criadoEm: todayISO(),
+    };
+    const ok = await salvarContas([...contas, nova]);
     if (!ok) return false;
-    if (fornecedorNome && fornecedorNome.trim()) {
-      salvarFornecedores(upsertFornecedor(fornecedores, fornecedorNome.trim()));
-    }
-    setAviso(n > 1 ? `${n} parcelas de "${descricao}" criadas.` : `Conta "${descricao}" criada.`);
+    salvarFornecedores(upsertFornecedor(fornecedores, fornecedorNome));
+    setAviso(`Conta de ${fornecedorNome} criada.`);
     return true;
   }
 
@@ -569,9 +547,9 @@ function CustoObraApp({ usuario }) {
     salvarContas(contas.map((c) => c.id === id ? { ...c, status: c.status === 'pago' ? 'pendente' : 'pago' } : c));
   }
 
-  function removerConta(id, descricao) {
-    confirmar(`Remover a conta "${descricao}"?`, () => {
-      salvarContas(contas.filter((c) => c.id !== id));
+  function removerConta(conta) {
+    confirmar(`Remover a conta de ${nomeDaConta(conta)} (${formatMoney(conta.valor)})?`, () => {
+      salvarContas(contas.filter((c) => c.id !== conta.id));
     });
   }
 
@@ -585,59 +563,6 @@ function CustoObraApp({ usuario }) {
     if (c.vencimento <= em7.toISOString().slice(0, 10)) return 'proximos7';
     if (c.vencimento <= em30.toISOString().slice(0, 10)) return 'proximos30';
     return 'futuro';
-  }
-
-  // ---- boletos ----
-  // Wrappers "só persistem": diálogos de confirmação e avisos ficam por
-  // conta da tela (src/boletos/Boletos.jsx), que já recebe `confirmar` como
-  // prop — mesmo padrão usado por OrcamentoVenda.jsx.
-  async function criarBoleto(campos) {
-    return salvarBoletos([novoBoleto(campos), ...boletos]);
-  }
-
-  async function atualizarBoleto(id, campos) {
-    return salvarBoletos(boletos.map((b) => (b.id === id ? atualizarCamposBoleto(b, campos) : b)));
-  }
-
-  async function marcarBoletoPago(id, dados) {
-    const boleto = boletos.find((b) => b.id === id);
-    if (!boleto) return false;
-    const boletoPago = registrarPagamento(boleto, dados);
-    let lancamentoId = null;
-    if (dados.lancarComoDespesa && boleto.obraId && !boleto.lancamentoGeradoId) {
-      lancamentoId = crypto.randomUUID();
-      const item = {
-        id: lancamentoId,
-        obraId: boleto.obraId,
-        categoria: mapearCategoriaBoletoParaLancamento(boleto.categoria),
-        produtoId: null,
-        descricao: boleto.descricao || boleto.beneficiario,
-        unidade: 'UN',
-        quantidade: 1,
-        preco: boletoPago.valorPago,
-        total: boletoPago.valorPago,
-        data: boletoPago.dataPagamento,
-        observacao: `Lançado a partir do boleto de ${boleto.beneficiario} (categoria original: ${boleto.categoria}).`,
-        etapaId: null,
-        fornecedorNome: boleto.beneficiario,
-      };
-      const okLancamento = await salvarLancamentos([item, ...lancamentos]);
-      if (!okLancamento) lancamentoId = null;
-    }
-    const boletoFinal = lancamentoId ? { ...boletoPago, lancamentoGeradoId: lancamentoId } : boletoPago;
-    return salvarBoletos(boletos.map((b) => (b.id === id ? boletoFinal : b)));
-  }
-
-  async function reabrirBoletoPagamento(id) {
-    return salvarBoletos(boletos.map((b) => (b.id === id ? reabrirBoleto(b) : b)));
-  }
-
-  async function cancelarBoleto(id) {
-    return salvarBoletos(boletos.map((b) => (b.id === id ? cancelarBoletoObj(b, '') : b)));
-  }
-
-  async function removerBoleto(id) {
-    return salvarBoletos(boletos.filter((b) => b.id !== id));
   }
 
   // ---- contratos ----
@@ -748,27 +673,26 @@ function CustoObraApp({ usuario }) {
   }
 
   // ---- formulário: nova conta a pagar ----
-  const [ctDescricao, setCtDescricao] = useState('');
+  const [ctFornecedor, setCtFornecedor] = useState('');
   const [ctValor, setCtValor] = useState('');
   const [ctVencimento, setCtVencimento] = useState(todayISO());
-  const [ctObraId, setCtObraId] = useState('');
-  const [ctFornecedor, setCtFornecedor] = useState('');
-  const [ctParcelas, setCtParcelas] = useState('1');
+  // true quando o usuário escolheu "cadastrar nova" em vez de usar a lista
+  const [ctDigitandoDistribuidora, setCtDigitandoDistribuidora] = useState(false);
 
   async function aoCriarConta() {
     setErro('');
-    const descricao = ctDescricao.trim();
+    const fornecedorNome = ctFornecedor.trim();
     const valor = parsePrecoBR(ctValor);
-    if (!descricao) { setErro('Descreva a conta.'); return; }
+    if (!fornecedorNome) { setErro('Escolha a distribuidora.'); return; }
     if (isNaN(valor) || valor <= 0) { setErro('Informe um valor válido.'); return; }
     if (!ctVencimento) { setErro('Informe a data de vencimento.'); return; }
-    const ok = await criarContas({
-      descricao, valor, vencimento: ctVencimento,
-      obraId: ctObraId || null, fornecedorNome: ctFornecedor.trim(), parcelas: ctParcelas,
-    });
+    const ok = await criarConta({ fornecedorNome, valor, vencimento: ctVencimento });
     if (ok) {
-      setCtDescricao(''); setCtValor(''); setCtVencimento(todayISO());
-      setCtObraId(''); setCtFornecedor(''); setCtParcelas('1');
+      setCtValor('');
+      setCtVencimento(todayISO());
+      setCtDigitandoDistribuidora(false);
+      // a distribuidora fica escolhida: quase sempre vêm várias contas
+      // da mesma de uma vez
     }
   }
 
@@ -815,10 +739,9 @@ function CustoObraApp({ usuario }) {
   }
 
   function exportarContasCSV() {
-    const linhas = [['Descrição', 'Valor', 'Vencimento', 'Status', 'Obra', 'Fornecedor']];
+    const linhas = [['Distribuidora', 'Valor', 'Vencimento', 'Status']];
     contas.forEach((c) => {
-      const o = c.obraId ? obras.find((ob) => ob.id === c.obraId) : null;
-      linhas.push([c.descricao, c.valor, formatDateBR(c.vencimento), c.status === 'pago' ? 'Paga' : 'Pendente', o ? o.nome : '', c.fornecedorNome || '']);
+      linhas.push([nomeDaConta(c), c.valor, formatDateBR(c.vencimento), c.status === 'pago' ? 'Paga' : 'Pendente']);
     });
     baixarCSV('contas-a-pagar.csv', linhas);
   }
@@ -863,25 +786,13 @@ function CustoObraApp({ usuario }) {
     baixarCSV('materiais.csv', linhas);
   }
 
-  function exportarBoletosCSV() {
-    const linhas = [['Beneficiário', 'CNPJ', 'Valor', 'Vencimento', 'Status', 'Categoria', 'Obra', 'Fornecedor', 'Documento']];
-    boletos.forEach((b) => {
-      const o = b.obraId ? obras.find((ob) => ob.id === b.obraId) : null;
-      linhas.push([
-        b.beneficiario, b.cnpjCpfBeneficiario || '', b.valor, formatDateBR(b.vencimento), b.status,
-        b.categoria, o ? o.nome : 'Despesa geral', b.fornecedorNome || '', b.numeroDocumento || '',
-      ]);
-    });
-    baixarCSV('boletos.csv', linhas);
-  }
-
   // ---- backup completo do sistema (baixar / restaurar) ----
   function exportarBackupCompleto() {
     const backup = {
       sistema: 'casaseco-custo-obra',
       versaoBackup: 1,
       geradoEm: new Date().toISOString(),
-      dados: { obras, produtos, lancamentos, etapas, fornecedores, contas, boletos, contratos, clientes, montadores, crediario, configuracao },
+      dados: { obras, produtos, lancamentos, etapas, fornecedores, contas, contratos, clientes, montadores, crediario, configuracao },
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -917,11 +828,11 @@ function CustoObraApp({ usuario }) {
         return;
       }
       const dados = backup && backup.dados;
-      // "boletos" é opcional aqui de propósito: backups feitos antes desse
-      // módulo existir não têm essa chave, e continuam válidos (restauram
-      // sem boletos, em vez de serem rejeitados).
+      // As listas opcionais são opcionais de propósito: backups antigos,
+      // feitos antes de um módulo existir, não têm a chave e continuam
+      // válidos — restauram sem ela, em vez de serem rejeitados.
       const chavesObrigatorias = ['obras', 'produtos', 'lancamentos', 'etapas', 'fornecedores', 'contas'];
-      const listasOpcionais = ['boletos', 'contratos', 'clientes', 'montadores', 'crediario'];
+      const listasOpcionais = ['contratos', 'clientes', 'montadores', 'crediario'];
       const valido = dados
         && chavesObrigatorias.every((k) => Array.isArray(dados[k]))
         && listasOpcionais.every((k) => dados[k] === undefined || Array.isArray(dados[k]));
@@ -946,7 +857,6 @@ function CustoObraApp({ usuario }) {
       salvarEtapas(dados.etapas),
       salvarFornecedores(dados.fornecedores),
       salvarContas(dados.contas),
-      salvarBoletos(dados.boletos || []),
       salvarContratos(dados.contratos || []),
       salvarClientes(dados.clientes || []),
       salvarMontadores(dados.montadores || []),
@@ -1568,7 +1478,7 @@ function CustoObraApp({ usuario }) {
                   </div>
                   {/* ---- resumo do mês ---- */}
                   {(() => {
-                    const r = resumoDoMes({ lancamentos, obras, contas, boletos, CATEGORIAS }, hoje);
+                    const r = resumoDoMes({ lancamentos, obras, contas, CATEGORIAS }, hoje);
                     if (r.lancamentosNoMes === 0 && r.totalAnterior === 0) return null;
                     const subiu = r.variacaoPct != null && r.variacaoPct > 0;
                     return (
@@ -2128,44 +2038,53 @@ function CustoObraApp({ usuario }) {
             <div className="space-y-6">
               <div className="eco-card p-4 flex flex-col sm:flex-row flex-wrap gap-3 items-end">
                 <div className="w-full sm:flex-1 sm:min-w-[220px]">
-                  <label className="text-xs text-stone-500 block mb-1">Descrição</label>
-                  <input value={ctDescricao} onChange={(e) => setCtDescricao(e.target.value)} placeholder="Ex: Aluguel do andaime"
-                    className="eco-input" />
+                  <label className="text-xs text-stone-500 block mb-1">Distribuidora</label>
+                  {ctDigitandoDistribuidora || fornecedores.length === 0 ? (
+                    <div className="flex gap-1.5">
+                      <input
+                        value={ctFornecedor}
+                        onChange={(e) => setCtFornecedor(upperInput(e.target.value))}
+                        placeholder="Nome da distribuidora"
+                        autoFocus={ctDigitandoDistribuidora}
+                        className="eco-input"
+                      />
+                      {fornecedores.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => { setCtDigitandoDistribuidora(false); setCtFornecedor(''); }}
+                          className="eco-btn-secondary flex-shrink-0"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <select
+                      value={ctFornecedor}
+                      onChange={(e) => {
+                        if (e.target.value === '__nova__') { setCtDigitandoDistribuidora(true); setCtFornecedor(''); }
+                        else setCtFornecedor(e.target.value);
+                      }}
+                      className="eco-input"
+                    >
+                      <option value="">Escolha a distribuidora…</option>
+                      {fornecedores.map((f) => <option key={f.id} value={f.nome}>{f.nome}</option>)}
+                      <option value="__nova__">+ Cadastrar nova distribuidora</option>
+                    </select>
+                  )}
                 </div>
-                <div className="w-full sm:w-32">
-                  <label className="text-xs text-stone-500 block mb-1">Valor total (R$)</label>
+                <div className="w-full sm:w-36">
+                  <label className="text-xs text-stone-500 block mb-1">Valor (R$)</label>
                   <input value={ctValor} onChange={(e) => setCtValor(e.target.value)} placeholder="0,00" inputMode="decimal"
                     className="eco-input" />
                 </div>
-                <div className="w-full sm:w-40">
-                  <label className="text-xs text-stone-500 block mb-1">1º vencimento</label>
+                <div className="w-full sm:w-44">
+                  <label className="text-xs text-stone-500 block mb-1">Vencimento</label>
                   <input type="date" value={ctVencimento} onChange={(e) => setCtVencimento(e.target.value)}
                     className="eco-input" />
                 </div>
-                <div className="w-full sm:w-40">
-                  <label className="text-xs text-stone-500 block mb-1">Obra (opcional)</label>
-                  <select value={ctObraId} onChange={(e) => setCtObraId(e.target.value)}
-                    className="eco-input">
-                    <option value="">Nenhuma</option>
-                    {obras.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}
-                  </select>
-                </div>
-                <div className="w-full sm:w-40">
-                  <label className="text-xs text-stone-500 block mb-1">Fornecedor (opcional)</label>
-                  <input value={ctFornecedor} onChange={(e) => setCtFornecedor(e.target.value)} placeholder="Nome"
-                    list="lista-fornecedores-conta"
-                    className="eco-input" />
-                  <datalist id="lista-fornecedores-conta">
-                    {fornecedores.map((f) => <option key={f.id} value={f.nome} />)}
-                  </datalist>
-                </div>
-                <div className="w-full sm:w-28">
-                  <label className="text-xs text-stone-500 block mb-1">Parcelas</label>
-                  <input value={ctParcelas} onChange={(e) => setCtParcelas(e.target.value)} placeholder="1" inputMode="numeric"
-                    className="eco-input" />
-                </div>
                 <button type="button" onClick={aoCriarConta} className="eco-btn-primary w-full sm:w-auto">
-                  <Plus size={15} /> Criar conta
+                  <Plus size={15} /> Registrar
                 </button>
               </div>
 
@@ -2183,30 +2102,23 @@ function CustoObraApp({ usuario }) {
                         <span>{formatMoney(totalGrupo)}</span>
                       </div>
                       <div className="bg-white border border-t-0 border-stone-200 rounded-b-lg overflow-hidden">
-                        {lista.map((c) => {
-                          const obraNome = c.obraId ? (obras.find((o) => o.id === c.obraId) || {}).nome : null;
-                          return (
-                            <div key={c.id} className="px-3 py-2 border-t border-stone-100 first:border-t-0 flex items-center justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className={`text-sm ${c.status === 'pago' ? 'line-through text-stone-400' : 'text-stone-800'}`}>{c.descricao}</p>
-                                <p className="text-xs text-stone-400">
-                                  vence {formatDateBR(c.vencimento)}
-                                  {obraNome && ` · ${obraNome}`}
-                                  {c.fornecedorNome && ` · ${c.fornecedorNome}`}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-3 flex-shrink-0">
-                                <span className="text-sm font-medium">{formatMoney(c.valor)}</span>
-                                <button onClick={() => marcarContaPaga(c.id)} className={`text-xs px-2 py-1 rounded-lg border transition-colors duration-150 active:scale-[0.97] ${c.status === 'pago' ? 'border-stone-300 text-stone-500' : 'border-green-300 text-green-700 hover:bg-green-50'}`}>
-                                  {c.status === 'pago' ? 'Reabrir' : 'Marcar paga'}
-                                </button>
-                                <button onClick={() => removerConta(c.id, c.descricao)} className="eco-icon-btn-danger">
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
+                        {lista.map((c) => (
+                          <div key={c.id} className="px-3 py-2 border-t border-stone-100 first:border-t-0 flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className={`text-sm truncate ${c.status === 'pago' ? 'line-through text-stone-400' : 'text-stone-800'}`}>{nomeDaConta(c)}</p>
+                              <p className="text-xs text-stone-400">vence {formatDateBR(c.vencimento)}</p>
                             </div>
-                          );
-                        })}
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                              <span className="text-sm font-medium">{formatMoney(c.valor)}</span>
+                              <button onClick={() => marcarContaPaga(c.id)} className={`text-xs px-2 py-1 rounded-lg border transition-colors duration-150 active:scale-[0.97] ${c.status === 'pago' ? 'border-stone-300 text-stone-500' : 'border-green-300 text-green-700 hover:bg-green-50'}`}>
+                                {c.status === 'pago' ? 'Reabrir' : 'Paga'}
+                              </button>
+                              <button onClick={() => removerConta(c)} className="eco-icon-btn-danger">
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   );
@@ -2215,24 +2127,6 @@ function CustoObraApp({ usuario }) {
             </div>
           );
         })()}
-
-        {/* ---------------- BOLETOS ---------------- */}
-        {view === 'boletos' && (
-          <Boletos
-            boletos={boletos}
-            obras={obras}
-            fornecedores={fornecedores}
-            onCriarBoleto={criarBoleto}
-            onAtualizarBoleto={atualizarBoleto}
-            onMarcarPago={marcarBoletoPago}
-            onReabrirBoleto={reabrirBoletoPagamento}
-            onCancelarBoleto={cancelarBoleto}
-            onRemoverBoleto={removerBoleto}
-            onAviso={setAviso}
-            onErro={setErro}
-            onConfirmar={confirmar}
-          />
-        )}
 
         {/* ---------------- CREDIÁRIO DOS MONTADORES ---------------- */}
         {view === 'crediario' && (
@@ -2308,9 +2202,6 @@ function CustoObraApp({ usuario }) {
                   </button>
                   <button onClick={exportarContasCSV} className="eco-btn-secondary eco-btn-sm">
                     <Download size={14} /> Contas a pagar (CSV)
-                  </button>
-                  <button onClick={exportarBoletosCSV} className="eco-btn-secondary eco-btn-sm">
-                    <Download size={14} /> Boletos (CSV)
                   </button>
                   <button onClick={exportarMateriaisCSV} className="eco-btn-secondary eco-btn-sm">
                     <Download size={14} /> Materiais e preços (CSV)
@@ -2519,24 +2410,6 @@ function CustoObraApp({ usuario }) {
                 <Pencil size={12} /> Definir orçamento para esta obra
               </button>
             ) : null}
-
-            {(() => {
-              const resumoBoletos = totalBoletosPorObra(boletos, obraAtiva.id);
-              if (resumoBoletos.quantidade === 0) return null;
-              return (
-                <div className="eco-card p-4">
-                  <p className="text-sm font-semibold text-stone-700 mb-1">Boletos vinculados a esta obra</p>
-                  <p className="text-xs text-stone-500">
-                    {formatMoney(resumoBoletos.pendente)} pendente · {formatMoney(resumoBoletos.pago)} pago
-                    {' · '}
-                    <button onClick={() => setView('boletos')} className="underline hover:text-green-700">ver boletos</button>
-                  </p>
-                  <p className="text-[11px] text-stone-400 mt-1">
-                    Este valor é informativo e não entra na soma de "Total da obra" acima.
-                  </p>
-                </div>
-              );
-            })()}
 
             {/* ---- contrato e parcelas a receber desta obra ---- */}
             {(() => {
@@ -2951,7 +2824,7 @@ function CustoObraApp({ usuario }) {
       <BuscaGlobal
         aberto={buscaAberta}
         onFechar={() => setBuscaAberta(false)}
-        dados={{ obras, clientes, produtos, fornecedores, boletos, contratos, lancamentos, contas, montadores, crediario }}
+        dados={{ obras, clientes, produtos, fornecedores, contratos, lancamentos, contas, montadores, crediario }}
         onIr={(destino) => {
           if (destino.view === 'obra' && destino.obraId) {
             setObraAtivaId(destino.obraId);

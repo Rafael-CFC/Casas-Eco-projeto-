@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Search, X, CornerDownLeft } from 'lucide-react';
 import { buscaGlobal } from './analiseCalc';
 
-// Busca única que procura em obras, contratos, clientes, boletos,
+// Busca única que procura em obras, contratos, clientes, contas,
 // fornecedores, produtos, contas e materiais comprados — e leva direto
 // para o lugar do resultado.
 export default function BuscaGlobal({ aberto, onFechar, dados, onIr }) {
@@ -40,7 +40,7 @@ export default function BuscaGlobal({ aberto, onFechar, dados, onIr }) {
             ref={inputRef}
             value={termo}
             onChange={(e) => setTermo(e.target.value)}
-            placeholder="Buscar obra, cliente, contrato, boleto, material, fornecedor…"
+            placeholder="Buscar obra, cliente, contrato, conta, material, fornecedor…"
             className="flex-1 min-w-0 text-sm outline-none placeholder:text-stone-400"
           />
           <button onClick={onFechar} className="eco-icon-btn flex-shrink-0">
