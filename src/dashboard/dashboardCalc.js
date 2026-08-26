@@ -5,6 +5,8 @@
 // conferir que nenhum valor é inventado: tudo vem de soma/filtro sobre os
 // dados reais.
 
+import { chaveFornecedor } from '../textUtils';
+
 const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 export const PERIODOS = [
@@ -52,7 +54,7 @@ export function filtrarLancamentos(lancamentos, { obraId, categoria, fornecedor,
   const escopo = lancamentos.filter((l) => {
     if (obraId && obraId !== 'todas' && l.obraId !== obraId) return false;
     if (categoria && categoria !== 'todas' && l.categoria !== categoria) return false;
-    if (fornecedor && fornecedor !== 'todos' && (l.fornecedorNome || '') !== fornecedor) return false;
+    if (fornecedor && fornecedor !== 'todos' && chaveFornecedor(l.fornecedorNome) !== chaveFornecedor(fornecedor)) return false;
     return true;
   });
   const periodo = periodoRange ? escopo.filter((l) => dentroDoPeriodo(l.data, periodoRange)) : escopo;
@@ -62,7 +64,7 @@ export function filtrarLancamentos(lancamentos, { obraId, categoria, fornecedor,
 export function filtrarContas(contas, { obraId, fornecedor, status, periodoRange }) {
   return contas.filter((c) => {
     if (obraId && obraId !== 'todas' && c.obraId !== obraId) return false;
-    if (fornecedor && fornecedor !== 'todos' && (c.fornecedorNome || '') !== fornecedor) return false;
+    if (fornecedor && fornecedor !== 'todos' && chaveFornecedor(c.fornecedorNome) !== chaveFornecedor(fornecedor)) return false;
     if (status && status !== 'todas') {
       if (status === 'atraso') {
         const hoje = new Date().toISOString().slice(0, 10);
@@ -95,19 +97,26 @@ export function agruparPorCategoria(lancamentos, CATEGORIAS) {
   lancamentos.forEach((l) => { somas[l.categoria] = (somas[l.categoria] || 0) + (Number(l.total) || 0); });
   const total = Object.values(somas).reduce((a, v) => a + v, 0);
   return Object.entries(somas)
-    .map(([key, valor]) => ({ key, label: CATEGORIAS[key].label, valor, pct: total > 0 ? (valor / total) * 100 : 0 }))
+    // um lançamento antigo com categoria que não existe mais não pode
+    // derrubar a tela inteira: ele aparece agrupado como "Outros"
+    .map(([key, valor]) => ({ key, label: (CATEGORIAS[key] || {}).label || 'Outros', valor, pct: total > 0 ? (valor / total) * 100 : 0 }))
     .filter((c) => c.valor > 0)
     .sort((a, b) => b.valor - a.valor);
 }
 
+// Agrupa pelo nome "sem caixa e sem acento", senão a mesma distribuidora
+// escrita de dois jeitos ("ALBERTINA" e "Albertina") apareceria duas
+// vezes, cada uma com metade do valor. Na tela sai a primeira grafia.
 export function agruparPorFornecedor(lancamentos, limite) {
   const somas = {};
   lancamentos.forEach((l) => {
-    const nome = (l.fornecedorNome || '').trim();
+    const nome = String(l.fornecedorNome || '').trim();
     if (!nome) return;
-    somas[nome] = (somas[nome] || 0) + (Number(l.total) || 0);
+    const chave = chaveFornecedor(nome);
+    if (!somas[chave]) somas[chave] = { nome, total: 0 };
+    somas[chave].total += Number(l.total) || 0;
   });
-  const lista = Object.entries(somas).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total);
+  const lista = Object.values(somas).sort((a, b) => b.total - a.total);
   return limite ? lista.slice(0, limite) : lista;
 }
 

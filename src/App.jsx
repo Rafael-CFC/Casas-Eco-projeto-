@@ -9,7 +9,7 @@ import {
   FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search, NotebookPen, Trees,
   LogOut, KeyRound,
 } from 'lucide-react';
-import { upperInput, normalizeProductName, normalizeUnit } from './textUtils';
+import { upperInput, normalizeProductName, normalizeUnit, chaveFornecedor } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
 import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
 import ToastStack from './ui/Toast';
@@ -488,13 +488,13 @@ function CustoObraApp({ usuario }) {
 
   // ---- fornecedores ----
   function upsertFornecedor(lista, nome) {
-    const existente = lista.find((f) => f.nome.toLowerCase() === nome.toLowerCase());
+    const existente = lista.find((f) => chaveFornecedor(f.nome) === chaveFornecedor(nome));
     if (existente) return lista;
     return [...lista, { id: crypto.randomUUID(), nome, telefone: '', categoria: '', observacoes: '', criadoEm: todayISO() }];
   }
 
   function estatisticasFornecedor(nome) {
-    const compras = lancamentos.filter((l) => l.fornecedorNome && l.fornecedorNome.toLowerCase() === nome.toLowerCase());
+    const compras = lancamentos.filter((l) => chaveFornecedor(l.fornecedorNome) && chaveFornecedor(l.fornecedorNome) === chaveFornecedor(nome));
     const total = compras.reduce((a, l) => a + l.total, 0);
     const obrasRelacionadas = [...new Set(compras.map((l) => {
       const o = obras.find((ob) => ob.id === l.obraId);
@@ -880,10 +880,13 @@ function CustoObraApp({ usuario }) {
   function gastosPorFornecedorGeral() {
     const porNome = {};
     lancamentos.forEach((l) => {
-      if (!l.fornecedorNome) return;
-      porNome[l.fornecedorNome] = (porNome[l.fornecedorNome] || 0) + l.total;
+      const nome = String(l.fornecedorNome || '').trim();
+      if (!nome) return;
+      const k = chaveFornecedor(nome);
+      if (!porNome[k]) porNome[k] = { nome, total: 0 };
+      porNome[k].total += l.total;
     });
-    return Object.entries(porNome).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total);
+    return Object.values(porNome).sort((a, b) => b.total - a.total);
   }
 
   async function vincularMadeirasAntigas(distribuidora) {

@@ -5,6 +5,8 @@
 // registradas) — nada aqui inventa número, tudo é soma/média sobre o que
 // foi de fato lançado no sistema.
 
+import { chaveFornecedor } from '../textUtils';
+
 function normalizar(s) {
   return String(s || '').trim().toLowerCase();
 }
@@ -140,12 +142,13 @@ export function resumoDoMes(dados, hojeISO) {
   // fornecedor que mais recebeu
   const porFornecedor = {};
   doMes.forEach((l) => {
-    const n = (l.fornecedorNome || '').trim();
+    const n = String(l.fornecedorNome || '').trim();
     if (!n) return;
-    porFornecedor[n] = (porFornecedor[n] || 0) + (Number(l.total) || 0);
+    const k = chaveFornecedor(n);
+    if (!porFornecedor[k]) porFornecedor[k] = { nome: n, valor: 0 };
+    porFornecedor[k].valor += Number(l.total) || 0;
   });
-  const topFornNome = Object.keys(porFornecedor).sort((a, b) => porFornecedor[b] - porFornecedor[a])[0];
-  const topFornecedor = topFornNome ? { nome: topFornNome, valor: porFornecedor[topFornNome] } : null;
+  const topFornecedor = Object.values(porFornecedor).sort((a, b) => b.valor - a.valor)[0] || null;
 
   // materiais que ficaram mais caros que no mês anterior
   const mediaPorMaterial = (lista) => {
