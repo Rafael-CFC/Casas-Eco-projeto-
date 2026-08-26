@@ -1,17 +1,22 @@
 import React, { useState } from 'react';
-import { Building2, FileSignature, ClipboardList, Save, Info, RotateCcw } from 'lucide-react';
+import { Building2, FileSignature, ClipboardList, Save, Info, RotateCcw, Trees, Link2 } from 'lucide-react';
 import {
   MARCADORES_DISPONIVEIS, blocosContratoDaConfig, blocosMemorialDaConfig,
   contratadaEstaPreenchida, configuracaoVazia,
 } from './configStore';
+import { formatDateBR } from '../domain';
+import { upperInput } from '../textUtils';
 
 const ABAS = [
   { key: 'contratada', label: 'Dados da empresa', icon: Building2 },
+  { key: 'madeiras', label: 'Madeiras', icon: Trees },
   { key: 'contrato', label: 'Texto do contrato', icon: FileSignature },
   { key: 'memorial', label: 'Texto do memorial', icon: ClipboardList },
 ];
 
-export default function Configuracoes({ config, onSalvarConfig, onAviso, onErro }) {
+export default function Configuracoes({
+  config, madeirasPendentes = [], onSalvarConfig, onVincularMadeiras, onAviso, onErro, onConfirmar,
+}) {
   const [aba, setAba] = useState('contratada');
   const [rascunho, setRascunho] = useState(config);
   const [salvando, setSalvando] = useState(false);
@@ -41,6 +46,20 @@ export default function Configuracoes({ config, onSalvarConfig, onAviso, onErro 
       ...r,
       [campo]: { ...r[campo], blocos: r[campo].blocos.filter((b) => b.chave !== chave) },
     }));
+  }
+
+  // Vincula de uma vez os lançamentos de madeira que ficaram sem
+  // fornecedor (os de antes desse vínculo existir). Usa o que está
+  // SALVO, não o rascunho: vincular a uma distribuidora que ainda nem foi
+  // salva deixaria as duas coisas fora de sintonia.
+  function vincularAntigos() {
+    const distribuidora = String(config.fornecedorMadeiras || '').trim();
+    if (!distribuidora || madeirasPendentes.length === 0) return;
+    onConfirmar(
+      `Vincular ${madeirasPendentes.length} lançamento(s) de madeira ao fornecedor "${distribuidora}"? `
+      + 'Só muda os que estão sem fornecedor anotado — nenhum valor de obra é alterado.',
+      () => onVincularMadeiras(distribuidora)
+    );
   }
 
   async function salvar() {
@@ -205,6 +224,67 @@ export default function Configuracoes({ config, onSalvarConfig, onAviso, onErro 
                 className="eco-input"
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {aba === 'madeiras' && (
+        <div className="eco-card p-4 space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-stone-700">Fornecedor das madeiras</p>
+            <p className="text-xs text-stone-500 mt-0.5">
+              A madeira vem toda de uma distribuidora só. Todo lançamento de madeira numa obra já
+              entra com esse fornecedor preenchido, então o gasto aparece sozinho no Financeiro e
+              nos relatórios por fornecedor. Na hora de lançar o campo continua editável — se a
+              compra foi em outro lugar, é só trocar.
+            </p>
+          </div>
+
+          <div className="sm:max-w-sm">
+            <label className="eco-label">Distribuidora</label>
+            <input
+              value={rascunho.fornecedorMadeiras || ''}
+              onChange={(e) => setRascunho((r) => ({ ...r, fornecedorMadeiras: upperInput(e.target.value) }))}
+              placeholder="Ex: ALBERTINA"
+              className="eco-input"
+            />
+            <p className="text-[11px] text-stone-400 mt-1">
+              Em branco, o sistema não preenche fornecedor nenhum sozinho.
+            </p>
+          </div>
+
+          <div className="border-t border-stone-100 pt-4">
+            <p className="text-sm font-semibold text-stone-700">Madeiras lançadas antes disso</p>
+            {madeirasPendentes.length === 0 ? (
+              <p className="text-xs text-stone-500 mt-1">
+                Nenhum lançamento de madeira está sem fornecedor — está tudo vinculado.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-stone-500 mt-1">
+                  Encontrei <strong>{madeirasPendentes.length}</strong> lançamento(s) de madeira sem
+                  fornecedor anotado. Dá para vincular todos de uma vez a{' '}
+                  <strong>{String(config.fornecedorMadeiras || '').trim() || '—'}</strong>, e assim eles
+                  entram no relatório por fornecedor. Quem já tem fornecedor anotado não é tocado.
+                </p>
+                <ul className="text-xs text-stone-400 mt-2 space-y-0.5 max-h-32 overflow-y-auto">
+                  {madeirasPendentes.slice(0, 12).map((l) => (
+                    <li key={l.id}>· {l.descricao} — {formatDateBR(l.data)}</li>
+                  ))}
+                  {madeirasPendentes.length > 12 && <li>· e mais {madeirasPendentes.length - 12}…</li>}
+                </ul>
+                <button
+                  onClick={vincularAntigos}
+                  disabled={!String(config.fornecedorMadeiras || '').trim()}
+                  className="eco-btn-secondary eco-btn-sm mt-3"
+                >
+                  <Link2 size={14} /> Vincular {madeirasPendentes.length} lançamento(s)
+                </button>
+                {!String(config.fornecedorMadeiras || '').trim() && (
+                  <p className="text-[11px] text-amber-700 mt-1">Salve uma distribuidora acima primeiro.</p>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

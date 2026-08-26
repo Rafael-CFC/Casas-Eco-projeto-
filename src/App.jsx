@@ -22,6 +22,7 @@ import SucessoFinalizacaoModal from './obra/SucessoFinalizacaoModal';
 import ResumoFinalObra from './obra/ResumoFinalObra';
 import ProdutoSeletor from './produtos/ProdutoSeletor';
 import { catalogoPorCategoria, filtrarOrdenarProdutos, ORDENS_CATALOGO } from './produtos/catalogoUtils';
+import { ehMadeira, fornecedorDasMadeiras, madeirasSemFornecedor, vincularMadeirasAoFornecedor } from './produtos/madeiras';
 import OrcamentoVenda from './venda/OrcamentoVenda';
 import Boletos from './boletos/Boletos';
 import { novoBoleto, atualizarCamposBoleto, registrarPagamento, reabrirBoleto, cancelarBoletoObj, mapearCategoriaBoletoParaLancamento } from './boletos/boletosStore';
@@ -975,6 +976,16 @@ function CustoObraApp({ usuario }) {
     return Object.entries(porNome).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total);
   }
 
+  async function vincularMadeirasAntigas(distribuidora) {
+    const atualizados = vincularMadeirasAoFornecedor(lancamentos, distribuidora);
+    const quantos = atualizados.filter((l, i) => l !== lancamentos[i]).length;
+    if (quantos === 0) return;
+    const ok = await salvarLancamentos(atualizados);
+    if (!ok) return;
+    salvarFornecedores(upsertFornecedor(fornecedores, distribuidora));
+    setAviso(`${quantos} lançamento(s) de madeira vinculado(s) a ${distribuidora}.`);
+  }
+
   async function copiarResumoObra(obra) {
     const itens = lancamentos.filter((l) => l.obraId === obra.id);
     let texto = `RESUMO DA OBRA: ${obra.nome}\n`;
@@ -1158,13 +1169,37 @@ function CustoObraApp({ usuario }) {
   const [ldObservacao, setLdObservacao] = useState('');
   const [ldEtapaId, setLdEtapaId] = useState('');
   const [ldFornecedor, setLdFornecedor] = useState('');
+  // marca que o fornecedor no campo foi posto pelo sistema (item de
+  // madeira), e não digitado por uma pessoa. Só o que foi posto pelo
+  // sistema pode ser trocado ou apagado sozinho depois.
+  const [ldFornecedorAutomatico, setLdFornecedorAutomatico] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [buscaLancamento, setBuscaLancamento] = useState('');
 
   function resetFormLancamento() {
     setLdDescricao(''); setLdQuantidade('1'); setLdUnidade('UN');
     setLdPreco(''); setLdData(todayISO());
-    setLdObservacao(''); setLdEtapaId(''); setLdFornecedor(''); setEditandoId(null);
+    setLdObservacao(''); setLdEtapaId(''); setLdFornecedor('');
+    setLdFornecedorAutomatico(false); setEditandoId(null);
+  }
+
+  // A madeira vem toda de uma distribuidora só (ver Configurações >
+  // Madeiras). Quando o item lançado é madeira, o fornecedor já entra
+  // preenchido — assim o gasto aparece no Financeiro sem depender de
+  // alguém lembrar de digitar. O campo continua editável: se a compra
+  // foi em outro lugar, é só trocar, e o que foi digitado à mão nunca é
+  // apagado pelo sistema.
+  function ajustarFornecedorMadeira(nome, categoria) {
+    const distribuidora = fornecedorDasMadeiras(configuracao);
+    if (!distribuidora) return;
+    const madeira = ehMadeira(nome, categoria);
+    if (madeira && (!ldFornecedor.trim() || ldFornecedorAutomatico)) {
+      setLdFornecedor(distribuidora);
+      setLdFornecedorAutomatico(true);
+    } else if (!madeira && ldFornecedorAutomatico) {
+      setLdFornecedor('');
+      setLdFornecedorAutomatico(false);
+    }
   }
 
   function aoDigitarDescricao(valor) {
@@ -1173,12 +1208,14 @@ function CustoObraApp({ usuario }) {
     const catalogo = catalogoPorCategoria(categoriaAtiva, produtos, lancamentos);
     const item = catalogo.find((it) => it.nome.toLowerCase() === nome.trim().toLowerCase());
     if (item) { setLdPreco(String(item.preco)); setLdUnidade(item.unidade); }
+    ajustarFornecedorMadeira(nome, categoriaAtiva);
   }
 
   function selecionarItemCatalogo(item) {
     setLdDescricao(item.nome);
     setLdUnidade(item.unidade);
     setLdPreco(String(item.preco));
+    ajustarFornecedorMadeira(item.nome, categoriaAtiva);
   }
 
   function editarLancamento(item) {
@@ -1192,6 +1229,7 @@ function CustoObraApp({ usuario }) {
     setLdObservacao(item.observacao || '');
     setLdEtapaId(item.etapaId || '');
     setLdFornecedor(item.fornecedorNome || '');
+    setLdFornecedorAutomatico(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -1263,6 +1301,10 @@ function CustoObraApp({ usuario }) {
   // catálogo oferecido no crediário: produtos cadastrados + tabela de
   // madeiras, que são as duas listas de itens que a loja já tem.
   const catalogoCrediario = catalogoParaRetirada(produtos, CATALOGO_VENDA);
+  // lançamentos de madeira que ficaram sem fornecedor (os de antes do
+  // vínculo com a distribuidora existir) — a tela de Configurações
+  // oferece corrigir todos de uma vez
+  const madeirasPendentes = madeirasSemFornecedor(lancamentos);
   const paginaAtual = (view === 'obra' || view === 'resumo') && obraAtiva
     ? {
         titulo: obraAtiva.nome,
@@ -2237,9 +2279,12 @@ function CustoObraApp({ usuario }) {
         {view === 'configuracoes' && (
           <Configuracoes
             config={configuracao}
+            madeirasPendentes={madeirasPendentes}
             onSalvarConfig={salvarConfiguracao}
+            onVincularMadeiras={vincularMadeirasAntigas}
             onAviso={setAviso}
             onErro={setErro}
+            onConfirmar={confirmar}
           />
         )}
 
@@ -2726,12 +2771,21 @@ function CustoObraApp({ usuario }) {
               )}
               <div className="col-span-2 sm:col-span-2 lg:col-span-2">
                 <label className="text-xs text-stone-500 block mb-1">Fornecedor (opcional)</label>
-                <input value={ldFornecedor} onChange={(e) => setLdFornecedor(e.target.value)} placeholder="Ex: Depósito São José"
+                <input
+                  value={ldFornecedor}
+                  onChange={(e) => { setLdFornecedor(e.target.value); setLdFornecedorAutomatico(false); }}
+                  placeholder="Ex: Depósito São José"
                   list="lista-fornecedores-lancamento"
-                  className="eco-input" />
+                  className="eco-input"
+                />
                 <datalist id="lista-fornecedores-lancamento">
                   {fornecedores.map((f) => <option key={f.id} value={f.nome} />)}
                 </datalist>
+                {ldFornecedorAutomatico && (
+                  <p className="text-[11px] text-green-700 mt-1 flex items-center gap-1">
+                    <Trees size={11} /> madeira — gasto vinculado a {ldFornecedor} (dá para trocar)
+                  </p>
+                )}
               </div>
               <div className="col-span-2 sm:col-span-2 lg:col-span-2">
                 <label className="text-xs text-stone-500 block mb-1">Observação (opcional)</label>
