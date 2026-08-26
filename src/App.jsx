@@ -14,7 +14,7 @@ import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } fr
 import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
 import ToastStack from './ui/Toast';
 import RelatorioContas from './contas/RelatorioContas';
-import { nomeDaConta } from './contas/contasCalc';
+import { nomeDaConta, somarDias } from './contas/contasCalc';
 import TrocarSenha from './auth/TrocarSenha';
 import { sair } from './auth/authStore';
 import { DashboardSkeleton } from './ui/Skeleton';
@@ -524,20 +524,29 @@ function CustoObraApp({ usuario }) {
   // o que o dono quer controlar — quem ele tem que pagar, quanto e quando.
   // A distribuidora sai da mesma lista dos fornecedores, então basta
   // cadastrar uma vez e depois é só escolher.
+  //
+  // Uma nota fiscal quase nunca vem com um boleto só. Por isso quem grava
+  // recebe uma LISTA de boletos da MESMA distribuidora e salva todos de
+  // uma vez: um único gravar, para não sobrar meia nota lançada se a
+  // internet cair no meio. Cada boleto continua sendo uma conta separada
+  // na lista de baixo — some, marque como paga e apague um por um.
 
-  async function criarConta({ fornecedorNome, valor, vencimento }) {
-    const nova = {
+  async function criarContas(fornecedorNome, boletos) {
+    const novas = boletos.map((b) => ({
       id: crypto.randomUUID(),
       fornecedorNome,
-      valor,
-      vencimento,
+      valor: b.valor,
+      vencimento: b.vencimento,
       status: 'pendente',
       criadoEm: todayISO(),
-    };
-    const ok = await salvarContas([...contas, nova]);
+    }));
+    const ok = await salvarContas([...contas, ...novas]);
     if (!ok) return false;
     salvarFornecedores(upsertFornecedor(fornecedores, fornecedorNome));
-    setAviso(`Conta de ${fornecedorNome} criada.`);
+    const total = novas.reduce((a, c) => a + c.valor, 0);
+    setAviso(novas.length === 1
+      ? `Conta de ${fornecedorNome} criada.`
+      : `${novas.length} boletos de ${fornecedorNome} registrados — ${formatMoney(total)}.`);
     return true;
   }
 
@@ -671,26 +680,72 @@ function CustoObraApp({ usuario }) {
   }
 
   // ---- formulário: nova conta a pagar ----
+  //
+  // O formulário é o de uma NOTA FISCAL inteira, não o de um boleto: a
+  // distribuidora fica em cima, escolhida uma vez só, e embaixo entra uma
+  // linha por boleto que veio na nota. Chegou uma nota com três boletos,
+  // são três linhas — sem repetir a distribuidora três vezes.
+  const novoBoletoVazio = () => ({ id: crypto.randomUUID(), valor: '', vencimento: todayISO() });
+
   const [ctFornecedor, setCtFornecedor] = useState('');
-  const [ctValor, setCtValor] = useState('');
-  const [ctVencimento, setCtVencimento] = useState(todayISO());
+  const [ctBoletos, setCtBoletos] = useState(() => [novoBoletoVazio()]);
   // true quando o usuário escolheu "cadastrar nova" em vez de usar a lista
   const [ctDigitandoDistribuidora, setCtDigitandoDistribuidora] = useState(false);
+
+  function alterarBoleto(id, campos) {
+    setCtBoletos((lista) => lista.map((b) => (b.id === id ? { ...b, ...campos } : b)));
+  }
+
+  // A linha nova já nasce com o valor da anterior e o vencimento 30 dias
+  // depois — é como quase todo boleto de distribuidora vem (30/60/90).
+  // É só um chute para adiantar a digitação: os dois campos continuam
+  // editáveis, e nada é gravado sem o dono conferir.
+  function adicionarBoleto() {
+    setCtBoletos((lista) => {
+      const ultimo = lista[lista.length - 1];
+      return [...lista, {
+        id: crypto.randomUUID(),
+        valor: ultimo ? ultimo.valor : '',
+        vencimento: ultimo && ultimo.vencimento ? somarDias(ultimo.vencimento, 30) : todayISO(),
+      }];
+    });
+  }
+
+  // Tirar a última linha não faz sentido: o formulário sempre tem pelo
+  // menos um boleto para preencher.
+  function tirarBoleto(id) {
+    setCtBoletos((lista) => (lista.length <= 1 ? lista : lista.filter((b) => b.id !== id)));
+  }
+
+  // Só entra na conta o que tem valor preenchido — a linha que o usuário
+  // abriu e deixou em branco é simplesmente ignorada.
+  function boletosPreenchidos(lista) {
+    return lista.filter((b) => (parsePrecoBR(b.valor) || 0) > 0);
+  }
 
   async function aoCriarConta() {
     setErro('');
     const fornecedorNome = ctFornecedor.trim();
-    const valor = parsePrecoBR(ctValor);
     if (!fornecedorNome) { setErro('Escolha a distribuidora.'); return; }
-    if (isNaN(valor) || valor <= 0) { setErro('Informe um valor válido.'); return; }
-    if (!ctVencimento) { setErro('Informe a data de vencimento.'); return; }
-    const ok = await criarConta({ fornecedorNome, valor, vencimento: ctVencimento });
+
+    const preenchidos = boletosPreenchidos(ctBoletos);
+    if (preenchidos.length === 0) { setErro('Informe o valor do boleto.'); return; }
+
+    const boletos = [];
+    for (const b of preenchidos) {
+      const posicao = ctBoletos.indexOf(b) + 1;
+      const valor = parsePrecoBR(b.valor);
+      if (isNaN(valor) || valor <= 0) { setErro(`Boleto ${posicao}: informe um valor válido.`); return; }
+      if (!b.vencimento) { setErro(`Boleto ${posicao}: informe a data de vencimento.`); return; }
+      boletos.push({ valor, vencimento: b.vencimento });
+    }
+
+    const ok = await criarContas(fornecedorNome, boletos);
     if (ok) {
-      setCtValor('');
-      setCtVencimento(todayISO());
+      // a distribuidora fica escolhida: quase sempre vem outra nota da
+      // mesma de uma vez. Os boletos, esses sim, voltam para o zero.
+      setCtBoletos([novoBoletoVazio()]);
       setCtDigitandoDistribuidora(false);
-      // a distribuidora fica escolhida: quase sempre vêm várias contas
-      // da mesma de uma vez
     }
   }
 
@@ -2059,9 +2114,15 @@ function CustoObraApp({ usuario }) {
                 <RelatorioContas contas={contas} onExportarCSV={exportarContasCSV} />
               )}
 
-              {abaContas === 'registrar' && (<>
-              <div className="eco-card p-4 flex flex-col sm:flex-row flex-wrap gap-3 items-end">
-                <div className="w-full sm:flex-1 sm:min-w-[220px]">
+              {abaContas === 'registrar' && (() => {
+                const preenchidos = boletosPreenchidos(ctBoletos);
+                const totalDaNota = preenchidos.reduce((a, b) => a + parsePrecoBR(b.valor), 0);
+                const quantos = preenchidos.length;
+                return (<>
+              {/* O formulário é o da nota fiscal inteira: distribuidora em
+                  cima, uma linha por boleto embaixo. */}
+              <div className="eco-card p-4 space-y-4">
+                <div>
                   <label className="text-xs text-stone-500 block mb-1">Distribuidora</label>
                   {ctDigitandoDistribuidora || fornecedores.length === 0 ? (
                     <div className="flex gap-1.5">
@@ -2096,20 +2157,69 @@ function CustoObraApp({ usuario }) {
                       <option value="__nova__">+ Cadastrar nova distribuidora</option>
                     </select>
                   )}
+                  <p className="text-xs text-stone-400 mt-1">
+                    Escolhida uma vez só — vale para todos os boletos da nota.
+                  </p>
                 </div>
-                <div className="w-full sm:w-36">
-                  <label className="text-xs text-stone-500 block mb-1">Valor (R$)</label>
-                  <input value={ctValor} onChange={(e) => setCtValor(e.target.value)} placeholder="0,00" inputMode="decimal"
-                    className="eco-input" />
+
+                <div className="space-y-2 max-w-xl">
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 flex-shrink-0" />
+                    <span className="flex-1 min-w-0 text-xs text-stone-500">Valor do boleto (R$)</span>
+                    <span className="w-36 sm:w-44 flex-shrink-0 text-xs text-stone-500">Vencimento</span>
+                    <span className="w-8 flex-shrink-0" />
+                  </div>
+
+                  {ctBoletos.map((b, i) => (
+                    <div key={b.id} className="flex items-center gap-2">
+                      <span className="w-4 flex-shrink-0 text-xs text-stone-400 text-right tabular-nums">{i + 1}</span>
+                      <input
+                        value={b.valor}
+                        onChange={(e) => alterarBoleto(b.id, { valor: e.target.value })}
+                        placeholder="0,00"
+                        inputMode="decimal"
+                        aria-label={`Valor do boleto ${i + 1}`}
+                        className="eco-input flex-1 min-w-0"
+                      />
+                      <input
+                        type="date"
+                        value={b.vencimento}
+                        onChange={(e) => alterarBoleto(b.id, { vencimento: e.target.value })}
+                        aria-label={`Vencimento do boleto ${i + 1}`}
+                        className="eco-input w-36 sm:w-44 flex-shrink-0"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => tirarBoleto(b.id)}
+                        disabled={ctBoletos.length === 1}
+                        aria-label={`Tirar o boleto ${i + 1}`}
+                        className="eco-icon-btn eco-icon-btn-danger flex-shrink-0 disabled:opacity-0 disabled:pointer-events-none"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+
+                  <button type="button" onClick={adicionarBoleto} className="eco-btn-secondary eco-btn-sm">
+                    <Plus size={14} /> Mais um boleto
+                  </button>
                 </div>
-                <div className="w-full sm:w-44">
-                  <label className="text-xs text-stone-500 block mb-1">Vencimento</label>
-                  <input type="date" value={ctVencimento} onChange={(e) => setCtVencimento(e.target.value)}
-                    className="eco-input" />
+
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-stone-100 pt-3">
+                  <p className="text-sm text-stone-500">
+                    {quantos === 0 ? (
+                      'Preencha o valor de cada boleto da nota.'
+                    ) : (
+                      <>
+                        {quantos} {quantos === 1 ? 'boleto' : 'boletos'} ·{' '}
+                        <span className="font-medium text-stone-800">{formatMoney(totalDaNota)}</span>
+                      </>
+                    )}
+                  </p>
+                  <button type="button" onClick={aoCriarConta} className="eco-btn-primary w-full sm:w-auto">
+                    <Plus size={15} /> {quantos > 1 ? `Registrar ${quantos} boletos` : 'Registrar'}
+                  </button>
                 </div>
-                <button type="button" onClick={aoCriarConta} className="eco-btn-primary w-full sm:w-auto">
-                  <Plus size={15} /> Registrar
-                </button>
               </div>
 
               {contas.length === 0 ? (
@@ -2148,7 +2258,8 @@ function CustoObraApp({ usuario }) {
                   );
                 })
               )}
-              </>)}
+              </>);
+              })()}
             </div>
           );
         })()}

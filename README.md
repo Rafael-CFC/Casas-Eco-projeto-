@@ -144,6 +144,28 @@ assinaturas) e **Copiar para WhatsApp** (cola o extrato como texto).
 
 Tudo isso entra no backup normal do sistema (botão de backup em Relatórios).
 
+### Contas a pagar — a nota que veio com vários boletos
+
+Nota fiscal de distribuidora quase nunca vem com um boleto só. Na aba **Contas >
+Registrar** o formulário é o da **nota inteira**:
+
+1. **Escolha a distribuidora uma vez só**, lá em cima. Ela vale para todos os
+   boletos daquela nota — não precisa repetir a cada boleto.
+2. **Preencha o valor e o vencimento do primeiro boleto.**
+3. Clique em **"+ Mais um boleto"** para cada boleto que veio na nota. A linha nova
+   já vem com o mesmo valor da anterior e o vencimento 30 dias depois (é o
+   30/60/90 de sempre) — se o seu for diferente, é só corrigir na hora.
+4. Embaixo aparece a conferência: **quantos boletos e o total da nota**. Confira com
+   o papel na mão e clique em **"Registrar 3 boletos"**.
+
+Deu para adicionar uma linha a mais sem querer? Ou ela fica em branco (linha em
+branco é ignorada), ou clique no **×** do lado dela.
+
+Depois de registrar, cada boleto vira **uma conta separada** na lista de baixo, com
+seu próprio vencimento — some, marque como paga e apague um por um, como sempre. A
+distribuidora continua escolhida, porque quase sempre vem outra nota da mesma logo
+em seguida.
+
 ## E se eu precisar mexer em algo depois?
 
 Sempre que eu (Claude) fizer uma atualização no software, vou te mandar os arquivos atualizados aqui no chat. Você só precisa:
