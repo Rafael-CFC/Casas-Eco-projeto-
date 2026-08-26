@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft, FileDown, AlertTriangle, Pencil, Check, X, Wand2, FileText, Eye,
+  ArrowLeft, FileDown, AlertTriangle, Pencil, Check, X, Wand2, FileText, Eye, Plus,
 } from 'lucide-react';
 import { formatMoney, parsePrecoBR, todayISO } from '../domain';
 import { valorPorExtenso } from './numeroPorExtenso';
 import {
   totalParcelas, diferencaParcelas, distribuirValorIgualmente, validarContrato,
   congelarContrato, blocosContratoResolvidos, blocosMemorialResolvidos,
-  montarValoresMarcadores, dataPorExtenso,
+  montarValoresMarcadores, dataPorExtenso, novaParcela, reordenarParcelas,
 } from './contratosStore';
 import { gerarPdfContrato, gerarPdfMemorial, gerarPdfContratoEMemorial } from './gerarPdfContrato';
 import { partesDoParagrafo, semMarcacao } from './textoRico';
@@ -47,6 +47,26 @@ export default function NovoContrato({
   }
   function distribuir() {
     setContrato((c) => ({ ...c, parcelas: distribuirValorIgualmente(c.valorTotal, c.parcelas), atualizadoEm: todayISO() }));
+  }
+  // O contrato nasce com as 7 etapas de sempre, mas obra nenhuma é igual à
+  // outra: dá para acrescentar quantas parcelas a negociação pedir. A nova
+  // entra no fim, sem valor — o "Dividir igualmente" já reparte o total
+  // entre todas de novo, se for o caso.
+  function adicionarParcela() {
+    setContrato((c) => ({
+      ...c,
+      parcelas: reordenarParcelas([...c.parcelas, novaParcela(c.parcelas.length + 1)]),
+      atualizadoEm: todayISO(),
+    }));
+  }
+  // Tirar a última não faz sentido: todo contrato tem pelo menos uma
+  // parcela. As de baixo são renumeradas na hora.
+  function tirarParcela(id) {
+    setContrato((c) => (c.parcelas.length <= 1 ? c : {
+      ...c,
+      parcelas: reordenarParcelas(c.parcelas.filter((p) => p.id !== id)),
+      atualizadoEm: todayISO(),
+    }));
   }
   function usarClienteExistente(clienteId) {
     const cli = clientes.find((c) => c.id === clienteId);
@@ -171,7 +191,9 @@ export default function NovoContrato({
         </div>
 
         <div className="flex items-center justify-between">
-          <span className="text-xs text-stone-500">7 parcelas</span>
+          <span className="text-xs text-stone-500">
+            {contrato.parcelas.length} {contrato.parcelas.length === 1 ? 'parcela' : 'parcelas'}
+          </span>
           {contrato.valorTotal > 0 && (
             <button onClick={distribuir} className="eco-btn-secondary eco-btn-xs">
               <Wand2 size={12} /> Dividir igualmente
@@ -201,8 +223,20 @@ export default function NovoContrato({
                 placeholder="0,00"
                 className="eco-input-sm w-24 flex-shrink-0 text-right"
               />
+              <button
+                type="button"
+                onClick={() => tirarParcela(p.id)}
+                disabled={contrato.parcelas.length === 1}
+                aria-label={`Tirar a parcela ${p.ordem}`}
+                className="eco-icon-btn eco-icon-btn-danger w-7 h-7 flex-shrink-0 disabled:opacity-0 disabled:pointer-events-none"
+              >
+                <X size={13} />
+              </button>
             </div>
           ))}
+          <button type="button" onClick={adicionarParcela} className="eco-btn-secondary eco-btn-xs">
+            <Plus size={12} /> Adicionar parcela
+          </button>
         </div>
 
         <div className={`rounded-lg p-2.5 text-xs ${diff !== 0 ? 'bg-amber-50 border border-amber-200 text-amber-800' : 'bg-green-50 border border-green-200 text-green-800'}`}>
