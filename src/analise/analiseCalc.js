@@ -111,7 +111,7 @@ function mesAnterior(mesISO) {
 }
 
 export function resumoDoMes(dados, hojeISO) {
-  const { lancamentos = [], obras = [], contas = [], boletos = [], CATEGORIAS = {} } = dados;
+  const { lancamentos = [], obras = [], contas = [], CATEGORIAS = {} } = dados;
   const mes = hojeISO.slice(0, 7);
   const anterior = mesAnterior(mes);
 
@@ -173,7 +173,6 @@ export function resumoDoMes(dados, hojeISO) {
     .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
 
   const contasPendentes = contas.filter((c) => c.status !== 'pago');
-  const boletosPendentes = boletos.filter((b) => b.status === 'pendente');
 
   return {
     mes, anterior,
@@ -183,7 +182,6 @@ export function resumoDoMes(dados, hojeISO) {
     topObra, topCategoria, topFornecedor,
     variacoesMateriais: variacoes.slice(0, 5),
     contasPendentes: { quantidade: contasPendentes.length, valor: contasPendentes.reduce((a, c) => a + (Number(c.valor) || 0), 0) },
-    boletosPendentes: { quantidade: boletosPendentes.length, valor: boletosPendentes.reduce((a, b) => a + (Number(b.valor) || 0), 0) },
   };
 }
 
@@ -196,7 +194,7 @@ export function buscaGlobal(termo, dados) {
   if (t.length < 2) return [];
   const {
     obras = [], clientes = [], produtos = [], fornecedores = [],
-    boletos = [], contratos = [], lancamentos = [], contas = [],
+    contratos = [], lancamentos = [], contas = [],
     montadores = [], crediario = [],
   } = dados;
 
@@ -218,11 +216,6 @@ export function buscaGlobal(termo, dados) {
   push('Clientes', clientes.filter((c) => bate(c.nome, c.cpfCnpj, c.telefone, c.email, c.cidade)).map((c) => ({
     id: c.id, titulo: c.nome, subtitulo: [c.cpfCnpj, c.cidade, c.telefone].filter(Boolean).join(' · '),
     destino: { view: 'contratos' },
-  })));
-
-  push('Boletos', boletos.filter((b) => bate(b.beneficiario, b.cnpjCpfBeneficiario, b.numeroDocumento, b.descricao)).map((b) => ({
-    id: b.id, titulo: b.beneficiario, subtitulo: `${b.categoria} · vence ${b.vencimento} · ${b.status}`,
-    destino: { view: 'boletos' },
   })));
 
   push('Fornecedores', fornecedores.filter((f) => bate(f.nome, f.cnpj, f.telefone, f.email, f.cidade, f.categoria)).map((f) => ({
@@ -251,8 +244,9 @@ export function buscaGlobal(termo, dados) {
     };
   }));
 
-  push('Contas a pagar', contas.filter((c) => bate(c.descricao, c.fornecedorNome)).map((c) => ({
-    id: c.id, titulo: c.descricao, subtitulo: `vence ${c.vencimento} · ${c.status}`,
+  push('Contas a pagar', contas.filter((c) => bate(c.fornecedorNome, c.descricao)).map((c) => ({
+    id: c.id, titulo: c.fornecedorNome || c.descricao || 'Conta',
+    subtitulo: `vence ${c.vencimento} · ${c.status}`,
     destino: { view: 'contas' },
   })));
 

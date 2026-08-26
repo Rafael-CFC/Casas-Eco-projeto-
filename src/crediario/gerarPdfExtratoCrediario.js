@@ -1,5 +1,5 @@
 // Extrato do crediário em PDF — mesmo estilo visual dos outros documentos
-// do sistema (src/boletos/gerarRelatorioBoletos.js).
+// do sistema (src/obra/gerarPdfResumoObra.js).
 //
 // O documento é deliberadamente carimbado como ANOTAÇÃO INTERNA, SEM VALOR
 // FISCAL: ele serve para o montador conferir o que pegou e para o acerto

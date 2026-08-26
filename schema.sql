@@ -30,7 +30,7 @@ create table if not exists public.app_data (
 --    'dono'        = enxerga e mexe em tudo
 --    'funcionario' = só a tela de orçamento de madeiras, que nem toca no
 --                    banco. Ele não consegue ler obras, contratos,
---                    boletos nem lançamentos — nem pelo site, nem por
+--                    contas nem lançamentos — nem pelo site, nem por
 --                    fora dele.
 --
 --    Conta sem linha aqui vale como 'funcionario'. É de propósito: uma

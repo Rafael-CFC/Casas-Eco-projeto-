@@ -8,7 +8,7 @@ import { sair } from '../auth/authStore';
 // Tela do funcionário: só a tabela de preços das madeiras e o orçamento.
 //
 // Não é só a barra de navegação que some — a conta dele não tem permissão
-// no banco para ler obras, contratos, boletos ou lançamentos. Mesmo que
+// no banco para ler obras, contratos, contas ou lançamentos. Mesmo que
 // alguém tente pedir esses dados por fora do site, o banco não entrega.
 // A tabela de preços de venda vem do próprio código do site, então esta
 // tela funciona sem tocar no banco.
