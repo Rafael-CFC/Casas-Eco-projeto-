@@ -59,6 +59,25 @@ Siga na ordem. Não precisa saber programar nem usar linha de comando — tudo �
 
 ## Como usar as telas principais
 
+### Modo escuro
+
+O site abre no **modo escuro**. Para trocar, use o seletor **Escuro / Claro / Automático**:
+
+- no computador, no rodapé da barra lateral (embaixo, perto de "Senha" e "Sair");
+- no celular, dentro do botão **Mais**;
+- na tela do funcionário (só orçamento de madeiras), no botãozinho de lua/sol lá em cima.
+
+**Automático** segue o ajuste do próprio aparelho: se o celular entra no modo noturno à
+noite, o site acompanha sozinho.
+
+A escolha fica guardada no aparelho, não na conta — dá para deixar o celular escuro e o
+computador claro, e cada pessoa da equipe escolhe o seu. Os PDFs (orçamento, contrato,
+extrato do crediário, relatórios) continuam sempre claros, que é como se imprime.
+
+Para quem for mexer no código: as cores de todo o sistema saem das variáveis no começo do
+`src/index.css` (`:root` é o tema claro, `.dark` é o escuro). Mudar a cara do sistema é
+mexer ali, num lugar só.
+
 ### Madeiras (antigo "Vender")
 
 O botão que se chamava **Vender** agora se chama **Madeiras** — a tela é a tabela

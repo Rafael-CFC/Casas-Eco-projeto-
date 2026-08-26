@@ -5,6 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/jpeg" href="/logo-casas-eco.jpeg" />
     <title>Casas Eco — Custo de Obra</title>
+    <meta name="theme-color" content="#12100f" />
+    <!-- Põe o tema salvo antes da página aparecer. Sem isso a tela pisca
+         branca por um instante antes de ficar escura. -->
+    <script>
+      (function () {
+        try {
+          var salvo = localStorage.getItem('casaseco-tema');
+          var tema = (salvo === 'claro' || salvo === 'escuro' || salvo === 'sistema') ? salvo : 'escuro';
+          var escuro = tema === 'escuro'
+            || (tema === 'sistema' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (escuro) document.documentElement.classList.add('dark');
+          document.documentElement.style.colorScheme = escuro ? 'dark' : 'light';
+        } catch (e) {
+          document.documentElement.classList.add('dark');
+          document.documentElement.style.colorScheme = 'dark';
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

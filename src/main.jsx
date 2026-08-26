@@ -8,6 +8,12 @@ import Login from './Login.jsx';
 import AppVenda from './venda/AppVenda.jsx';
 import TrocarSenha from './auth/TrocarSenha.jsx';
 import { aoMudarSessao, papelDoUsuario, sessaoAtual } from './auth/authStore';
+import { aplicarTema, temaAtivo } from './ui/temaStore';
+
+// O tema já entra aplicado pelo trecho no index.html (evita a tela piscar
+// branca antes de carregar). Aqui é só a garantia de que ele continua
+// certo se aquele trecho não tiver rodado.
+aplicarTema(temaAtivo());
 
 function Carregando() {
   return (
