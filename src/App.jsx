@@ -188,7 +188,7 @@ function CustoObraApp({ usuario }) {
         return;
       }
       try {
-        const [o, p, l, et, fo, co, bo, ct, cl, cf, mt, cr] = await Promise.all([
+        const [o, p, l, et, fo, co, ct, cl, cf, mt, cr] = await Promise.all([
           window.storage.get('obras', false).catch(() => null),
           window.storage.get('produtos', false).catch(() => null),
           window.storage.get('lancamentos', false).catch(() => null),
