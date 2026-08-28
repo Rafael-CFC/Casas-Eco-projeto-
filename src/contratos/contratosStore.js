@@ -29,7 +29,10 @@ export function clienteVazio() {
 }
 
 export function novaParcela(ordem, etapa = '', valor = 0) {
-  return { id: crypto.randomUUID(), ordem, etapa, valor: Number(valor) || 0, vencimento: '', status: 'pendente', dataPagamento: null, observacao: '' };
+  return {
+    id: crypto.randomUUID(), ordem, etapa, valor: Number(valor) || 0, vencimento: '',
+    status: 'pendente', dataPagamento: null, observacao: '', pagamentos: [],
+  };
 }
 
 // Contrato novo já nasce com as 7 etapas de pagamento que a empresa usa.
@@ -200,7 +203,8 @@ export function duplicarContrato(contrato) {
     obraId: null,
     dataContrato: hoje,
     parcelas: (contrato.parcelas || []).map((p) => ({
-      ...p, id: crypto.randomUUID(), vencimento: '', status: 'pendente', dataPagamento: null, observacao: '',
+      ...p, id: crypto.randomUUID(), vencimento: '', status: 'pendente', dataPagamento: null,
+      observacao: '', pagamentos: [],
     })),
     // volta a usar o modelo ATUAL
     contratadaSnapshot: null,
@@ -216,18 +220,127 @@ export function duplicarContrato(contrato) {
 // ---- parcelas como cronograma financeiro (valores A RECEBER do cliente) ----
 // Parcelas de contrato são RECEITA (dinheiro que entra); lançamentos,
 // as contas a pagar são CUSTO. Por isso nunca são somadas ao custo da obra.
+//
+// Uma parcela pode ser recebida em pedaços (o cliente paga metade agora e o
+// resto depois). Cada recebimento vira uma entrada em `parcela.pagamentos`
+// — { id, data, valor, observacao } — e é dela que sai tudo: quanto já foi
+// pago, quanto falta e a situação da parcela. Os campos antigos `status` e
+// `dataPagamento` continuam sendo gravados, derivados dos pagamentos, porque
+// outras telas e exportações ainda os leem.
+//
+// Compatibilidade: parcela antiga marcada como 'pago' e sem lista de
+// pagamentos vale como um recebimento do valor cheio, na data que estava
+// gravada. Nada precisa ser migrado no banco.
+const CENTAVO = 0.005;
+
+function arredondar(v) {
+  return Math.round((Number(v) || 0) * 100) / 100;
+}
+
+export function pagamentosDaParcela(parcela) {
+  if (!parcela) return [];
+  if (Array.isArray(parcela.pagamentos)) return parcela.pagamentos;
+  if (parcela.status === 'pago') {
+    return [{
+      id: `legado-${parcela.id}`,
+      data: parcela.dataPagamento || null,
+      valor: Number(parcela.valor) || 0,
+      observacao: '',
+      legado: true,
+    }];
+  }
+  return [];
+}
+
+export function valorPagoParcela(parcela) {
+  return arredondar(pagamentosDaParcela(parcela).reduce((a, p) => a + (Number(p.valor) || 0), 0));
+}
+
+// O que ainda falta receber. Nunca negativo: se o cliente pagou a mais, o
+// excedente aparece em `valorPago`, não como saldo negativo.
+export function saldoParcela(parcela) {
+  return Math.max(0, arredondar((Number(parcela?.valor) || 0) - valorPagoParcela(parcela)));
+}
+
+// Parcela sem valor definido (contrato ainda em rascunho) nunca conta como
+// quitada — senão o cronograma inteiro nasceria "recebido".
+export function parcelaQuitada(parcela) {
+  const valor = Number(parcela?.valor) || 0;
+  return valor > 0 && valorPagoParcela(parcela) + CENTAVO >= valor;
+}
+
+export function statusParcela(parcela) {
+  if (parcelaQuitada(parcela)) return 'pago';
+  return valorPagoParcela(parcela) > 0 ? 'parcial' : 'pendente';
+}
+
+export const STATUS_PARCELA = {
+  pendente: { label: 'A RECEBER', cls: 'bg-stone-100 text-stone-600 border-stone-200' },
+  parcial: { label: 'PARCIAL', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+  pago: { label: 'RECEBIDA', cls: 'bg-green-50 text-green-700 border-green-200' },
+};
+
+export function parcelaVencida(parcela, hojeISO = todayISO()) {
+  return saldoParcela(parcela) > 0 && !!parcela?.vencimento && parcela.vencimento < hojeISO;
+}
+
+// Devolve SÓ os campos que mudam na parcela — feito para o
+// `onAtualizarParcela(contratoId, parcelaId, campos)` do App.
+function camposDosPagamentos(parcela, pagamentos) {
+  const ordenados = [...pagamentos].sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')));
+  const atualizada = { ...parcela, pagamentos: ordenados };
+  const status = statusParcela(atualizada);
+  const ultimo = ordenados.length ? ordenados[ordenados.length - 1].data || null : null;
+  return {
+    pagamentos: ordenados,
+    status,
+    // `dataPagamento` sempre significou "quitada em"; num recebimento
+    // parcial a parcela ainda não foi quitada, então continua vazia.
+    dataPagamento: status === 'pago' ? ultimo : null,
+  };
+}
+
+export function registrarPagamento(parcela, { valor, data, observacao } = {}) {
+  const novo = {
+    id: crypto.randomUUID(),
+    data: data || todayISO(),
+    valor: arredondar(valor),
+    observacao: (observacao || '').trim(),
+  };
+  return camposDosPagamentos(parcela, [...pagamentosDaParcela(parcela), novo]);
+}
+
+export function removerPagamento(parcela, pagamentoId) {
+  return camposDosPagamentos(parcela, pagamentosDaParcela(parcela).filter((p) => p.id !== pagamentoId));
+}
+
+// Atalho do botão "Recebida": lança de uma vez tudo o que ainda falta.
+export function quitarParcela(parcela, data = todayISO()) {
+  const falta = saldoParcela(parcela);
+  if (falta <= 0) return camposDosPagamentos(parcela, pagamentosDaParcela(parcela));
+  return registrarPagamento(parcela, { valor: falta, data });
+}
+
+export function limparPagamentos(parcela) {
+  return camposDosPagamentos(parcela, []);
+}
+
 export function resumoParcelas(parcelas, hojeISO = todayISO()) {
   const lista = parcelas || [];
-  const recebido = lista.filter((p) => p.status === 'pago').reduce((a, p) => a + (Number(p.valor) || 0), 0);
-  const aReceber = lista.filter((p) => p.status !== 'pago').reduce((a, p) => a + (Number(p.valor) || 0), 0);
-  const vencidas = lista.filter((p) => p.status !== 'pago' && p.vencimento && p.vencimento < hojeISO);
+  const total = arredondar(lista.reduce((a, p) => a + (Number(p.valor) || 0), 0));
+  const recebido = arredondar(lista.reduce((a, p) => a + valorPagoParcela(p), 0));
+  const aReceber = arredondar(lista.reduce((a, p) => a + saldoParcela(p), 0));
+  const vencidas = lista.filter((p) => parcelaVencida(p, hojeISO));
   return {
-    total: recebido + aReceber,
+    total,
     recebido,
     aReceber,
     vencidas: vencidas.length,
-    valorVencido: vencidas.reduce((a, p) => a + (Number(p.valor) || 0), 0),
+    valorVencido: arredondar(vencidas.reduce((a, p) => a + saldoParcela(p), 0)),
     quantidade: lista.length,
+    quitadas: lista.filter((p) => statusParcela(p) === 'pago').length,
+    parciais: lista.filter((p) => statusParcela(p) === 'parcial').length,
+    pctRecebido: total > 0 ? Math.min(100, (recebido / total) * 100) : 0,
   };
 }
 

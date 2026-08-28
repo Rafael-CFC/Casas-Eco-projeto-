@@ -296,7 +296,7 @@ export async function gerarPdfResumoObra(obra, resumo) {
   linhaChaveValor(ctx, 'Nome', obra.nome);
   if (obra.cliente) linhaChaveValor(ctx, 'Cliente', obra.cliente);
   if (obra.endereco) linhaChaveValor(ctx, 'Endereço', obra.endereco);
-  linhaChaveValor(ctx, 'Data de início', formatDateBR(resumo.dataInicio));
+  linhaChaveValor(ctx, 'Data de início', `${formatDateBR(resumo.dataInicio)}${resumo.inicioRegistrado ? '' : ' (data de cadastro)'}`);
   linhaChaveValor(ctx, 'Data de finalização', obra.finalizadaEm ? formatDateBR(obra.finalizadaEm.slice(0, 10)) : '—');
   linhaChaveValor(ctx, 'Duração da obra', resumo.duracaoDias ? `${resumo.duracaoDias} dias` : '—');
   linhaChaveValor(ctx, 'Status', 'CONCLUÍDA');

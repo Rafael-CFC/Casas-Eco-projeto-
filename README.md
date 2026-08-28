@@ -144,6 +144,56 @@ assinaturas) e **Copiar para WhatsApp** (cola o extrato como texto).
 
 Tudo isso entra no backup normal do sistema (botão de backup em Relatórios).
 
+### Iniciar obra — o contrato assina num dia, a obra começa em outro
+
+Cadastrar a obra (ou gerar o contrato) **não** é começar a obra. Por isso a obra nasce
+como **AGUARDANDO INÍCIO** e não conta dia nenhum ainda.
+
+No dia em que o pessoal entrar na obra de verdade, abra a obra (ou o cartão dela no
+Início) e clique em **Iniciar obra**. Informe a data em que a obra começou — pode ser
+hoje, um dia atrás ou uma data já marcada para a semana que vem — e, se quiser, uma
+observação. A partir daí a obra passa a mostrar **"X dias de obra"** em todo lugar: no
+cartão do Início, no cabeçalho da obra, no resumo final e no PDF.
+
+- Errou a data? **Corrigir data de início**, dentro da obra, ajusta quando quiser.
+- Marcou por engano? No mesmo lugar tem **Desfazer início da obra** — a obra volta
+  para "aguardando início" e nenhum lançamento é apagado.
+- Os filtros do Início agora são **Todas / Aguardando início / Em andamento /
+  Concluídas**, cada um com o número de obras do lado. As obras que já existiam antes
+  desta novidade aparecem em "Aguardando início" até você informar a data real delas —
+  nada foi apagado e o sistema não inventa uma data que ninguém confirmou.
+
+A duração no resumo final e no PDF passa a contar do início real. Quando a obra nunca
+teve início registrado, aparece a data do cadastro com a marca `(cadastro)`, para
+ninguém confundir uma coisa com a outra.
+
+### Parcelas do contrato — quanto o cliente já pagou e quanto falta
+
+Dentro do contrato, em **Parcelas a receber**, cada parcela mostra o que já foi pago e
+o que ainda falta. Tem dois jeitos de lançar:
+
+- **Recebeu tudo de uma vez:** clique no ✓ verde na linha da parcela. Ela fica quitada
+  na hora, com a data de hoje.
+- **Recebeu só uma parte:** clique em **Receber**. Abre a janela do recebimento, já com
+  o valor que falta preenchido — troque pelo valor que o cliente pagou de verdade,
+  escolha a data e, se ajudar, escreva de onde veio ("PIX", "entrada em dinheiro").
+
+A parcela recebida pela metade fica com a tarja **PARCIAL** e uma barrinha mostrando o
+quanto já entrou. Em cima da lista ficam os três números que interessam: **Total**,
+**Recebido** e **Falta receber**, mais a porcentagem recebida e quantas parcelas já
+foram quitadas.
+
+Lançou errado? Abra a parcela em **Receber** (ou **Recebimentos**, se já estiver
+quitada) e apague o recebimento na lixeirinha — o valor volta a contar como a receber.
+
+Esses números aparecem também na tela da obra (bloco "Contrato e recebimentos"), na
+lista de contratos e na exportação **parcelas-a-receber.csv**, que agora traz as
+colunas *Valor pago* e *Falta receber*. Os avisos de parcela em atraso passam a somar
+só o que falta: se o cliente já pagou metade, só a outra metade está atrasada.
+
+Quem já tinha parcelas marcadas como recebidas antes desta novidade não perde nada —
+elas continuam recebidas, valendo pelo valor cheio na data que estava gravada.
+
 ### Contas a pagar — a nota que veio com vários boletos
 
 Nota fiscal de distribuidora quase nunca vem com um boleto só. Na aba **Contas >

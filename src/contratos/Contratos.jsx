@@ -6,10 +6,12 @@ import {
 import { formatMoney, formatDateBR, todayISO } from '../domain';
 import {
   STATUS_CONTRATO, novoContratoRascunho, duplicarContrato, congelarContrato,
-  resumoParcelas, totalParcelas,
+  resumoParcelas, totalParcelas, valorPagoParcela, saldoParcela, statusParcela, parcelaVencida,
+  registrarPagamento, removerPagamento, quitarParcela,
 } from './contratosStore';
 import { gerarPdfContrato, gerarPdfMemorial, gerarPdfContratoEMemorial } from './gerarPdfContrato';
 import NovoContrato from './NovoContrato';
+import ModalPagamentoParcela from './ModalPagamentoParcela';
 
 export default function Contratos({
   contratos, config, obras, clientes,
@@ -20,6 +22,8 @@ export default function Contratos({
   const [contratoAtivo, setContratoAtivo] = useState(null);
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('todos');
+  // parcela aberta no modal de recebimento: { contratoId, parcelaId }
+  const [parcelaEmPagamento, setParcelaEmPagamento] = useState(null);
 
   const rascunhos = useMemo(() => contratos.filter((c) => c.status === 'rascunho'), [contratos]);
 
@@ -101,6 +105,38 @@ export default function Contratos({
     } catch (e) {
       onErro('Não foi possível gerar o PDF.');
     }
+  }
+
+  // ---- recebimentos das parcelas ----
+  // O modal guarda só os ids: assim ele sempre lê a parcela recém-salva da
+  // lista de contratos, e não uma cópia velha presa no estado.
+  const alvoPagamento = (() => {
+    if (!parcelaEmPagamento) return null;
+    const contrato = contratos.find((x) => x.id === parcelaEmPagamento.contratoId);
+    const parcela = (contrato?.parcelas || []).find((p) => p.id === parcelaEmPagamento.parcelaId);
+    return parcela ? { contrato, parcela } : null;
+  })();
+
+  async function lancarPagamento({ valor, data, observacao }) {
+    if (!alvoPagamento) return;
+    const { contrato, parcela } = alvoPagamento;
+    const ok = await onAtualizarParcela(contrato.id, parcela.id, registrarPagamento(parcela, { valor, data, observacao }));
+    if (ok) onAviso(`Recebimento de ${formatMoney(valor)} lançado na parcela ${parcela.ordem}.`);
+  }
+
+  function apagarPagamento(pagamentoId) {
+    if (!alvoPagamento) return;
+    const { contrato, parcela } = alvoPagamento;
+    onConfirmar('Apagar este recebimento? O valor volta a contar como a receber.', async () => {
+      const ok = await onAtualizarParcela(contrato.id, parcela.id, removerPagamento(parcela, pagamentoId));
+      if (ok) onAviso('Recebimento apagado.');
+    });
+  }
+
+  async function quitarDeUmaVez(contrato, parcela) {
+    const falta = saldoParcela(parcela);
+    const ok = await onAtualizarParcela(contrato.id, parcela.id, quitarParcela(parcela));
+    if (ok) onAviso(`Parcela ${parcela.ordem} recebida (${formatMoney(falta)}).`);
   }
 
   // ---- EDITOR (assistente) ----
@@ -187,38 +223,72 @@ export default function Contratos({
                 <p className="text-[11px] text-green-700/70">Recebido</p>
                 <p className="text-sm font-semibold text-green-800">{formatMoney(resumo.recebido)}</p>
               </div>
-              <div className="bg-amber-50 rounded-lg p-2">
-                <p className="text-[11px] text-amber-700/70">A receber</p>
-                <p className="text-sm font-semibold text-amber-700">{formatMoney(resumo.aReceber)}</p>
+              <div className={`rounded-lg p-2 ${resumo.vencidas > 0 ? 'bg-red-50' : 'bg-amber-50'}`}>
+                <p className={`text-[11px] ${resumo.vencidas > 0 ? 'text-red-700/70' : 'text-amber-700/70'}`}>
+                  Falta receber{resumo.vencidas > 0 ? ` (${resumo.vencidas} atrasada${resumo.vencidas > 1 ? 's' : ''})` : ''}
+                </p>
+                <p className={`text-sm font-semibold ${resumo.vencidas > 0 ? 'text-red-700' : 'text-amber-700'}`}>
+                  {formatMoney(resumo.aReceber)}
+                </p>
               </div>
+            </div>
+            <div className="mb-3">
+              <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                <div className="h-full bg-green-500" style={{ width: `${resumo.pctRecebido}%` }}></div>
+              </div>
+              <p className="text-xs text-stone-400 mt-1">
+                {resumo.pctRecebido.toFixed(0)}% recebido · {resumo.quitadas} de {resumo.quantidade} parcelas quitadas
+                {resumo.parciais > 0 ? ` · ${resumo.parciais} parcial${resumo.parciais > 1 ? 'is' : ''}` : ''}
+              </p>
             </div>
             <div className="space-y-1.5">
               {c.parcelas.map((p) => {
-                const vencida = p.status !== 'pago' && p.vencimento && p.vencimento < todayISO();
+                const situacao = statusParcela(p);
+                const pago = valorPagoParcela(p);
+                const falta = saldoParcela(p);
+                const vencida = parcelaVencida(p, todayISO());
                 return (
-                  <div key={p.id} className="flex items-center gap-2 bg-stone-50 rounded-lg p-2">
-                    <span className={`w-6 h-6 rounded-full text-xs font-semibold flex items-center justify-center flex-shrink-0 ${
-                      p.status === 'pago' ? 'bg-green-600 text-white' : vencida ? 'bg-red-500 text-white' : 'bg-stone-300 text-stone-700'
-                    }`}>{p.ordem}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-stone-800 truncate">{p.etapa || 'Parcela'}</p>
-                      <p className="text-xs text-stone-400">
-                        {p.vencimento ? `vence ${formatDateBR(p.vencimento)}` : 'sem vencimento'}
-                        {p.status === 'pago' && p.dataPagamento ? ` · recebido em ${formatDateBR(p.dataPagamento)}` : ''}
-                        {vencida ? ' · atrasada' : ''}
-                      </p>
+                  <div key={p.id} className="bg-stone-50 rounded-lg p-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-6 h-6 rounded-full text-xs font-semibold flex items-center justify-center flex-shrink-0 ${
+                        situacao === 'pago' ? 'bg-green-600 text-white'
+                          : vencida ? 'bg-red-500 text-white'
+                            : situacao === 'parcial' ? 'bg-amber-500 text-white' : 'bg-stone-300 text-stone-700'
+                      }`}>{p.ordem}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-stone-800 truncate">{p.etapa || 'Parcela'}</p>
+                        <p className="text-xs text-stone-400">
+                          {p.vencimento ? `vence ${formatDateBR(p.vencimento)}` : 'sem vencimento'}
+                          {situacao === 'pago' && p.dataPagamento ? ` · recebida em ${formatDateBR(p.dataPagamento)}` : ''}
+                          {situacao === 'parcial' ? ` · pago ${formatMoney(pago)}, falta ${formatMoney(falta)}` : ''}
+                          {vencida ? ' · atrasada' : ''}
+                        </p>
+                      </div>
+                      <p className="text-sm font-semibold text-stone-800 flex-shrink-0">{formatMoney(p.valor)}</p>
+                      {falta > 0 && (
+                        <button
+                          onClick={() => quitarDeUmaVez(c, p)}
+                          aria-label={`Marcar a parcela ${p.ordem} como recebida por inteiro`}
+                          title="Recebida por inteiro"
+                          className="eco-icon-btn w-7 h-7 flex-shrink-0 text-green-700"
+                        >
+                          <CheckCircle2 size={15} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setParcelaEmPagamento({ contratoId: c.id, parcelaId: p.id })}
+                        className={`text-xs px-2 py-1 rounded-lg border transition-colors flex-shrink-0 ${
+                          falta > 0 ? 'border-green-300 text-green-700 hover:bg-green-50' : 'border-stone-300 text-stone-500'
+                        }`}
+                      >
+                        {falta > 0 ? 'Receber' : 'Recebimentos'}
+                      </button>
                     </div>
-                    <p className="text-sm font-semibold text-stone-800 flex-shrink-0">{formatMoney(p.valor)}</p>
-                    <button
-                      onClick={() => onAtualizarParcela(c.id, p.id, p.status === 'pago'
-                        ? { status: 'pendente', dataPagamento: null }
-                        : { status: 'pago', dataPagamento: todayISO() })}
-                      className={`text-xs px-2 py-1 rounded-lg border transition-colors flex-shrink-0 ${
-                        p.status === 'pago' ? 'border-stone-300 text-stone-500' : 'border-green-300 text-green-700 hover:bg-green-50'
-                      }`}
-                    >
-                      {p.status === 'pago' ? 'Reabrir' : 'Recebida'}
-                    </button>
+                    {situacao === 'parcial' && (
+                      <div className="w-full h-1 bg-stone-200 rounded-full overflow-hidden mt-1.5">
+                        <div className="h-full bg-amber-500" style={{ width: `${Math.min(100, (pago / (Number(p.valor) || 1)) * 100)}%` }}></div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -247,6 +317,19 @@ export default function Contratos({
             <Trash2 size={14} /> Excluir
           </button>
         </div>
+
+        {alvoPagamento && (
+          <ModalPagamentoParcela
+            // remonta a cada lançamento: o campo de valor volta a vir
+            // preenchido com o que ainda falta, em vez de repetir o último
+            // valor digitado.
+            key={`${alvoPagamento.parcela.id}-${valorPagoParcela(alvoPagamento.parcela)}`}
+            parcela={alvoPagamento.parcela}
+            onCancelar={() => setParcelaEmPagamento(null)}
+            onRegistrar={lancarPagamento}
+            onRemover={apagarPagamento}
+          />
+        )}
       </div>
     );
   }
@@ -332,6 +415,7 @@ export default function Contratos({
             const st = STATUS_CONTRATO[c.status] || STATUS_CONTRATO.rascunho;
             const soma = totalParcelas(c.parcelas);
             const divergente = c.valorTotal > 0 && Math.abs(soma - c.valorTotal) > 0.005 && (c.parcelas || []).length > 0;
+            const rec = resumoParcelas(c.parcelas);
             return (
               <button key={c.id} onClick={() => abrirDetalhe(c)} className="w-full text-left p-3.5 hover:bg-stone-50 transition-colors flex items-center gap-3">
                 <div className="min-w-0 flex-1">
@@ -343,6 +427,8 @@ export default function Contratos({
                   <p className="text-xs text-stone-400 mt-0.5 truncate">
                     {c.numero ? `nº ${c.numero} · ` : ''}
                     {(obras.find((o) => o.id === c.obraId) || {}).nome || 'sem obra vinculada'}
+                    {rec.recebido > 0 && ` · recebido ${formatMoney(rec.recebido)} de ${formatMoney(rec.total)}`}
+                    {rec.vencidas > 0 && ` · ${rec.vencidas} atrasada${rec.vencidas > 1 ? 's' : ''}`}
                   </p>
                 </div>
                 <p className="text-sm font-semibold text-stone-800 flex-shrink-0">{formatMoney(c.valorTotal)}</p>

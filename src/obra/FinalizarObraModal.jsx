@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CheckCircle2, X } from 'lucide-react';
 import { formatMoney, formatDateBR, CATEGORIAS } from '../domain';
 import { calcularResumoObra } from './obraResumoCalc';
+import { obraFoiIniciada } from './obraStatus';
 
 export default function FinalizarObraModal({ obra, lancamentos, onCancelar, onConfirmar }) {
   const [observacoes, setObservacoes] = useState(obra.observacoesFinais || '');
@@ -40,8 +41,16 @@ export default function FinalizarObraModal({ obra, lancamentos, onCancelar, onCo
               </div>
             )}
             <div className="flex justify-between gap-2">
-              <span className="text-stone-500">Data de início</span>
-              <span className="text-stone-800">{formatDateBR(obra.criadoEm)}</span>
+              <span className="text-stone-500">Início da obra</span>
+              <span className="text-stone-800 text-right">
+                {obraFoiIniciada(obra)
+                  ? formatDateBR(obra.inicioObraEm)
+                  : `${formatDateBR(obra.criadoEm)} (cadastro — início nunca registrado)`}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2">
+              <span className="text-stone-500">Duração até hoje</span>
+              <span className="text-stone-800">{resumo.duracaoDias ? `${resumo.duracaoDias} dias` : '—'}</span>
             </div>
             <div className="flex justify-between gap-2">
               <span className="text-stone-500">Total gasto</span>
