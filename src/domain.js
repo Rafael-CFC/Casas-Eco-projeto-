@@ -8,6 +8,17 @@ export function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Dias corridos entre duas datas ISO (yyyy-mm-dd), contando o primeiro dia:
+// começou hoje = 1 dia. Devolve 0 ou negativo quando o fim é anterior ao
+// início (ex.: obra com início programado para a semana que vem).
+export function diasCorridos(inicioISO, fimISO) {
+  if (!inicioISO) return null;
+  const inicio = new Date(`${String(inicioISO).slice(0, 10)}T00:00:00`);
+  const fim = new Date(`${String(fimISO || todayISO()).slice(0, 10)}T00:00:00`);
+  if (isNaN(inicio.getTime()) || isNaN(fim.getTime())) return null;
+  return Math.round((fim - inicio) / 86400000) + 1;
+}
+
 export function formatDateBR(iso) {
   if (!iso) return '';
   const [y, m, d] = iso.split('-');

@@ -158,7 +158,10 @@ export default function ResumoFinalObra({ obra, lancamentos, onVoltar }) {
           )}
           <div className="flex justify-between sm:justify-start sm:gap-2">
             <span className="text-stone-500 flex items-center gap-1"><Calendar size={12} /> Data de início</span>
-            <span className="text-stone-800 sm:ml-auto">{formatDateBR(resumo.dataInicio)}</span>
+            <span className="text-stone-800 sm:ml-auto">
+              {formatDateBR(resumo.dataInicio)}
+              {!resumo.inicioRegistrado && <span className="text-stone-400"> (cadastro)</span>}
+            </span>
           </div>
           <div className="flex justify-between sm:justify-start sm:gap-2">
             <span className="text-stone-500 flex items-center gap-1"><Calendar size={12} /> Data de finalização</span>

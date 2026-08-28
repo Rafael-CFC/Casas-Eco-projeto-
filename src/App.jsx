@@ -7,7 +7,7 @@ import {
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
   FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search, NotebookPen, Trees,
-  LogOut, KeyRound, BarChart3,
+  LogOut, KeyRound, BarChart3, PlayCircle, CalendarDays,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit, chaveFornecedor } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
@@ -20,6 +20,10 @@ import { sair } from './auth/authStore';
 import { DashboardSkeleton } from './ui/Skeleton';
 import SeletorTema from './ui/SeletorTema';
 import FinalizarObraModal from './obra/FinalizarObraModal';
+import IniciarObraModal from './obra/IniciarObraModal';
+import {
+  SITUACAO_OBRA, obraEstaConcluida, obraFoiIniciada, situacaoObra, diasDeObra, textoDiasDeObra,
+} from './obra/obraStatus';
 import SucessoFinalizacaoModal from './obra/SucessoFinalizacaoModal';
 import ResumoFinalObra from './obra/ResumoFinalObra';
 import ProdutoSeletor from './produtos/ProdutoSeletor';
@@ -29,7 +33,9 @@ import OrcamentoVenda from './venda/OrcamentoVenda';
 import Contratos from './contratos/Contratos';
 import Configuracoes from './config/Configuracoes';
 import { normalizarConfiguracao, configuracaoVazia } from './config/configStore';
-import { resumoParcelasDaObra, resumoParcelas } from './contratos/contratosStore';
+import {
+  resumoParcelasDaObra, resumoParcelas, valorPagoParcela, saldoParcela, statusParcela, parcelaVencida,
+} from './contratos/contratosStore';
 import Crediario from './crediario/Crediario';
 import { catalogoParaRetirada } from './crediario/crediarioCalc';
 import { CATALOGO_VENDA } from './venda/catalogoVenda';
@@ -177,6 +183,7 @@ function CustoObraApp({ usuario }) {
   const [novaObraCliente, setNovaObraCliente] = useState('');
   const [novaObraEndereco, setNovaObraEndereco] = useState('');
 
+  const [modalIniciarId, setModalIniciarId] = useState(null);
   const [modalFinalizarId, setModalFinalizarId] = useState(null);
   const [sucessoFinalizacaoId, setSucessoFinalizacaoId] = useState(null);
 
@@ -305,10 +312,12 @@ function CustoObraApp({ usuario }) {
       cliente: novaObraCliente.trim() || null,
       endereco: novaObraEndereco.trim() || null,
       status: 'em_andamento',
+      // ver comentário em obra/obraStatus.js: cadastrar não é iniciar
+      inicioObraEm: null,
     };
     const ok = await salvarObras([...obras, nova]);
     if (ok) {
-      setAviso(`Obra "${nome}" criada.`);
+      setAviso(`Obra "${nome}" criada. Clique em "Iniciar obra" no dia em que o serviço começar.`);
       setNovaObraNome('');
       setNovaObraOrcamento('');
       setNovaObraCliente('');
@@ -316,14 +325,45 @@ function CustoObraApp({ usuario }) {
     }
   }
 
-  // ---- finalização / reabertura de obra ----
-  // Obras antigas não têm o campo "status" — tratamos qualquer valor
-  // diferente de 'concluida' como "em andamento", então nada quebra para
-  // quem já tinha obras cadastradas antes desta funcionalidade existir.
-  function obraEstaConcluida(obra) {
-    return !!obra && obra.status === 'concluida';
+  // ---- início da obra ----
+  // Cadastrar a obra (ou assinar o contrato) não é começar a obra. Só depois
+  // que alguém informa a data real aqui é que os dias começam a contar.
+  // As regras ficam em obra/obraStatus.js.
+  async function iniciarObra(obraId, dataISO, observacao) {
+    const atual = obras.find((o) => o.id === obraId);
+    if (!atual || !dataISO) return;
+    const jaIniciada = obraFoiIniciada(atual);
+    const historico = [...(atual.historicoInicio || []), { tipo: jaIniciada ? 'corrigida' : 'iniciada', data: dataISO, registradoEm: new Date().toISOString() }];
+    const ok = await salvarObras(obras.map((o) => o.id === obraId ? {
+      ...o,
+      inicioObraEm: dataISO,
+      observacoesInicio: (observacao || '').trim(),
+      historicoInicio: historico,
+    } : o));
+    if (ok) {
+      setModalIniciarId(null);
+      setAviso(jaIniciada
+        ? `Data de início da obra "${atual.nome}" ajustada para ${formatDateBR(dataISO)}.`
+        : `Obra "${atual.nome}" iniciada em ${formatDateBR(dataISO)}. A contagem de dias começou.`);
+    }
   }
 
+  function desfazerInicioObra(obraId) {
+    const atual = obras.find((o) => o.id === obraId);
+    if (!atual) return;
+    confirmar(`Desfazer o início da obra "${atual.nome}"? Ela volta para "aguardando início" e a contagem de dias para. Os lançamentos não são apagados.`, async () => {
+      const ok = await salvarObras(obras.map((o) => o.id === obraId ? { ...o, inicioObraEm: null } : o));
+      if (ok) {
+        setModalIniciarId(null);
+        setAviso(`Início da obra "${atual.nome}" desfeito.`);
+      }
+    });
+  }
+
+  // ---- finalização / reabertura de obra ----
+  // Obras antigas não têm o campo "status" — qualquer valor diferente de
+  // 'concluida' vale como "em andamento", então nada quebra para quem já
+  // tinha obras cadastradas antes destas funcionalidades existirem.
   async function finalizarObra(obraId, observacoes) {
     const atual = obras.find((o) => o.id === obraId);
     if (!atual) return;
@@ -469,15 +509,17 @@ function CustoObraApp({ usuario }) {
       alertas.unshift({ tipo: 'red', texto: `${vencidas.length} conta(s) vencida(s), totalizando ${formatMoney(vencidas.reduce((a, c) => a + c.valor, 0))}.` });
     }
 
-    // parcelas de contrato atrasadas (dinheiro a receber do cliente)
+    // parcelas de contrato atrasadas (dinheiro a receber do cliente).
+    // Conta o que FALTA em cada parcela: se o cliente já pagou parte dela,
+    // só o restante está em atraso.
     const parcelasAtrasadas = contratos
       .filter((c) => c.status !== 'cancelado' && c.status !== 'rascunho')
       .flatMap((c) => (c.parcelas || []).map((p) => ({ ...p, cliente: c.cliente?.nome })))
-      .filter((p) => p.status !== 'pago' && p.vencimento && p.vencimento < hoje);
+      .filter((p) => parcelaVencida(p, hoje));
     if (parcelasAtrasadas.length > 0) {
       alertas.unshift({
         tipo: 'yellow',
-        texto: `${parcelasAtrasadas.length} parcela(s) de contrato em atraso a receber, totalizando ${formatMoney(parcelasAtrasadas.reduce((a, p) => a + (Number(p.valor) || 0), 0))}.`,
+        texto: `${parcelasAtrasadas.length} parcela(s) de contrato em atraso a receber, totalizando ${formatMoney(parcelasAtrasadas.reduce((a, p) => a + saldoParcela(p), 0))}.`,
       });
     }
 
@@ -616,13 +658,17 @@ function CustoObraApp({ usuario }) {
         cliente: nomeCliente,
         endereco: contrato.cliente.endereco || null,
         status: 'em_andamento',
+        // A obra nasce SEM data de início: assinar o contrato não é começar
+        // a obra. Os dias só passam a contar quando alguém apertar
+        // "Iniciar obra" e informar o dia em que o serviço começou.
+        inicioObraEm: null,
       };
       const okObra = await salvarObras([...obras, novaObra]);
       if (okObra) {
         await salvarContratos(
           lista.map((c) => (c.id === contrato.id ? { ...c, obraId: novaObra.id } : c))
         );
-        setAviso(`Obra "${novaObra.nome}" criada automaticamente a partir do contrato.`);
+        setAviso(`Obra "${novaObra.nome}" criada automaticamente a partir do contrato. Quando o serviço começar, abra a obra e clique em "Iniciar obra" para começar a contar os dias.`);
       }
     }
     return true;
@@ -815,13 +861,14 @@ function CustoObraApp({ usuario }) {
   }
 
   function exportarParcelasCSV() {
-    const linhas = [['Contrato', 'Cliente', 'Obra', 'Parcela', 'Etapa', 'Valor', 'Vencimento', 'Status', 'Recebido em']];
+    const SITUACAO = { pago: 'Recebida', parcial: 'Recebida em parte', pendente: 'A receber' };
+    const linhas = [['Contrato', 'Cliente', 'Obra', 'Parcela', 'Etapa', 'Valor', 'Vencimento', 'Situação', 'Valor pago', 'Falta receber', 'Quitada em']];
     contratos.forEach((c) => {
       (c.parcelas || []).forEach((p) => {
         linhas.push([
           c.numero || '(rascunho)', c.cliente?.nome || '', (obras.find((ob) => ob.id === c.obraId) || {}).nome || '',
           p.ordem, p.etapa || '', p.valor, p.vencimento ? formatDateBR(p.vencimento) : '',
-          p.status === 'pago' ? 'Recebida' : 'A receber',
+          SITUACAO[statusParcela(p)], valorPagoParcela(p), saldoParcela(p),
           p.dataPagamento ? formatDateBR(p.dataPagamento) : '',
         ]);
       });
@@ -957,7 +1004,10 @@ function CustoObraApp({ usuario }) {
   async function copiarResumoObra(obra) {
     const itens = lancamentos.filter((l) => l.obraId === obra.id);
     let texto = `RESUMO DA OBRA: ${obra.nome}\n`;
-    texto += `Desde: ${formatDateBR(obra.criadoEm)}\n`;
+    texto += `Cadastrada em: ${formatDateBR(obra.criadoEm)}\n`;
+    texto += obraFoiIniciada(obra)
+      ? `Início da obra: ${formatDateBR(obra.inicioObraEm)} (${textoDiasDeObra(obra)})\n`
+      : 'Início da obra: ainda não registrado\n';
     if (obra.orcamento) texto += `Orçamento: ${formatMoney(obra.orcamento)}\n`;
     texto += `Total gasto: ${formatMoney(totalObra(obra.id))}\n\n`;
     Object.entries(CATEGORIAS).forEach(([key, cat]) => {
@@ -1276,9 +1326,12 @@ function CustoObraApp({ usuario }) {
   const paginaAtual = (view === 'obra' || view === 'resumo') && obraAtiva
     ? {
         titulo: obraAtiva.nome,
-        subtitulo: view === 'resumo' ? 'Resumo final da obra' : `Desde ${formatDateBR(obraAtiva.criadoEm)}${obraConcluida ? ' · Concluída' : ''}`,
+        subtitulo: view === 'resumo'
+          ? 'Resumo final da obra'
+          : `${obraFoiIniciada(obraAtiva) ? textoDiasDeObra(obraAtiva) : 'Obra ainda não iniciada'}${obraConcluida ? ' · Concluída' : ''}`,
       }
     : (PAGINA_META[view] || PAGINA_META.home);
+  const obraDoModalIniciar = modalIniciarId ? obras.find((o) => o.id === modalIniciarId) : null;
   const obraDoModalFinalizar = modalFinalizarId ? obras.find((o) => o.id === modalFinalizarId) : null;
   const obraDoSucesso = sucessoFinalizacaoId ? obras.find((o) => o.id === sucessoFinalizacaoId) : null;
 
@@ -1643,32 +1696,43 @@ function CustoObraApp({ usuario }) {
             {obras.length > 0 && (
               <div className="flex gap-1 bg-stone-100 rounded-md p-0.5 w-fit">
                 {[
-                  ['todas', 'Todas'],
-                  ['andamento', 'Em andamento'],
-                  ['concluidas', 'Concluídas'],
-                ].map(([key, label]) => (
+                  ['todas', 'Todas', obras.length],
+                  ['aguardando', 'Aguardando início', obras.filter((o) => situacaoObra(o) === 'aguardando_inicio').length],
+                  ['andamento', 'Em andamento', obras.filter((o) => !obraEstaConcluida(o) && obraFoiIniciada(o)).length],
+                  ['concluidas', 'Concluídas', obras.filter((o) => obraEstaConcluida(o)).length],
+                ].map(([key, label, quantas]) => (
                   <button
                     key={key}
                     onClick={() => setFiltroObras(key)}
                     className={`text-xs px-3 py-1.5 rounded transition-colors duration-150 ${filtroObras === key ? 'bg-white text-green-700 shadow-sm font-medium' : 'text-stone-500'}`}
                   >
-                    {label}
+                    {label} ({quantas})
                   </button>
                 ))}
               </div>
             )}
 
             {(() => {
+              // "Em andamento" agora quer dizer obra que JÁ COMEÇOU. As que
+              // ainda não tiveram o início registrado (inclusive as antigas)
+              // ficam em "Aguardando início" — por isso os contadores em cada
+              // filtro, para nenhuma obra parecer ter sumido.
               const obrasFiltradas = obras.filter((o) => {
-                if (filtroObras === 'andamento') return !obraEstaConcluida(o);
+                if (filtroObras === 'aguardando') return situacaoObra(o) === 'aguardando_inicio';
+                if (filtroObras === 'andamento') return !obraEstaConcluida(o) && obraFoiIniciada(o);
                 if (filtroObras === 'concluidas') return obraEstaConcluida(o);
                 return true;
               });
+              const VAZIO = {
+                aguardando: 'Nenhuma obra aguardando início.',
+                andamento: 'Nenhuma obra em andamento no momento.',
+                concluidas: 'Nenhuma obra concluída no momento.',
+              };
               if (obras.length === 0) {
                 return <p className="text-center text-stone-400 py-10">Nenhuma obra cadastrada. Crie a primeira acima.</p>;
               }
               if (obrasFiltradas.length === 0) {
-                return <p className="text-center text-stone-400 py-10">Nenhuma obra {filtroObras === 'concluidas' ? 'concluída' : 'em andamento'} no momento.</p>;
+                return <p className="text-center text-stone-400 py-10">{VAZIO[filtroObras] || 'Nenhuma obra nesse filtro.'}</p>;
               }
               return (
                 <div className="eco-stagger grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1676,23 +1740,22 @@ function CustoObraApp({ usuario }) {
                     const gasto = totalObra(o.id);
                     const pct = o.orcamento ? Math.min(100, (gasto / o.orcamento) * 100) : null;
                     const concluida = obraEstaConcluida(o);
+                    const situacao = situacaoObra(o);
+                    const sit = SITUACAO_OBRA[situacao];
                     return (
                       <div key={o.id} className={`eco-card eco-card-hover p-4 ${concluida ? 'border-green-200' : ''}`}>
                         <button onClick={() => abrirObra(o.id)} className="w-full text-left">
                           <div className="flex items-center justify-between gap-2 mb-1">
                             <p className="font-semibold text-stone-900 truncate">{o.nome}</p>
-                            {concluida ? (
-                              <span className="eco-badge bg-green-50 text-green-700 border border-green-200 flex-shrink-0">
-                                <CheckCircle2 size={12} /> CONCLUÍDA
-                              </span>
-                            ) : (
-                              <span className="eco-badge bg-blue-50 text-blue-700 border border-blue-200 flex-shrink-0">
-                                🟢 EM ANDAMENTO
-                              </span>
-                            )}
+                            <span className={`eco-badge border flex-shrink-0 ${sit.cls}`}>
+                              {concluida && <CheckCircle2 size={12} />}
+                              {sit.label}
+                            </span>
                           </div>
                           <p className="text-xs text-stone-400 mb-3">
-                            desde {formatDateBR(o.criadoEm)}
+                            {obraFoiIniciada(o)
+                              ? `início ${formatDateBR(o.inicioObraEm)} · ${textoDiasDeObra(o)}`
+                              : `cadastrada em ${formatDateBR(o.criadoEm)} · obra ainda não iniciada`}
                             {concluida && o.finalizadaEm && ` · finalizada em ${formatDateBR(o.finalizadaEm.slice(0, 10))}`}
                           </p>
                           <p className="text-2xl font-semibold text-green-800 mb-1">{formatMoney(gasto)}</p>
@@ -1719,6 +1782,11 @@ function CustoObraApp({ usuario }) {
                           </div>
                         </button>
                         <div className="flex items-center gap-3 mt-3 flex-wrap">
+                          {!concluida && !obraFoiIniciada(o) && (
+                            <button onClick={() => setModalIniciarId(o.id)} className="eco-btn-primary eco-btn-xs">
+                              <PlayCircle size={12} /> Iniciar obra
+                            </button>
+                          )}
                           {!concluida && (
                             <button onClick={() => definirOrcamento(o.id)} className="text-xs text-stone-400 hover:text-green-700 flex items-center gap-1 transition-colors">
                               <Pencil size={12} /> {o.orcamento ? 'Editar orçamento' : 'Definir orçamento'}
@@ -2458,16 +2526,15 @@ function CustoObraApp({ usuario }) {
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-xl font-semibold text-stone-900">{obraAtiva.nome}</h2>
-                  {obraConcluida ? (
-                    <span className="eco-badge bg-green-50 text-green-700 border border-green-200">
-                      <CheckCircle2 size={12} /> OBRA CONCLUÍDA
-                    </span>
-                  ) : (
-                    <span className="eco-badge bg-blue-50 text-blue-700 border border-blue-200">🟢 EM ANDAMENTO</span>
-                  )}
+                  <span className={`eco-badge border ${SITUACAO_OBRA[situacaoObra(obraAtiva)].cls}`}>
+                    {obraConcluida && <CheckCircle2 size={12} />}
+                    {SITUACAO_OBRA[situacaoObra(obraAtiva)].label}
+                  </span>
                 </div>
                 <p className="text-xs text-stone-400">
-                  desde {formatDateBR(obraAtiva.criadoEm)}
+                  {obraFoiIniciada(obraAtiva)
+                    ? `início da obra em ${formatDateBR(obraAtiva.inicioObraEm)} · ${textoDiasDeObra(obraAtiva)}`
+                    : `cadastrada em ${formatDateBR(obraAtiva.criadoEm)} · obra ainda não iniciada`}
                   {obraConcluida && obraAtiva.finalizadaEm && ` · Finalizada em: ${formatDateBR(obraAtiva.finalizadaEm.slice(0, 10))}`}
                 </p>
               </div>
@@ -2484,6 +2551,48 @@ function CustoObraApp({ usuario }) {
                 </div>
               </div>
             </div>
+
+            {/* ---- início da obra: a data em que o pessoal realmente entrou na
+                 obra, que é o que faz os dias começarem a contar ---- */}
+            {!obraConcluida && (
+              obraFoiIniciada(obraAtiva) ? (
+                <div className="eco-card p-4 border-blue-200 bg-blue-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <CalendarDays size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-blue-900">
+                        {situacaoObra(obraAtiva) === 'programada'
+                          ? `Início programado para ${formatDateBR(obraAtiva.inicioObraEm)}`
+                          : `${diasDeObra(obraAtiva)} ${diasDeObra(obraAtiva) === 1 ? 'dia' : 'dias'} de obra`}
+                      </p>
+                      <p className="text-xs text-blue-800/80">
+                        Contando desde {formatDateBR(obraAtiva.inicioObraEm)}.
+                        {obraAtiva.observacoesInicio ? ` ${obraAtiva.observacoesInicio}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => setModalIniciarId(obraAtiva.id)} className="eco-btn-secondary eco-btn-sm flex-shrink-0">
+                    <Pencil size={14} /> Corrigir data de início
+                  </button>
+                </div>
+              ) : (
+                <div className="eco-card p-4 border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <PlayCircle size={20} className="text-stone-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-stone-700">Obra ainda não iniciada</p>
+                      <p className="text-xs text-stone-400">
+                        O contrato é assinado num dia e a obra começa em outro. Registre o dia em que a
+                        obra começou de verdade — é dele que sai a contagem de dias.
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => setModalIniciarId(obraAtiva.id)} className="eco-btn-primary eco-btn-sm flex-shrink-0">
+                    <PlayCircle size={14} /> Iniciar obra
+                  </button>
+                </div>
+              )
+            )}
 
             {/* ---- ação de encerramento da obra: separada das ações do dia a dia ---- */}
             {obraConcluida ? (
@@ -2597,12 +2706,23 @@ function CustoObraApp({ usuario }) {
                       </div>
                       <div className={`rounded-lg p-2 ${resumoRec.vencidas > 0 ? 'bg-red-50' : 'bg-amber-50'}`}>
                         <p className={`text-[11px] ${resumoRec.vencidas > 0 ? 'text-red-700/70' : 'text-amber-700/70'}`}>
-                          A receber{resumoRec.vencidas > 0 ? ` (${resumoRec.vencidas} atrasada${resumoRec.vencidas > 1 ? 's' : ''})` : ''}
+                          Falta receber{resumoRec.vencidas > 0 ? ` (${resumoRec.vencidas} atrasada${resumoRec.vencidas > 1 ? 's' : ''})` : ''}
                         </p>
                         <p className={`text-sm font-semibold ${resumoRec.vencidas > 0 ? 'text-red-700' : 'text-amber-700'}`}>
                           {formatMoney(resumoRec.aReceber)}
                         </p>
                       </div>
+                    </div>
+                  )}
+                  {resumoRec.quantidade > 0 && (
+                    <div className="mt-2">
+                      <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-green-500" style={{ width: `${resumoRec.pctRecebido}%` }}></div>
+                      </div>
+                      <p className="text-xs text-stone-400 mt-1">
+                        {resumoRec.pctRecebido.toFixed(0)}% recebido · {resumoRec.quitadas} de {resumoRec.quantidade} parcelas quitadas
+                        {resumoRec.parciais > 0 ? ` · ${resumoRec.parciais} recebida${resumoRec.parciais > 1 ? 's' : ''} em parte` : ''}
+                      </p>
                     </div>
                   )}
                   <p className="text-[11px] text-stone-400 mt-2">
@@ -2905,6 +3025,15 @@ function CustoObraApp({ usuario }) {
         )}
         </main>
       </div>
+
+      {modalIniciarId && obraDoModalIniciar && (
+        <IniciarObraModal
+          obra={obraDoModalIniciar}
+          onCancelar={() => setModalIniciarId(null)}
+          onConfirmar={(data, observacao) => iniciarObra(modalIniciarId, data, observacao)}
+          onDesfazer={() => desfazerInicioObra(modalIniciarId)}
+        />
+      )}
 
       {modalFinalizarId && obraDoModalFinalizar && (
         <FinalizarObraModal

@@ -4,6 +4,8 @@
 // nenhum valor aqui é inventado, tudo vem de soma/filtro sobre os
 // lançamentos reais daquela obra.
 import { somarTotal, agruparPorCategoria, agruparPorFornecedor, evoluirPorPeriodo } from '../dashboard/dashboardCalc';
+import { diasCorridos } from '../domain';
+import { obraFoiIniciada } from './obraStatus';
 
 export function calcularResumoObra(obra, todosLancamentos, CATEGORIAS, topN = 8) {
   const lancamentosObra = todosLancamentos.filter((l) => l.obraId === obra.id);
@@ -29,9 +31,13 @@ export function calcularResumoObra(obra, todosLancamentos, CATEGORIAS, topN = 8)
       fornecedorNome: l.fornecedorNome || '',
     }));
 
-  const dataInicio = obra.criadoEm;
+  // Duração conta do início REAL da obra (quando alguém apertou "Iniciar
+  // obra"). Obras que nunca tiveram o início registrado caem no cadastro,
+  // que é como era antes desta funcionalidade existir.
+  const iniciada = obraFoiIniciada(obra);
+  const dataInicio = obra.inicioObraEm || obra.criadoEm;
   const dataFim = obra.finalizadaEm ? obra.finalizadaEm.slice(0, 10) : new Date().toISOString().slice(0, 10);
-  const duracaoDias = dataInicio ? Math.max(1, Math.round((new Date(`${dataFim}T00:00:00`) - new Date(`${dataInicio}T00:00:00`)) / 86400000) + 1) : null;
+  const duracaoDias = dataInicio ? Math.max(1, diasCorridos(dataInicio, dataFim)) : null;
   const duracaoMeses = duracaoDias ? Math.max(1, duracaoDias / 30) : null;
   const mediaGastoPorMes = duracaoMeses && evolucaoMensal.length > 1 ? totalGasto / duracaoMeses : null;
 
@@ -49,6 +55,8 @@ export function calcularResumoObra(obra, todosLancamentos, CATEGORIAS, topN = 8)
     evolucaoMensal,
     maioresDespesas,
     dataInicio,
+    inicioRegistrado: iniciada,
+    dataCadastro: obra.criadoEm,
     dataFim,
     duracaoDias,
     mediaGastoPorMes,
