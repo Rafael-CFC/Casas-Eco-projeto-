@@ -24,10 +24,16 @@ export default function NovoContrato({
   const [abaMobile, setAbaMobile] = useState('preencher'); // 'preencher' | 'documento'
   const [docAtivo, setDocAtivo] = useState('contrato'); // 'contrato' | 'memorial'
   const primeiraRenderizacao = useRef(true);
+  const salvoPeloGerar = useRef(false);
 
   // rascunho automático
   useEffect(() => {
     if (primeiraRenderizacao.current) { primeiraRenderizacao.current = false; return; }
+    // Logo depois de gerar, quem salva é o próprio gerar() — e é ele que
+    // faz nascer a obra do cliente. Se o rascunho automático também
+    // disparasse aqui, ele regravaria por cima uma cópia de antes, sem o
+    // número e sem o vínculo com a obra recém-criada.
+    if (salvoPeloGerar.current) { salvoPeloGerar.current = false; return; }
     const t = setTimeout(() => onSalvarRascunho(contrato), 1200);
     return () => clearTimeout(t);
   }, [contrato]);
@@ -107,6 +113,7 @@ export default function NovoContrato({
       if (tipo === 'contrato') await gerarPdfContrato(congelado, config);
       else if (tipo === 'memorial') await gerarPdfMemorial(congelado, config);
       else await gerarPdfContratoEMemorial(congelado, config);
+      salvoPeloGerar.current = true;
       setContrato(congelado);
       await onFinalizar(congelado);
       onAviso(`Documento gerado. Contrato nº ${congelado.numero} salvo no histórico.`);

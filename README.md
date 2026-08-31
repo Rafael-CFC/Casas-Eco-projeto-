@@ -240,6 +240,34 @@ como a semana é falada no dia a dia ("na quinta vence a Albertina").
 
 Só entram boletos com vencimento anotado.
 
+### Obras — quanto o cliente já pagou e quanto falta
+
+Cada cartão da lista de obras mostra agora **duas contas separadas**, que nunca se
+misturam:
+
+- em cima, em verde grande, o **gasto** da obra (custo: material, mão de obra,
+  produtos da loja) e quanto isso representa do orçamento;
+- embaixo, **quanto o cliente já pagou** e **quanto falta receber**, com a barra de
+  quanto por cento do contrato já entrou e quantas parcelas foram quitadas.
+
+O valor pago sai das **parcelas do contrato** daquela obra. Se alguma parcela está
+atrasada, o "falta" aparece em vermelho e o aviso diz quantas. Obra sem contrato
+com parcelas mostra "sem contrato com parcelas" — o sistema não inventa recebimento
+que ninguém registrou.
+
+### Contrato fechado que ficou sem obra
+
+Ao gerar um contrato, a obra do cliente nasce junto. Se por algum motivo ela não
+existir — a obra foi apagada, ou o vínculo se perdeu —, aparece um **aviso amarelo
+no topo da tela de Início**, com o nome do cliente e um botão **"Criar obra"**. Um
+clique e a obra volta, com cliente, endereço e orçamento vindos do próprio contrato.
+
+Antes esse caso ficava mudo: o contrato guardava o número de uma obra que não
+existia mais, o sistema entendia isso como "já tem obra" e nunca mais criava — nem
+apertando "Gerar contrato" de novo. Agora a pergunta é "essa obra existe?", então
+gerar outra vez também conserta, e apagar uma obra desfaz o vínculo em vez de
+deixá-lo pendurado.
+
 ## E se eu precisar mexer em algo depois?
 
 Sempre que eu (Claude) fizer uma atualização no software, vou te mandar os arquivos atualizados aqui no chat. Você só precisa:

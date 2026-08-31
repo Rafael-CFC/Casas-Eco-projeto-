@@ -36,6 +36,7 @@ import Configuracoes from './config/Configuracoes';
 import { normalizarConfiguracao, configuracaoVazia } from './config/configStore';
 import {
   resumoParcelasDaObra, resumoParcelas, valorPagoParcela, saldoParcela, statusParcela, parcelaVencida,
+  obraDoContrato, contratosSemObra, novaObraDoContrato,
 } from './contratos/contratosStore';
 import Crediario from './crediario/Crediario';
 import { catalogoParaRetirada } from './crediario/crediarioCalc';
@@ -147,7 +148,7 @@ function CustoObraApp({ usuario }) {
   const [menuMaisAberto, setMenuMaisAberto] = useState(false);
   const [trocandoSenha, setTrocandoSenha] = useState(false);
   // 'registrar' = formulário do dia a dia | 'relatorio' = gráficos e filtros
-  const [abaContas, setAbaContas] = useState('registrar');
+  const [abaContas, setAbaContas] = useState('dia');
   const [buscaAberta, setBuscaAberta] = useState(false);
   const [materialFoco, setMaterialFoco] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -395,9 +396,16 @@ function CustoObraApp({ usuario }) {
   }
 
   function removerObra(id, nome) {
-    confirmar(`Remover a obra "${nome}"? Todos os lançamentos dela serão apagados.`, () => {
-      salvarObras(obras.filter((o) => o.id !== id));
-      salvarLancamentos(lancamentos.filter((l) => l.obraId !== id));
+    confirmar(`Remover a obra "${nome}"? Todos os lançamentos dela serão apagados.`, async () => {
+      await salvarObras(obras.filter((o) => o.id !== id));
+      await salvarLancamentos(lancamentos.filter((l) => l.obraId !== id));
+      // o contrato não pode continuar apontando para uma obra que não
+      // existe mais: sem isso ele fica preso a um vínculo quebrado e a
+      // obra nunca mais é recriada
+      const presos = contratos.filter((c) => c.obraId === id);
+      if (presos.length > 0) {
+        await salvarContratos(contratos.map((c) => (c.obraId === id ? { ...c, obraId: null } : c)));
+      }
       if (obraAtivaId === id) { setView('home'); setObraAtivaId(null); }
     });
   }
@@ -648,31 +656,42 @@ function CustoObraApp({ usuario }) {
       }
     }
 
-    // obra: ao GERAR um contrato sem obra vinculada, cria a obra já com
+    // obra: ao GERAR um contrato, a obra do cliente nasce junto, já com
     // cliente, endereço e orçamento vindos do próprio contrato.
-    if (contrato.status !== 'rascunho' && !contrato.obraId && nomeCliente) {
-      const novaObra = {
-        id: crypto.randomUUID(),
-        nome: `CASA ${nomeCliente}`.toUpperCase(),
-        criadoEm: contrato.dataContrato || todayISO(),
-        orcamento: Number(contrato.valorTotal) || null,
-        cliente: nomeCliente,
-        endereco: contrato.cliente.endereco || null,
-        status: 'em_andamento',
-        // A obra nasce SEM data de início: assinar o contrato não é começar
-        // a obra. Os dias só passam a contar quando alguém apertar
-        // "Iniciar obra" e informar o dia em que o serviço começou.
-        inicioObraEm: null,
-      };
-      const okObra = await salvarObras([...obras, novaObra]);
-      if (okObra) {
-        await salvarContratos(
-          lista.map((c) => (c.id === contrato.id ? { ...c, obraId: novaObra.id } : c))
-        );
-        setAviso(`Obra "${novaObra.nome}" criada automaticamente a partir do contrato. Quando o serviço começar, abra a obra e clique em "Iniciar obra" para começar a contar os dias.`);
+    //
+    // A pergunta aqui é "existe a obra?", e não "o contrato tem um
+    // obraId?". Um obraId apontando para obra apagada é um vínculo
+    // quebrado, e a pergunta antiga dava ele como resposta boa: a obra
+    // nunca mais era criada, por mais que a pessoa gerasse o contrato de
+    // novo. Perguntando pelas obras que existem, gerar outra vez conserta.
+    if (contrato.status !== 'rascunho' && contrato.status !== 'cancelado' && nomeCliente) {
+      const jaTem = obraDoContrato(obras, contrato);
+      if (jaTem) {
+        // a obra existe mas o contrato perdeu o fio — reata sem duplicar
+        if (contrato.obraId !== jaTem.id) {
+          await salvarContratos(lista.map((c) => (c.id === contrato.id ? { ...c, obraId: jaTem.id } : c)));
+        }
+      } else {
+        const novaObra = novaObraDoContrato(contrato);
+        const okObra = await salvarObras([...obras, novaObra]);
+        if (okObra) {
+          await salvarContratos(
+            lista.map((c) => (c.id === contrato.id ? { ...c, obraId: novaObra.id } : c))
+          );
+          setAviso(`Obra "${novaObra.nome}" criada automaticamente a partir do contrato. Quando o serviço começar, abra a obra e clique em "Iniciar obra" para começar a contar os dias.`);
+        }
       }
     }
     return true;
+  }
+
+  // Botão "Criar obra" da tela de Obras, para o contrato que ficou sem a
+  // sua. Passa pelo mesmo caminho do salvamento, então vale a mesma regra
+  // de não duplicar.
+  async function criarObraDoContrato(contratoId) {
+    const contrato = contratos.find((c) => c.id === contratoId);
+    if (!contrato) return;
+    await salvarContrato(contrato);
   }
 
   async function removerContrato(id) {
@@ -1694,6 +1713,43 @@ function CustoObraApp({ usuario }) {
               </button>
             </div>
 
+            {/* ---- contrato fechado que ficou sem obra ----
+                Enquanto o vínculo entre contrato e obra dependia de um fio
+                só, dava para um contrato gerado ficar sem obra nenhuma e
+                ninguém saber. Aqui ele aparece, com o botão que cria a
+                obra que faltou. */}
+            {(() => {
+              const semObra = contratosSemObra(contratos, obras);
+              if (semObra.length === 0) return null;
+              return (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-sm font-medium text-amber-800 flex items-center gap-1.5 mb-2">
+                    <AlertCircle size={15} className="flex-shrink-0" />
+                    {semObra.length === 1
+                      ? 'Um contrato fechado está sem obra cadastrada'
+                      : `${semObra.length} contratos fechados estão sem obra cadastrada`}
+                  </p>
+                  <div className="space-y-1.5">
+                    {semObra.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-xs text-amber-800/80 min-w-0">
+                          {c.cliente?.nome || 'sem cliente'}
+                          {c.numero ? ` · contrato nº ${c.numero}` : ''}
+                          {c.valorTotal ? ` · ${formatMoney(c.valorTotal)}` : ''}
+                        </span>
+                        <button
+                          onClick={() => criarObraDoContrato(c.id)}
+                          className="eco-btn-primary eco-btn-xs flex-shrink-0"
+                        >
+                          <Plus size={12} /> Criar obra
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {obras.length > 0 && (
               <div className="flex gap-1 bg-stone-100 rounded-md p-0.5 w-fit">
                 {[
@@ -1740,6 +1796,10 @@ function CustoObraApp({ usuario }) {
                   {obrasFiltradas.map((o) => {
                     const gasto = totalObra(o.id);
                     const pct = o.orcamento ? Math.min(100, (gasto / o.orcamento) * 100) : null;
+                    // O que o CLIENTE já pagou desta obra, e o que falta.
+                    // Sai das parcelas do contrato — é receita, e não se
+                    // mistura com o gasto logo acima, que é custo.
+                    const rec = resumoParcelasDaObra(contratos, o.id);
                     const concluida = obraEstaConcluida(o);
                     const situacao = situacaoObra(o);
                     const sit = SITUACAO_OBRA[situacao];
@@ -1770,6 +1830,45 @@ function CustoObraApp({ usuario }) {
                           ) : (
                             <p className="text-xs text-stone-300 mb-3">sem orçamento definido</p>
                           )}
+
+                          {/* ---- quanto o cliente já pagou desta obra ---- */}
+                          {rec.quantidade > 0 ? (
+                            <div className="mb-3 pt-2 border-t border-stone-100">
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <span className="text-xs text-stone-400">
+                                  Pago pelo cliente
+                                  <span className="text-stone-300"> · de {formatMoney(rec.total)}</span>
+                                </span>
+                                <span className="text-xs text-stone-400">
+                                  {rec.quitadas}/{rec.quantidade} parcelas
+                                </span>
+                              </div>
+                              <div className="flex items-baseline justify-between gap-2">
+                                <span className="text-sm font-semibold text-green-800">{formatMoney(rec.recebido)}</span>
+                                {rec.aReceber > 0 ? (
+                                  <span className={`text-sm font-semibold ${rec.vencidas > 0 ? 'text-red-600' : 'text-amber-700'}`}>
+                                    falta {formatMoney(rec.aReceber)}
+                                  </span>
+                                ) : (
+                                  <span className="text-sm font-medium text-green-700">tudo recebido</span>
+                                )}
+                              </div>
+                              <div className="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden mt-1.5">
+                                <div className="h-full bg-green-500" style={{ width: `${rec.pctRecebido}%` }}></div>
+                              </div>
+                              <p className="text-xs text-stone-400 mt-1">
+                                {rec.pctRecebido.toFixed(0)}% recebido
+                                {rec.vencidas > 0 && (
+                                  <span className="text-red-600">
+                                    {` · ${rec.vencidas} parcela${rec.vencidas > 1 ? 's' : ''} atrasada${rec.vencidas > 1 ? 's' : ''}`}
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-stone-300 mb-3">sem contrato com parcelas</p>
+                          )}
+
                           <div className="flex flex-wrap gap-2">
                             {Object.entries(CATEGORIAS).map(([key, cat]) => {
                               const Icon = cat.icon;
@@ -2161,7 +2260,7 @@ function CustoObraApp({ usuario }) {
           Object.keys(grupos).forEach((g) => { contasPorGrupo[g] = []; });
           contas.forEach((c) => { contasPorGrupo[classificarConta(c)].push(c); });
 
-          const abas = [['registrar', 'Registrar', Plus], ['dia', 'Por dia', CalendarDays], ['relatorio', 'Relatório', BarChart3]];
+          const abas = [['dia', 'Por dia', CalendarDays], ['registrar', 'Registrar', Plus], ['relatorio', 'Relatório', BarChart3]];
 
           return (
             <div className="space-y-6">

@@ -344,6 +344,60 @@ export function resumoParcelas(parcelas, hojeISO = todayISO()) {
   };
 }
 
+// ---- o vínculo entre o contrato e a obra ----
+//
+// Gerar um contrato cria a obra do cliente. O elo entre os dois era só o
+// `obraId` guardado no contrato — um fio só, e que arrebentava calado:
+// apagar a obra deixava o `obraId` apontando para o vazio, e como o
+// sistema só perguntava "esse contrato tem obraId?", nunca mais criava a
+// obra de novo, por mais que a pessoa apertasse "Gerar" outra vez.
+//
+// Agora o fio é de mão dupla: a obra também guarda de qual contrato ela
+// nasceu (`contratoId`). Assim dá para achar a obra mesmo se o `obraId`
+// se perder, e dá para saber que ela sumiu de verdade.
+
+// A obra de um contrato, ou null se ela não existe (mais).
+export function obraDoContrato(obras, contrato) {
+  if (!contrato) return null;
+  const lista = obras || [];
+  return lista.find((o) => o.id === contrato.obraId)
+    || lista.find((o) => o.contratoId && o.contratoId === contrato.id)
+    || null;
+}
+
+// Contratos que já foram gerados ou assinados e continuam sem obra
+// nenhuma. É o buraco entre "gerei o contrato" e "cadê a obra do
+// cliente": a tela de Obras mostra esta lista para dar de cara o botão
+// que cria a obra que faltou.
+export function contratosSemObra(contratos, obras) {
+  return (contratos || []).filter((c) => (
+    c.status !== 'rascunho'
+    && c.status !== 'cancelado'
+    && (c.cliente?.nome || '').trim()
+    && !obraDoContrato(obras, c)
+  ));
+}
+
+// A obra que nasce de um contrato — nome, cliente, endereço e orçamento
+// vêm todos do próprio contrato, para nada precisar ser digitado de novo.
+export function novaObraDoContrato(contrato, hojeISO = todayISO()) {
+  const nomeCliente = (contrato.cliente?.nome || '').trim();
+  return {
+    id: crypto.randomUUID(),
+    contratoId: contrato.id,
+    nome: `CASA ${nomeCliente}`.toUpperCase(),
+    criadoEm: contrato.dataContrato || hojeISO,
+    orcamento: Number(contrato.valorTotal) || null,
+    cliente: nomeCliente,
+    endereco: contrato.cliente?.endereco || null,
+    status: 'em_andamento',
+    // A obra nasce SEM data de início: assinar o contrato não é começar a
+    // obra. Os dias só passam a contar quando alguém apertar "Iniciar
+    // obra" e informar o dia em que o serviço começou.
+    inicioObraEm: null,
+  };
+}
+
 export function resumoParcelasDaObra(contratos, obraId, hojeISO = todayISO()) {
   const doObra = contratos.filter((c) => c.obraId === obraId && c.status !== 'cancelado');
   const todas = doObra.flatMap((c) => c.parcelas || []);
