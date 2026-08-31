@@ -14,6 +14,7 @@ import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } fr
 import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
 import ToastStack from './ui/Toast';
 import RelatorioContas from './contas/RelatorioContas';
+import BoletosPorDia from './contas/BoletosPorDia';
 import { nomeDaConta, somarDias } from './contas/contasCalc';
 import TrocarSenha from './auth/TrocarSenha';
 import { sair } from './auth/authStore';
@@ -2160,7 +2161,7 @@ function CustoObraApp({ usuario }) {
           Object.keys(grupos).forEach((g) => { contasPorGrupo[g] = []; });
           contas.forEach((c) => { contasPorGrupo[classificarConta(c)].push(c); });
 
-          const abas = [['registrar', 'Registrar', Plus], ['relatorio', 'Relatório', BarChart3]];
+          const abas = [['registrar', 'Registrar', Plus], ['dia', 'Por dia', CalendarDays], ['relatorio', 'Relatório', BarChart3]];
 
           return (
             <div className="space-y-6">
@@ -2177,6 +2178,10 @@ function CustoObraApp({ usuario }) {
                   </button>
                 ))}
               </div>
+
+              {abaContas === 'dia' && (
+                <BoletosPorDia contas={contas} onMarcarPaga={marcarContaPaga} />
+              )}
 
               {abaContas === 'relatorio' && (
                 <RelatorioContas contas={contas} onExportarCSV={exportarContasCSV} />

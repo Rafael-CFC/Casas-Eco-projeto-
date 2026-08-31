@@ -216,6 +216,30 @@ seu próprio vencimento — some, marque como paga e apague um por um, como semp
 distribuidora continua escolhida, porque quase sempre vem outra nota da mesma logo
 em seguida.
 
+### Contas > Por dia — o que vence hoje, amanhã e nos próximos dias
+
+Na aba **Contas > Por dia** os boletos aparecem **um dia de cada vez**, começando
+por hoje: hoje, amanhã, depois de amanhã, e assim por diante. Cada dia vem com o
+**nome da semana na frente** — "Segunda-feira 01/09", "Terça-feira 02/09" — que é
+como a semana é falada no dia a dia ("na quinta vence a Albertina").
+
+- Em cima, quatro números: **vence hoje**, **vence amanhã**, **o total do período**
+  e **o que já venceu e continua em aberto**.
+- Dá para ver **7, 15 ou 30 dias** — o botãozinho fica no canto de cima.
+- **Dias sem boleto nenhum aparecem assim mesmo**, escritos "nada vence". Saber que
+  na terça não vence nada é informação; sumir com o dia deixaria dúvida. Se preferir
+  a lista curta, marque **"Mostrar só os dias que têm boleto"**.
+- **Sábado e domingo vêm marcados**, porque boleto que vence no fim de semana quase
+  sempre precisa ser resolvido antes.
+- O que **já venceu** fica num bloco vermelho em cima, separado dos dias. O dia
+  daqueles boletos já passou — misturar com o de hoje esconderia o atraso.
+- As contas **já pagas ficam de fora** por padrão; marque **"Mostrar também as já
+  pagas"** para conferir o que já foi quitado no período.
+- O botão **Paga** funciona direto daí, sem precisar voltar para a lista da aba
+  Registrar.
+
+Só entram boletos com vencimento anotado.
+
 ## E se eu precisar mexer em algo depois?
 
 Sempre que eu (Claude) fizer uma atualização no software, vou te mandar os arquivos atualizados aqui no chat. Você só precisa:

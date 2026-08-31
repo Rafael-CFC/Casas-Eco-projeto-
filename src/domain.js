@@ -4,8 +4,18 @@
 // todo o sistema).
 import { HardHat, Mountain, Store } from 'lucide-react';
 
+// Uma data (objeto Date) escrita como yyyy-mm-dd pelo relógio de quem
+// está usando o site. `toISOString()` devolveria a data em UTC — no
+// Brasil, das 21h em diante, isso já viraria o dia seguinte e "hoje"
+// apontaria para amanhã.
+export function isoLocal(data) {
+  const mes = String(data.getMonth() + 1).padStart(2, '0');
+  const dia = String(data.getDate()).padStart(2, '0');
+  return `${data.getFullYear()}-${mes}-${dia}`;
+}
+
 export function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return isoLocal(new Date());
 }
 
 // Dias corridos entre duas datas ISO (yyyy-mm-dd), contando o primeiro dia:

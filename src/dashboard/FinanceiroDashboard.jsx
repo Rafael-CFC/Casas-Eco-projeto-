@@ -29,6 +29,7 @@ export function StatCard({ label, valor, numero, formatar, sub, icon: Icon, tone
   const tones = {
     default: 'text-stone-900',
     good: 'text-green-700',
+    warn: 'text-amber-600',
     bad: 'text-red-600',
   };
   const contado = useCountUp(numero != null ? numero : 0, { formatar });

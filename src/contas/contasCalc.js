@@ -5,6 +5,7 @@
 // para conferir que nenhum valor é inventado: tudo é soma ou filtro em
 // cima do que foi registrado.
 import { chaveFornecedor } from '../textUtils';
+import { isoLocal } from '../domain';
 
 export const TODAS = 'todas';
 
@@ -26,7 +27,7 @@ function somar(lista) {
 export function somarDias(iso, dias) {
   const d = new Date(`${iso}T00:00:00`);
   d.setDate(d.getDate() + dias);
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 }
 
 // ---- filtros ----
@@ -102,7 +103,7 @@ function rotuloMes(iso) {
 function inicioDaSemana(iso) {
   const d = new Date(`${iso}T00:00:00`);
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // segunda-feira
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 }
 
 // Quanto vence em cada semana ou mês, para o gráfico de "quando o
@@ -136,4 +137,69 @@ export function totalPorVencimento(contas, granularidade = 'mensal', hojeISO = '
 
 export function somarContas(contas) {
   return somar(contas);
+}
+
+// ---- a agenda dia a dia ----
+
+// Os nomes dos dias na ordem que o JavaScript usa (0 = domingo).
+export const DIAS_SEMANA = [
+  'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira',
+  'Quinta-feira', 'Sexta-feira', 'Sábado',
+];
+export const DIAS_SEMANA_CURTO = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+// Em que dia da semana cai uma data. O `T00:00:00` é o que impede o
+// navegador de ler a data como UTC e devolver o dia anterior.
+export function diaDaSemana(iso) {
+  return new Date(`${iso}T00:00:00`).getDay();
+}
+
+export function nomeDoDia(iso) {
+  return DIAS_SEMANA[diaDaSemana(iso)];
+}
+
+// O que já passou do vencimento e continua em aberto. Fica fora da
+// agenda de propósito: esses boletos não têm mais "dia certo" — o dia
+// deles já passou, e misturá-los com o de hoje esconderia o atraso.
+export function boletosVencidos(contas, hojeISO) {
+  return contas
+    .filter((c) => !estaPaga(c) && c.vencimento && c.vencimento < hojeISO)
+    .sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+}
+
+// A agenda: hoje, amanhã e assim por diante, um dia por vez.
+//
+// Devolve TODOS os dias do período, inclusive os que não têm boleto
+// nenhum — é a tela que decide se esconde os vazios. Saber que na terça
+// não vence nada é informação, não buraco.
+export function boletosPorDia(contas, hojeISO, quantosDias = 7, { incluirPagas = false } = {}) {
+  const porData = new Map();
+  contas.forEach((c) => {
+    if (!c.vencimento) return;
+    if (!incluirPagas && estaPaga(c)) return;
+    if (!porData.has(c.vencimento)) porData.set(c.vencimento, []);
+    porData.get(c.vencimento).push(c);
+  });
+
+  const agenda = [];
+  for (let i = 0; i < quantosDias; i += 1) {
+    const iso = i === 0 ? hojeISO : somarDias(hojeISO, i);
+    // o maior primeiro: é o que decide o dia
+    const doDia = (porData.get(iso) || []).sort((a, b) => (Number(b.valor) || 0) - (Number(a.valor) || 0));
+    const indiceSemana = diaDaSemana(iso);
+    agenda.push({
+      iso,
+      daquiADias: i,
+      diaSemana: indiceSemana,
+      nomeDia: DIAS_SEMANA[indiceSemana],
+      nomeDiaCurto: DIAS_SEMANA_CURTO[indiceSemana],
+      fimDeSemana: indiceSemana === 0 || indiceSemana === 6,
+      ehHoje: i === 0,
+      ehAmanha: i === 1,
+      contas: doDia,
+      quantidade: doDia.length,
+      total: somar(doDia),
+    });
+  }
+  return agenda;
 }
