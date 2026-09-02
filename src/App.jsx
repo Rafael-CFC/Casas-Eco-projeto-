@@ -7,7 +7,7 @@ import {
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
   FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search, NotebookPen, Trees,
-  LogOut, KeyRound, BarChart3, PlayCircle, CalendarDays,
+  LogOut, KeyRound, BarChart3, PlayCircle, CalendarDays, Repeat,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit, chaveFornecedor } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
@@ -15,7 +15,9 @@ import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
 import ToastStack from './ui/Toast';
 import RelatorioContas from './contas/RelatorioContas';
 import BoletosPorDia from './contas/BoletosPorDia';
-import { nomeDaConta, somarDias } from './contas/contasCalc';
+import { nomeDaConta, proximoVencimentoBoleto } from './contas/contasCalc';
+import ContasFixas from './contas/ContasFixas';
+import { mesDe, pendentesDoMes, rotuloMes } from './contas/contasFixasCalc';
 import TrocarSenha from './auth/TrocarSenha';
 import { sair } from './auth/authStore';
 import { DashboardSkeleton } from './ui/Skeleton';
@@ -140,6 +142,7 @@ function CustoObraApp({ usuario }) {
   const [etapas, setEtapas] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
   const [contas, setContas] = useState([]);
+  const [contasFixas, setContasFixas] = useState([]);
   const [contratos, setContratos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [montadores, setMontadores] = useState([]);
@@ -197,13 +200,14 @@ function CustoObraApp({ usuario }) {
         return;
       }
       try {
-        const [o, p, l, et, fo, co, ct, cl, cf, mt, cr] = await Promise.all([
+        const [o, p, l, et, fo, co, cfx, ct, cl, cf, mt, cr] = await Promise.all([
           window.storage.get('obras', false).catch(() => null),
           window.storage.get('produtos', false).catch(() => null),
           window.storage.get('lancamentos', false).catch(() => null),
           window.storage.get('etapas', false).catch(() => null),
           window.storage.get('fornecedores', false).catch(() => null),
           window.storage.get('contas', false).catch(() => null),
+          window.storage.get('contasFixas', false).catch(() => null),
           window.storage.get('contratos', false).catch(() => null),
           window.storage.get('clientes', false).catch(() => null),
           window.storage.get('configuracao', false).catch(() => null),
@@ -240,6 +244,7 @@ function CustoObraApp({ usuario }) {
         setEtapas(et ? JSON.parse(et.value) : []);
         setFornecedores(fo ? JSON.parse(fo.value) : []);
         setContas(co ? JSON.parse(co.value) : []);
+        setContasFixas(cfx ? JSON.parse(cfx.value) : []);
         setContratos(ct ? JSON.parse(ct.value) : []);
         setClientes(cl ? JSON.parse(cl.value) : []);
         setConfiguracao(normalizarConfiguracao(cf ? JSON.parse(cf.value) : null));
@@ -293,6 +298,7 @@ function CustoObraApp({ usuario }) {
   const salvarEtapas = (l) => persist('etapas', l, setEtapas);
   const salvarFornecedores = (l) => persist('fornecedores', l, setFornecedores);
   const salvarContas = (l) => persist('contas', l, setContas);
+  const salvarContasFixas = (l) => persist('contasFixas', l, setContasFixas);
   const salvarContratos = (l) => persist('contratos', l, setContratos);
   const salvarClientes = (l) => persist('clientes', l, setClientes);
   const salvarConfiguracao = (c) => persist('configuracao', c, setConfiguracao);
@@ -518,6 +524,18 @@ function CustoObraApp({ usuario }) {
       alertas.unshift({ tipo: 'red', texto: `${vencidas.length} conta(s) vencida(s), totalizando ${formatMoney(vencidas.reduce((a, c) => a + c.valor, 0))}.` });
     }
 
+    // contas fixas do mês que ainda não foram lançadas. Sem esse aviso o
+    // molde ficaria parado no cadastro e o boleto do mês passaria batido —
+    // que é exatamente o esquecimento que a tela de fixas existe para evitar.
+    const fixasPendentes = pendentesDoMes(contasFixas, contas, mesDe(hoje));
+    if (fixasPendentes.length > 0) {
+      const previsto = fixasPendentes.reduce((a, s) => a + (Number(s.fixa.valor) || 0), 0);
+      alertas.unshift({
+        tipo: 'yellow',
+        texto: `${fixasPendentes.length} conta(s) fixa(s) de ${rotuloMes(mesDe(hoje))} ainda não lançada(s) — cerca de ${formatMoney(previsto)}.`,
+      });
+    }
+
     // parcelas de contrato atrasadas (dinheiro a receber do cliente).
     // Conta o que FALTA em cada parcela: se o cliente já pagou parte dela,
     // só o restante está em atraso.
@@ -609,6 +627,102 @@ function CustoObraApp({ usuario }) {
     confirmar(`Remover a conta de ${nomeDaConta(conta)} (${formatMoney(conta.valor)})?`, () => {
       salvarContas(contas.filter((c) => c.id !== conta.id));
     });
+  }
+
+  // ---- contas fixas do mês (energia, água, aluguel, internet, salário) ----
+  //
+  // O que fica guardado aqui é só o MOLDE: nome, valor de sempre e o dia do
+  // vencimento. O boleto de cada mês é criado a partir dele e vira uma conta
+  // a pagar normal, com `fixaId` apontando para o molde — é por esse campo
+  // que a tela sabe o que já foi lançado no mês e o que ainda falta.
+  //
+  // Nada é lançado sozinho. Energia e água mudam de valor todo mês; criar
+  // um boleto que ninguém conferiu daria um número errado no vencimento e
+  // no total a pagar, que é justamente o que o dono usa para se organizar.
+
+  async function salvarContaFixa({ id, nome, fornecedorNome, valor, diaVencimento, observacao }) {
+    if (id) {
+      const ok = await salvarContasFixas(contasFixas.map((f) => (
+        f.id === id ? { ...f, nome, fornecedorNome, valor, diaVencimento, observacao } : f
+      )));
+      if (ok) setAviso(`${nome} atualizada. Os boletos já lançados não mudam.`);
+      return;
+    }
+    const nova = {
+      id: crypto.randomUUID(),
+      nome, fornecedorNome, valor, diaVencimento, observacao,
+      ativa: true,
+      criadoEm: todayISO(),
+    };
+    const ok = await salvarContasFixas([...contasFixas, nova]);
+    if (!ok) return;
+    if (fornecedorNome) salvarFornecedores(upsertFornecedor(fornecedores, fornecedorNome));
+    setAviso(`${nome} agora aparece todo mês, no dia ${diaVencimento}.`);
+  }
+
+  // Apagar e pausar mexem só no molde. O boleto que já foi lançado é uma
+  // conta a pagar como qualquer outra e continua onde está — dívida
+  // registrada não some porque o molde saiu do cadastro.
+  function removerContaFixa(fixa) {
+    confirmar(
+      `Tirar ${fixa.nome} das contas fixas? Ela para de aparecer todo mês. Os boletos já lançados continuam nas contas a pagar.`,
+      () => salvarContasFixas(contasFixas.filter((f) => f.id !== fixa.id))
+    );
+  }
+
+  function alternarPausaContaFixa(fixa) {
+    const pausando = fixa.ativa !== false;
+    salvarContasFixas(contasFixas.map((f) => (f.id === fixa.id ? { ...f, ativa: !pausando } : f)));
+    setAviso(pausando
+      ? `${fixa.nome} pausada — não aparece mais no quadro do mês até você voltar a ativar.`
+      : `${fixa.nome} voltou a ser cobrada todo mês.`);
+  }
+
+  async function criarContasDeFixas(itens) {
+    const novas = itens.map(({ fixa, vencimento, valor }) => ({
+      id: crypto.randomUUID(),
+      // Quando o dono anotou quem cobra (CEMIG), a conta sai no nome dela,
+      // que é como ela aparece no resto do sistema. Sem isso, o nome da
+      // própria conta serve — melhor "ENERGIA ELÉTRICA" do que
+      // "Sem distribuidora" na agenda de boletos.
+      fornecedorNome: fixa.fornecedorNome || fixa.nome,
+      descricao: fixa.nome,
+      valor,
+      vencimento,
+      status: 'pendente',
+      fixaId: fixa.id,
+      criadoEm: todayISO(),
+    }));
+    const ok = await salvarContas([...contas, ...novas]);
+    if (!ok) return;
+    const total = novas.reduce((a, c) => a + c.valor, 0);
+    setAviso(novas.length === 1
+      ? `${itens[0].fixa.nome} lançada para ${formatDateBR(novas[0].vencimento)} — ${formatMoney(total)}.`
+      : `${novas.length} contas fixas lançadas — ${formatMoney(total)}.`);
+  }
+
+  // Uma de cada vez pergunta o valor, já preenchido com o de sempre: é o
+  // momento em que o dono está com a fatura na mão.
+  function lancarContaFixa(fixa, vencimento) {
+    perguntar(
+      `Quanto veio de ${fixa.nome} com vencimento em ${formatDateBR(vencimento)}?`,
+      (Number(fixa.valor) || 0).toFixed(2).replace('.', ','),
+      (digitado) => {
+        const valor = parsePrecoBR(digitado);
+        if (isNaN(valor) || valor <= 0) { setErro('Informe um valor válido para lançar a conta.'); return; }
+        criarContasDeFixas([{ fixa, vencimento, valor }]);
+      }
+    );
+  }
+
+  // Em bloco entra tudo pelo valor de sempre — serve para o mês em que nada
+  // mudou. O que veio diferente se corrige depois, na lista de contas.
+  function lancarTodasContasFixas(pendentes, mes) {
+    const total = pendentes.reduce((a, s) => a + (Number(s.fixa.valor) || 0), 0);
+    confirmar(
+      `Lançar as ${pendentes.length} contas fixas de ${rotuloMes(mes)}, somando ${formatMoney(total)}? Cada uma entra pelo valor de sempre — o que veio diferente você corrige depois.`,
+      () => criarContasDeFixas(pendentes.map((s) => ({ fixa: s.fixa, vencimento: s.vencimento, valor: s.fixa.valor })))
+    );
   }
 
   function classificarConta(c) {
@@ -762,17 +876,24 @@ function CustoObraApp({ usuario }) {
     setCtBoletos((lista) => lista.map((b) => (b.id === id ? { ...b, ...campos } : b)));
   }
 
-  // A linha nova já nasce com o valor da anterior e o vencimento 30 dias
-  // depois — é como quase todo boleto de distribuidora vem (30/60/90).
+  // A linha nova já nasce com o valor da anterior e o vencimento no MESMO
+  // DIA do mês seguinte — é como o 30/60/90 da distribuidora funciona na
+  // prática: venceu dia 10, o próximo vence dia 10 do mês que vem.
+  // Somar 30 dias corridos desencontrava do papel (de 10/10 dava 09/11) e
+  // às vezes pulava um mês inteiro (de 31/01 dava 02/03).
   // É só um chute para adiantar a digitação: os dois campos continuam
   // editáveis, e nada é gravado sem o dono conferir.
   function adicionarBoleto() {
     setCtBoletos((lista) => {
+      const primeiro = lista[0];
       const ultimo = lista[lista.length - 1];
+      const sugerido = ultimo && ultimo.vencimento
+        ? proximoVencimentoBoleto(primeiro && primeiro.vencimento, ultimo.vencimento)
+        : '';
       return [...lista, {
         id: crypto.randomUUID(),
         valor: ultimo ? ultimo.valor : '',
-        vencimento: ultimo && ultimo.vencimento ? somarDias(ultimo.vencimento, 30) : todayISO(),
+        vencimento: sugerido || todayISO(),
       }];
     });
   }
@@ -914,7 +1035,7 @@ function CustoObraApp({ usuario }) {
       sistema: 'casaseco-custo-obra',
       versaoBackup: 1,
       geradoEm: new Date().toISOString(),
-      dados: { obras, produtos, lancamentos, etapas, fornecedores, contas, contratos, clientes, montadores, crediario, configuracao },
+      dados: { obras, produtos, lancamentos, etapas, fornecedores, contas, contasFixas, contratos, clientes, montadores, crediario, configuracao },
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -954,7 +1075,7 @@ function CustoObraApp({ usuario }) {
       // feitos antes de um módulo existir, não têm a chave e continuam
       // válidos — restauram sem ela, em vez de serem rejeitados.
       const chavesObrigatorias = ['obras', 'produtos', 'lancamentos', 'etapas', 'fornecedores', 'contas'];
-      const listasOpcionais = ['contratos', 'clientes', 'montadores', 'crediario'];
+      const listasOpcionais = ['contratos', 'clientes', 'montadores', 'crediario', 'contasFixas'];
       const valido = dados
         && chavesObrigatorias.every((k) => Array.isArray(dados[k]))
         && listasOpcionais.every((k) => dados[k] === undefined || Array.isArray(dados[k]));
@@ -979,6 +1100,7 @@ function CustoObraApp({ usuario }) {
       salvarEtapas(dados.etapas),
       salvarFornecedores(dados.fornecedores),
       salvarContas(dados.contas),
+      salvarContasFixas(dados.contasFixas || []),
       salvarContratos(dados.contratos || []),
       salvarClientes(dados.clientes || []),
       salvarMontadores(dados.montadores || []),
@@ -1561,7 +1683,6 @@ function CustoObraApp({ usuario }) {
         {view === 'home' && (
           <div className="space-y-6">
             {obras.length > 0 && (() => {
-              const totalOrcado = obras.reduce((a, o) => a + (o.orcamento || 0), 0);
               const totalGastoGeral = obras.reduce((a, o) => a + totalObra(o.id), 0);
               const alertas = gerarAlertas();
               const hoje = todayISO();
@@ -1571,20 +1692,10 @@ function CustoObraApp({ usuario }) {
               const contasProx7 = contas.filter((c) => c.status !== 'pago' && c.vencimento >= hoje && c.vencimento <= em7ISO);
               return (
                 <div className="space-y-3">
-                  <div className="eco-stagger grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div className="eco-card p-3">
-                      <p className="text-xs text-stone-500">Orçamento total</p>
-                      <p className="text-lg font-semibold text-stone-900">{totalOrcado > 0 ? formatMoney(totalOrcado) : '—'}</p>
-                    </div>
+                  <div className="eco-stagger grid grid-cols-2 lg:grid-cols-3 gap-3">
                     <div className="eco-card p-3">
                       <p className="text-xs text-stone-500">Gasto total</p>
                       <p className="text-lg font-semibold text-green-800">{formatMoney(totalGastoGeral)}</p>
-                    </div>
-                    <div className="eco-card p-3">
-                      <p className="text-xs text-stone-500">Saldo</p>
-                      <p className={`text-lg font-semibold ${totalOrcado - totalGastoGeral < 0 ? 'text-red-600' : 'text-stone-900'}`}>
-                        {totalOrcado > 0 ? formatMoney(totalOrcado - totalGastoGeral) : '—'}
-                      </p>
                     </div>
                     <div className="eco-card p-3">
                       <p className="text-xs text-stone-500">Obras ativas</p>
@@ -2260,7 +2371,7 @@ function CustoObraApp({ usuario }) {
           Object.keys(grupos).forEach((g) => { contasPorGrupo[g] = []; });
           contas.forEach((c) => { contasPorGrupo[classificarConta(c)].push(c); });
 
-          const abas = [['dia', 'Por dia', CalendarDays], ['registrar', 'Registrar', Plus], ['relatorio', 'Relatório', BarChart3]];
+          const abas = [['dia', 'Por dia', CalendarDays], ['registrar', 'Registrar', Plus], ['fixas', 'Fixas do mês', Repeat], ['relatorio', 'Relatório', BarChart3]];
 
           return (
             <div className="space-y-6">
@@ -2280,6 +2391,20 @@ function CustoObraApp({ usuario }) {
 
               {abaContas === 'dia' && (
                 <BoletosPorDia contas={contas} onMarcarPaga={marcarContaPaga} />
+              )}
+
+              {abaContas === 'fixas' && (
+                <ContasFixas
+                  fixas={contasFixas}
+                  contas={contas}
+                  fornecedores={fornecedores}
+                  onSalvarFixa={salvarContaFixa}
+                  onRemoverFixa={removerContaFixa}
+                  onAlternarPausa={alternarPausaContaFixa}
+                  onLancar={lancarContaFixa}
+                  onLancarTodas={lancarTodasContasFixas}
+                  onMarcarPaga={marcarContaPaga}
+                />
               )}
 
               {abaContas === 'relatorio' && (
