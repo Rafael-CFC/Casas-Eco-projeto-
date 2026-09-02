@@ -30,6 +30,30 @@ export function somarDias(iso, dias) {
   return isoLocal(d);
 }
 
+// O vencimento sugerido para o próximo boleto da mesma nota: um mês depois
+// do último, mas no DIA do primeiro.
+//
+// O dia vem do primeiro porque é ele que o dono copiou do papel, e porque
+// senão a data escorrega e não volta mais: encadeando a partir de 31/12,
+// fevereiro corta para 28 e daí em diante todo mês vira 28 — 31/12, 31/01,
+// 28/02, 28/03. Ancorando no dia do primeiro, o corte de fevereiro é só de
+// fevereiro: 31/12, 31/01, 28/02, 31/03, 30/04.
+//
+// O mês vem do último para que corrigir uma linha à mão empurre as
+// próximas junto, e para nunca repetir uma data que já está na tela.
+export function proximoVencimentoBoleto(primeiroISO, ultimoISO) {
+  const ultimo = String(ultimoISO || '').slice(0, 10);
+  const [ano, mes] = ultimo.split('-').map(Number);
+  if (!ano || !mes) return '';
+  const primeiro = String(primeiroISO || '').slice(0, 10) || ultimo;
+  const diaDoPrimeiro = Number(primeiro.slice(8, 10)) || Number(ultimo.slice(8, 10));
+
+  const alvo = new Date(ano, mes, 1); // dia 1º do mês seguinte ao do último
+  const ultimoDiaDoMes = new Date(alvo.getFullYear(), alvo.getMonth() + 1, 0).getDate();
+  alvo.setDate(Math.min(diaDoPrimeiro, ultimoDiaDoMes));
+  return isoLocal(alvo);
+}
+
 // ---- filtros ----
 
 export function distribuidorasDasContas(contas) {
