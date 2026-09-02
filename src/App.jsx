@@ -1561,7 +1561,6 @@ function CustoObraApp({ usuario }) {
         {view === 'home' && (
           <div className="space-y-6">
             {obras.length > 0 && (() => {
-              const totalOrcado = obras.reduce((a, o) => a + (o.orcamento || 0), 0);
               const totalGastoGeral = obras.reduce((a, o) => a + totalObra(o.id), 0);
               const alertas = gerarAlertas();
               const hoje = todayISO();
@@ -1571,20 +1570,10 @@ function CustoObraApp({ usuario }) {
               const contasProx7 = contas.filter((c) => c.status !== 'pago' && c.vencimento >= hoje && c.vencimento <= em7ISO);
               return (
                 <div className="space-y-3">
-                  <div className="eco-stagger grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div className="eco-card p-3">
-                      <p className="text-xs text-stone-500">Orçamento total</p>
-                      <p className="text-lg font-semibold text-stone-900">{totalOrcado > 0 ? formatMoney(totalOrcado) : '—'}</p>
-                    </div>
+                  <div className="eco-stagger grid grid-cols-2 lg:grid-cols-3 gap-3">
                     <div className="eco-card p-3">
                       <p className="text-xs text-stone-500">Gasto total</p>
                       <p className="text-lg font-semibold text-green-800">{formatMoney(totalGastoGeral)}</p>
-                    </div>
-                    <div className="eco-card p-3">
-                      <p className="text-xs text-stone-500">Saldo</p>
-                      <p className={`text-lg font-semibold ${totalOrcado - totalGastoGeral < 0 ? 'text-red-600' : 'text-stone-900'}`}>
-                        {totalOrcado > 0 ? formatMoney(totalOrcado - totalGastoGeral) : '—'}
-                      </p>
                     </div>
                     <div className="eco-card p-3">
                       <p className="text-xs text-stone-500">Obras ativas</p>
