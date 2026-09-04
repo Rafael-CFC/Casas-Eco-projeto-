@@ -26,6 +26,9 @@ import {
   SITUACAO_OBRA, obraEstaConcluida, obraFoiIniciada, situacaoObra, diasDeObra, textoDiasDeObra,
 } from './obra/obraStatus';
 import SucessoFinalizacaoModal from './obra/SucessoFinalizacaoModal';
+import {
+  filtrarLancamentos, resumoLancamentos, textoQuantidades, lancamentosEmOutrasCategorias,
+} from './obra/buscaLancamentos';
 import ResumoFinalObra from './obra/ResumoFinalObra';
 import ProdutoSeletor from './produtos/ProdutoSeletor';
 import { catalogoPorCategoria, filtrarOrdenarProdutos, ORDENS_CATALOGO } from './produtos/catalogoUtils';
@@ -3042,15 +3045,11 @@ function CustoObraApp({ usuario }) {
             )}
 
             {(() => {
-              const listaFiltrada = lancamentos
-                .filter((l) => l.obraId === obraAtiva.id && l.categoria === categoriaAtiva)
-                .filter((l) => {
-                  const q = buscaLancamento.trim().toLowerCase();
-                  if (!q) return true;
-                  return l.descricao.toLowerCase().includes(q)
-                    || (l.fornecedorNome || '').toLowerCase().includes(q)
-                    || (l.observacao || '').toLowerCase().includes(q);
-                });
+              const alvo = { obraId: obraAtiva.id, categoria: categoriaAtiva, termo: buscaLancamento };
+              const listaFiltrada = filtrarLancamentos(lancamentos, alvo);
+              const conta = resumoLancamentos(listaFiltrada);
+              const fora = lancamentosEmOutrasCategorias(lancamentos, alvo);
+              const procurando = buscaLancamento.trim().length > 0;
               return (
                 <div className="eco-card overflow-hidden">
                   <div className="p-2 border-b border-stone-100">
@@ -3111,6 +3110,48 @@ function CustoObraApp({ usuario }) {
                         </tr>
                       ))}
                     </tbody>
+                    {/* ---- a conta do que a busca achou ----
+                        Procurar "prego" e ver quanto de dinheiro foi
+                        embora em prego era coisa de somar no papel. */}
+                    {conta.lancamentos > 0 && (
+                      <tfoot>
+                        <tr className="border-t-2 border-stone-200 bg-stone-50">
+                          <td colSpan={2} className="px-3 py-2 text-stone-600">
+                            <span className="font-medium">
+                              {procurando ? `Total de "${buscaLancamento.trim()}"` : 'Total da categoria'}
+                            </span>
+                            <span className="text-stone-400">
+                              {` · ${conta.lancamentos} lançamento${conta.lancamentos > 1 ? 's' : ''}`}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium text-stone-700 whitespace-nowrap">
+                            {textoQuantidades(conta.quantidades)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-stone-500 whitespace-nowrap">
+                            {/* média ponderada: dinheiro dividido pela
+                                quantidade. Só aparece quando tudo o que a
+                                busca achou está na mesma unidade. */}
+                            {conta.precoMedio != null ? `média ${formatMoney(conta.precoMedio)}` : ''}
+                          </td>
+                          <td className="px-3 py-2 text-right font-semibold text-green-800 whitespace-nowrap">
+                            {formatMoney(conta.total)}
+                          </td>
+                          <td className="px-3 py-2"></td>
+                        </tr>
+                        {/* o mesmo termo pode ter caído em outra categoria
+                            da obra; sem este aviso o total acima seria
+                            lido como "tudo o que gastei disso" */}
+                        {fora.lancamentos > 0 && (
+                          <tr className="bg-stone-50">
+                            <td colSpan={6} className="px-3 pb-2 text-xs text-amber-700">
+                              Fora desta categoria há mais {fora.lancamentos} lançamento
+                              {fora.lancamentos > 1 ? 's' : ''} de "{buscaLancamento.trim()}" nesta obra,
+                              somando {formatMoney(fora.total)}. Este total é só de {CATEGORIAS[categoriaAtiva].label}.
+                            </td>
+                          </tr>
+                        )}
+                      </tfoot>
+                    )}
                   </table>
                   </div>
                 </div>

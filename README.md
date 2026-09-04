@@ -268,6 +268,34 @@ apertando "Gerar contrato" de novo. Agora a pergunta é "essa obra existe?", ent
 gerar outra vez também conserta, e apagar uma obra desfaz o vínculo em vez de
 deixá-lo pendurado.
 
+### Obra — procurar um material e ver quanto foi gasto nele
+
+Dentro da obra, a busca acima da lista de lançamentos agora **soma no pé da
+lista** tudo o que ela achou. Digite `prego` e a última linha responde de uma vez:
+
+```
+Total de "prego" · 7 lançamentos     30 UN     média R$ 17,18     R$ 515,32
+```
+
+- **quanto de dinheiro** foi embora naquilo (a coluna Total);
+- **quanto foi comprado**, somado por unidade;
+- a **média por unidade** — o dinheiro dividido pela quantidade.
+
+Sem nada digitado, a linha vira o **total da categoria** inteira.
+
+Três cuidados para o número não mentir:
+
+- **Quantidade não vira um número só.** Se a busca pegou coisas medidas de jeitos
+  diferentes, aparece `30 UN · 20 SC` em vez de um "50" que não quer dizer nada.
+- **A média só aparece quando a unidade é uma só.** Dividir dinheiro por unidades
+  misturadas daria um número com cara de verdade e sem significado.
+- **O total é só da categoria aberta.** Se o mesmo termo também apareceu em outra
+  categoria da obra, uma linha amarela avisa quantos lançamentos são e quanto
+  somam — assim ninguém lê "R$ 515,32" como tudo o que a obra gastou de prego.
+
+A busca também passou a ignorar acento e a aceitar as palavras em qualquer ordem,
+igual à do Catálogo: `cabeca dupla` acha `PREGO POLIDO 17X27 CABEÇA DUPLA`.
+
 ## E se eu precisar mexer em algo depois?
 
 Sempre que eu (Claude) fizer uma atualização no software, vou te mandar os arquivos atualizados aqui no chat. Você só precisa:
