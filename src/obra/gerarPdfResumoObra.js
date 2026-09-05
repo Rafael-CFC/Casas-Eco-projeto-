@@ -1,11 +1,21 @@
-// Geração do PDF "Resumo Final da Obra".
+// Geração do PDF da obra, em duas versões: o RESUMO FINAL (obra
+// finalizada, documento de encerramento) e o RELATÓRIO PARCIAL (a
+// qualquer momento, com o que foi gasto até a data de emissão).
+//
+// É o mesmo documento e as mesmas contas — muda só o que está escrito,
+// porque o que muda de verdade é o tempo verbal. No final a conta está
+// fechada: sobrou tanto, "economia". No meio da obra não sobrou nada
+// ainda, o dinheiro só não foi gasto: "ainda disponível". Chamar isso de
+// economia no meio do caminho seria dar por encerrado o que não acabou.
+//
 // Desenhado inteiramente com primitivas vetoriais do jsPDF (retângulos,
 // linhas, texto) — sem depender de captura de tela (html2canvas) — para não
 // ter problemas de fonte/CORS e para o texto do PDF continuar selecionável.
 // Todos os números vêm do objeto `resumo` calculado por obraResumoCalc.js a
 // partir dos lançamentos reais da obra; nada aqui é inventado.
 import { jsPDF } from 'jspdf';
-import { formatMoney, formatDateBR, formatPct, CORES_CATEGORIA } from '../domain';
+import { formatMoney, formatDateBR, formatPct, CORES_CATEGORIA, todayISO } from '../domain';
+import { SITUACAO_OBRA, situacaoObra } from './obraStatus';
 
 const MARGEM = 40;
 const RODAPE_Y = 800;
@@ -98,7 +108,7 @@ function iconeAlerta(ctx, cx, cy, acima) {
   }
 }
 
-function bannerConclusao(ctx, resumo) {
+function bannerConclusao(ctx, resumo, parcial) {
   const acima = resumo.statusOrcamentario === 'acima';
   const altura = 44;
   quebrarPaginaSeNecessario(ctx, altura + 12);
@@ -108,17 +118,19 @@ function bannerConclusao(ctx, resumo) {
   ctx.doc.setFont('helvetica', 'bold');
   ctx.doc.setFontSize(10.5);
   ctx.doc.setTextColor(...(acima ? COR.vermelho : COR.verdeEscuro));
-  ctx.doc.text(
-    acima ? 'OBRA FINALIZADA ACIMA DO ORÇAMENTO' : 'OBRA FINALIZADA DENTRO DO ORÇAMENTO',
-    ctx.x + 28,
-    ctx.y + 18
-  );
+  const titulo = parcial
+    ? (acima ? 'ACIMA DO ORÇAMENTO ATÉ AQUI' : 'DENTRO DO ORÇAMENTO ATÉ AQUI')
+    : (acima ? 'OBRA FINALIZADA ACIMA DO ORÇAMENTO' : 'OBRA FINALIZADA DENTRO DO ORÇAMENTO');
+  ctx.doc.text(titulo, ctx.x + 28, ctx.y + 18);
   ctx.doc.setFont('helvetica', 'normal');
   ctx.doc.setFontSize(9);
   ctx.doc.setTextColor(...COR.cinzaTexto);
+  // "economia" só existe com a obra fechada; no meio do caminho o que
+  // há é orçamento ainda não gasto
+  const sobra = parcial ? 'Ainda disponível' : 'Economia de';
   const detalhe = acima
     ? `Excedente de ${formatMoney(Math.abs(resumo.saldo))} · ${formatPct(resumo.pctUtilizado)} do orçamento utilizado`
-    : `Economia de ${formatMoney(resumo.saldo)} · ${formatPct(resumo.pctUtilizado)} do orçamento utilizado`;
+    : `${sobra} ${formatMoney(resumo.saldo)} · ${formatPct(resumo.pctUtilizado)} do orçamento utilizado`;
   ctx.doc.text(detalhe, ctx.x + 28, ctx.y + 32);
   ctx.y += altura + 18;
 }
@@ -252,7 +264,8 @@ function tabelaFornecedores(ctx, itens) {
   ctx.y += 3;
 }
 
-export async function gerarPdfResumoObra(obra, resumo) {
+export async function gerarPdfResumoObra(obra, resumo, { parcial = false } = {}) {
+  const hoje = todayISO();
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const larguraPagina = doc.internal.pageSize.getWidth();
   const largura = larguraPagina - MARGEM * 2;
@@ -272,7 +285,7 @@ export async function gerarPdfResumoObra(obra, resumo) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...COR.cinzaClaro);
-  doc.text('Custo de Obra — Resumo Final', ctx.x + offsetTexto, ctx.y + 29);
+  doc.text(`Custo de Obra — ${parcial ? 'Relatório Parcial' : 'Resumo Final'}`, ctx.x + offsetTexto, ctx.y + 29);
   ctx.y += 50;
 
   doc.setDrawColor(...COR.linha);
@@ -283,12 +296,20 @@ export async function gerarPdfResumoObra(obra, resumo) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(17);
   doc.setTextColor(...COR.preto);
-  doc.text(`RESUMO FINAL — ${obra.nome.toUpperCase()}`, ctx.x, ctx.y, { maxWidth: largura });
+  doc.text(
+    `${parcial ? 'RELATÓRIO PARCIAL' : 'RESUMO FINAL'} — ${obra.nome.toUpperCase()}`,
+    ctx.x, ctx.y, { maxWidth: largura }
+  );
   ctx.y += 18;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...COR.cinzaClaro);
-  doc.text(`Documento gerado em ${formatDateBR(new Date().toISOString().slice(0, 10))}`, ctx.x, ctx.y);
+  // No parcial a data não é enfeite: ela diz até quando a conta vale.
+  // Emitido de novo semana que vem, os números serão outros.
+  doc.text(
+    `Documento gerado em ${formatDateBR(hoje)}${parcial ? ' · com os lançamentos registrados até esta data' : ''}`,
+    ctx.x, ctx.y
+  );
   ctx.y += 26;
 
   // ---- informações da obra ----
@@ -297,22 +318,32 @@ export async function gerarPdfResumoObra(obra, resumo) {
   if (obra.cliente) linhaChaveValor(ctx, 'Cliente', obra.cliente);
   if (obra.endereco) linhaChaveValor(ctx, 'Endereço', obra.endereco);
   linhaChaveValor(ctx, 'Data de início', `${formatDateBR(resumo.dataInicio)}${resumo.inicioRegistrado ? '' : ' (data de cadastro)'}`);
-  linhaChaveValor(ctx, 'Data de finalização', obra.finalizadaEm ? formatDateBR(obra.finalizadaEm.slice(0, 10)) : '—');
-  linhaChaveValor(ctx, 'Duração da obra', resumo.duracaoDias ? `${resumo.duracaoDias} dias` : '—');
-  linhaChaveValor(ctx, 'Status', 'CONCLUÍDA');
+  if (obra.finalizadaEm) {
+    linhaChaveValor(ctx, 'Data de finalização', formatDateBR(obra.finalizadaEm.slice(0, 10)));
+  }
+  if (resumo.duracaoDias) {
+    linhaChaveValor(ctx, parcial ? 'Dias de obra até aqui' : 'Duração da obra', `${resumo.duracaoDias} dias`);
+  }
+  // No parcial o status é o de verdade (aguardando início, em andamento,
+  // programada); no final é sempre CONCLUÍDA, que é o que o encerramento
+  // atesta.
+  linhaChaveValor(ctx, 'Status', parcial ? SITUACAO_OBRA[situacaoObra(obra, hoje)].label : 'CONCLUÍDA');
   ctx.y += 8;
 
   // ---- resumo financeiro ----
   tituloSecao(ctx, 'RESUMO FINANCEIRO');
   if (resumo.orcamento != null) linhaChaveValor(ctx, 'Orçamento total', formatMoney(resumo.orcamento));
-  linhaChaveValor(ctx, 'Custo total', formatMoney(resumo.totalGasto));
-  if (resumo.saldo != null) linhaChaveValor(ctx, resumo.saldo < 0 ? 'Excedente' : 'Economia', formatMoney(Math.abs(resumo.saldo)));
+  linhaChaveValor(ctx, parcial ? 'Custo até aqui' : 'Custo total', formatMoney(resumo.totalGasto));
+  if (resumo.saldo != null) {
+    const rotuloSaldo = resumo.saldo < 0 ? 'Excedente' : (parcial ? 'Ainda disponível' : 'Economia');
+    linhaChaveValor(ctx, rotuloSaldo, formatMoney(Math.abs(resumo.saldo)));
+  }
   if (resumo.pctUtilizado != null) linhaChaveValor(ctx, 'Percentual do orçamento utilizado', formatPct(resumo.pctUtilizado));
   linhaChaveValor(ctx, 'Quantidade de lançamentos', String(resumo.qtdLancamentos));
   if (resumo.mediaGastoPorMes != null) linhaChaveValor(ctx, 'Média de gasto por mês', formatMoney(resumo.mediaGastoPorMes));
   ctx.y += 6;
 
-  if (resumo.orcamento != null) bannerConclusao(ctx, resumo);
+  if (resumo.orcamento != null) bannerConclusao(ctx, resumo, parcial);
 
   // ---- gráfico 1: gastos por categoria ----
   tituloSecao(ctx, 'GASTOS POR CATEGORIA');
@@ -334,7 +365,7 @@ export async function gerarPdfResumoObra(obra, resumo) {
   }
 
   // ---- maiores despesas ----
-  tituloSecao(ctx, 'MAIORES DESPESAS DA OBRA');
+  tituloSecao(ctx, parcial ? 'MAIORES DESPESAS ATÉ AQUI' : 'MAIORES DESPESAS DA OBRA');
   tabelaDespesas(ctx, resumo.maioresDespesas);
   ctx.y += 6;
 
@@ -364,9 +395,18 @@ export async function gerarPdfResumoObra(obra, resumo) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(...COR.cinzaMuitoClaro);
-    doc.text('Casas Eco · Custo de Obra', MARGEM, RODAPE_Y);
+    doc.text(
+      parcial
+        ? `Casas Eco · Custo de Obra · relatório parcial de ${formatDateBR(hoje)}`
+        : 'Casas Eco · Custo de Obra',
+      MARGEM, RODAPE_Y
+    );
     doc.text(`página ${p} de ${totalPaginas}`, larguraPagina - MARGEM, RODAPE_Y, { align: 'right' });
   }
 
-  doc.save(`Resumo Final - ${obra.nome}.pdf`);
+  // a data entra no nome do arquivo do parcial: dois relatórios da mesma
+  // obra são documentos diferentes, e sem a data um sobrescreveria o outro
+  doc.save(parcial
+    ? `Relatorio Parcial - ${obra.nome} - ${hoje}.pdf`
+    : `Resumo Final - ${obra.nome}.pdf`);
 }

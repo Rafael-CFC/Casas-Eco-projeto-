@@ -28,6 +28,10 @@ export default function ProdutoSeletor({
   itens,
   placeholder,
   categoriaLabel,
+  // as palavras mudam com a categoria: mão de obra procura "serviço",
+  // não "produto" (ver obra/vocabularioCategoria.js)
+  buscaPlaceholder = 'Pesquisar produto…',
+  abrirLabel = 'Abrir catálogo de produtos',
   id,
 }) {
   const [aberto, setAberto] = useState(false);
@@ -193,7 +197,7 @@ export default function ProdutoSeletor({
               value={value}
               onChange={(e) => onChangeTexto(e.target.value)}
               onKeyDown={aoTeclar}
-              placeholder="Pesquisar produto…"
+              placeholder={buscaPlaceholder}
               autoFocus={mobile}
               className="eco-input-sm pl-8 w-full"
             />
@@ -249,7 +253,7 @@ export default function ProdutoSeletor({
           tabIndex={-1}
           onClick={() => { setAberto((v) => !v); inputRef.current?.focus(); }}
           className="px-2.5 border border-stone-200 rounded-r-lg bg-white text-stone-400 hover:text-stone-600 hover:bg-stone-50 transition-colors duration-150 flex-shrink-0"
-          aria-label="Abrir catálogo de produtos"
+          aria-label={abrirLabel}
         >
           <ChevronDown size={16} className={`transition-transform duration-150 ${aberto ? 'rotate-180' : ''}`} />
         </button>

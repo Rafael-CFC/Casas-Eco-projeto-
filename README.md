@@ -350,6 +350,53 @@ Três cuidados para o número não mentir:
 A busca também passou a ignorar acento e a aceitar as palavras em qualquer ordem,
 igual à do Catálogo: `cabeca dupla` acha `PREGO POLIDO 17X27 CABEÇA DUPLA`.
 
+### Relatório PDF da obra — a qualquer momento, sem finalizar
+
+Dentro da obra, ao lado de **CSV** e **Copiar resumo**, tem o botão **Relatório PDF**.
+Ele gera o mesmo documento do encerramento — informações da obra, resumo financeiro,
+gastos por categoria, evolução mês a mês, orçamento x custo real, maiores despesas e
+principais fornecedores — só que **com o que foi lançado até hoje**. Serve para
+mostrar ao cliente, levar numa reunião ou conferir o andamento sem precisar
+finalizar nada. A obra não muda: o botão só lê.
+
+O documento sai marcado como parcial em tudo, para ninguém confundir com o de
+encerramento:
+
+- o título é **"RELATÓRIO PARCIAL"**, e embaixo dele a data: *"gerado em 05/09/2026
+  · com os lançamentos registrados até esta data"*;
+- o **status é o de verdade** (em andamento, aguardando início, início programado) —
+  o resumo final é que sempre diz "CONCLUÍDA";
+- onde o resumo final escreve **"Economia"**, o parcial escreve **"Ainda
+  disponível"**. No fim da obra o que sobrou é economia; no meio do caminho o
+  dinheiro só ainda não foi gasto, e chamar isso de economia seria dar por encerrado
+  o que não acabou;
+- o nome do arquivo leva a data (`Relatorio Parcial - CASA X - 2026-09-05.pdf`), então
+  dois relatórios da mesma obra não se sobrescrevem.
+
+O **Resumo Final** continua igual, gerado no encerramento da obra.
+
+### Mão de obra não é produto
+
+O formulário de lançamento é o mesmo para as três categorias, e por isso falava de
+tudo como se fosse compra de loja: "Produto", "UN", "Fornecedor", "Pesquisar
+produto…". Em **Mão de obra** agora ele fala de serviço:
+
+| | Produtos da Loja | Mão de obra |
+|---|---|---|
+| campo do item | Produto | **Serviço** |
+| unidade | UN | **DIÁRIA** (já preenchida) |
+| valor | Valor (R$) | **Valor por unidade (R$)** |
+| quem | Fornecedor (opcional) | **Quem fez (opcional)** |
+| exemplo | Ex: Depósito São José | Ex: Messias (pedreiro) |
+| na lista | 🏪 | 👷 |
+
+A unidade vem **preenchida à vista** no campo (DIÁRIA), não escondida como padrão —
+quem fechou por empreitada troca antes de lançar. Ao lado do campo há sugestões
+(DIÁRIA, H, SEMANA, MÊS, M², M, EMPREITADA), mas é sugestão, não regra: dá para
+digitar qualquer unidade.
+
+Os números e o jeito de guardar não mudaram — muda só o que está escrito na tela.
+
 ## E se eu precisar mexer em algo depois?
 
 Sempre que eu (Claude) fizer uma atualização no software, vou te mandar os arquivos atualizados aqui no chat. Você só precisa:

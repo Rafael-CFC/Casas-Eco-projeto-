@@ -28,6 +28,9 @@ import {
   SITUACAO_OBRA, obraEstaConcluida, obraFoiIniciada, situacaoObra, diasDeObra, textoDiasDeObra,
 } from './obra/obraStatus';
 import SucessoFinalizacaoModal from './obra/SucessoFinalizacaoModal';
+import { vocabularioDe } from './obra/vocabularioCategoria';
+import { calcularResumoObra } from './obra/obraResumoCalc';
+import { gerarPdfResumoObra } from './obra/gerarPdfResumoObra';
 import {
   filtrarLancamentos, resumoLancamentos, textoQuantidades, lancamentosEmOutrasCategorias,
 } from './obra/buscaLancamentos';
@@ -955,6 +958,24 @@ function CustoObraApp({ usuario }) {
     setAviso(`"${nomeArquivo}" baixado.`);
   }
 
+  // Relatório parcial: o mesmo documento do encerramento, só que emitido
+  // no meio do caminho, com o que foi lançado até hoje. Não muda nada na
+  // obra — é só leitura.
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
+  async function baixarRelatorioParcial(obra) {
+    if (!obra) return;
+    setGerandoRelatorio(true);
+    try {
+      const resumo = calcularResumoObra(obra, lancamentos, CATEGORIAS);
+      await gerarPdfResumoObra(obra, resumo, { parcial: true });
+      setAviso(`Relatório parcial de "${obra.nome}" gerado com os lançamentos até hoje.`);
+    } catch (e) {
+      setErro('Não foi possível gerar o relatório parcial.');
+    } finally {
+      setGerandoRelatorio(false);
+    }
+  }
+
   function exportarObraCSV(obra) {
     const itens = lancamentos.filter((l) => l.obraId === obra.id);
     const linhas = [['Data', 'Categoria', 'Descrição', 'Etapa', 'Fornecedor', 'Quantidade', 'Unidade', 'Valor Unit.', 'Total', 'Observação']];
@@ -1326,7 +1347,7 @@ function CustoObraApp({ usuario }) {
   // ---- lançamento dentro de uma obra ----
   const [ldDescricao, setLdDescricao] = useState('');
   const [ldQuantidade, setLdQuantidade] = useState('1');
-  const [ldUnidade, setLdUnidade] = useState('UN');
+  const [ldUnidade, setLdUnidade] = useState(vocabularioDe('produto_loja').unidadePadrao);
   const [ldPreco, setLdPreco] = useState('');
   const [ldData, setLdData] = useState(todayISO());
   const [ldObservacao, setLdObservacao] = useState('');
@@ -1339,8 +1360,8 @@ function CustoObraApp({ usuario }) {
   const [editandoId, setEditandoId] = useState(null);
   const [buscaLancamento, setBuscaLancamento] = useState('');
 
-  function resetFormLancamento() {
-    setLdDescricao(''); setLdQuantidade('1'); setLdUnidade('UN');
+  function resetFormLancamento(categoria = categoriaAtiva) {
+    setLdDescricao(''); setLdQuantidade('1'); setLdUnidade(vocabularioDe(categoria).unidadePadrao);
     setLdPreco(''); setLdData(todayISO());
     setLdObservacao(''); setLdEtapaId(''); setLdFornecedor('');
     setLdFornecedorAutomatico(false); setEditandoId(null);
@@ -1402,7 +1423,7 @@ function CustoObraApp({ usuario }) {
     const quantidade = parsePrecoBR(ldQuantidade);
     const preco = parsePrecoBR(ldPreco);
     const nome = normalizeProductName(ldDescricao);
-    const unidade = normalizeUnit(ldUnidade) || 'UN';
+    const unidade = normalizeUnit(ldUnidade) || vocabularioDe(categoriaAtiva).unidadePadrao;
 
     if (!nome) { setErro('Descreva o item.'); return; }
     if (isNaN(quantidade) || quantidade <= 0) { setErro('Informe uma quantidade válida.'); return; }
@@ -2771,6 +2792,14 @@ function CustoObraApp({ usuario }) {
                 </p>
               </div>
               <div className="flex items-center gap-3">
+                <button
+                  onClick={() => baixarRelatorioParcial(obraAtiva)}
+                  disabled={gerandoRelatorio}
+                  className="eco-btn-secondary eco-btn-sm disabled:opacity-50"
+                  title="PDF com tudo o que foi gasto nesta obra até hoje"
+                >
+                  <FileText size={14} /> {gerandoRelatorio ? 'Gerando…' : 'Relatório PDF'}
+                </button>
                 <button onClick={() => exportarObraCSV(obraAtiva)} className="eco-btn-secondary eco-btn-sm">
                   <Download size={14} /> CSV
                 </button>
@@ -2972,7 +3001,7 @@ function CustoObraApp({ usuario }) {
                 return (
                   <button
                     key={key}
-                    onClick={() => { setCategoriaAtiva(key); resetFormLancamento(); }}
+                    onClick={() => { setCategoriaAtiva(key); resetFormLancamento(key); }}
                     className={`min-w-0 text-xs sm:text-sm px-2 sm:px-3 py-2 rounded-lg border flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 text-center transition-colors duration-150 ${
                       ativo ? `${c.solid} text-white border-transparent` : `bg-white ${c.text} ${c.border}`
                     }`}
@@ -3079,23 +3108,21 @@ function CustoObraApp({ usuario }) {
             {obraConcluida && (
               <p className="text-xs text-stone-400 flex items-center gap-1 -mb-2"><Lock size={12} /> Obra concluída — reabra a obra para lançar novos gastos.</p>
             )}
-            {!obraConcluida && (
+            {!obraConcluida && (() => {
+            const voc = vocabularioDe(categoriaAtiva);
+            return (
             <div className="eco-card p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 items-end">
               <div className="col-span-2 sm:col-span-4 lg:col-span-2">
-                <label className="text-xs text-stone-500 block mb-1">
-                  {categoriaAtiva === 'produto_loja' ? 'Produto' : 'Descrição'}
-                </label>
+                <label className="text-xs text-stone-500 block mb-1">{voc.item}</label>
                 <ProdutoSeletor
                   value={ldDescricao}
                   onChangeTexto={aoDigitarDescricao}
                   onSelecionar={selecionarItemCatalogo}
                   itens={catalogoAtivo}
                   categoriaLabel={CATEGORIAS[categoriaAtiva].label}
-                  placeholder={
-                    categoriaAtiva === 'produto_loja'
-                      ? 'Digite ou escolha — se já existir, o preço vem sozinho'
-                      : categoriaAtiva === 'mao_de_obra' ? 'Ex: Pedreiro - diária' : 'Ex: Areia lavada'
-                  }
+                  placeholder={voc.itemPlaceholder}
+                  buscaPlaceholder={voc.seletorBusca}
+                  abrirLabel={voc.seletorAbrir}
                 />
               </div>
               <div className="col-span-1">
@@ -3105,11 +3132,18 @@ function CustoObraApp({ usuario }) {
               </div>
               <div className="col-span-1">
                 <label className="text-xs text-stone-500 block mb-1">Unid.</label>
-                <input value={ldUnidade} onChange={(e) => setLdUnidade(upperInput(e.target.value))} placeholder="UN, M³..."
+                <input value={ldUnidade} onChange={(e) => setLdUnidade(upperInput(e.target.value))}
+                  placeholder={voc.unidadePlaceholder}
+                  list={`unidades-${categoriaAtiva}`}
                   className="eco-input" />
+                {/* sugestões, não regra: o campo continua aceitando
+                    qualquer coisa que a pessoa digitar */}
+                <datalist id={`unidades-${categoriaAtiva}`}>
+                  {voc.unidadesSugeridas.map((u) => <option key={u} value={u} />)}
+                </datalist>
               </div>
               <div className="col-span-1">
-                <label className="text-xs text-stone-500 block mb-1">Valor (R$)</label>
+                <label className="text-xs text-stone-500 block mb-1">{voc.valor}</label>
                 <input value={ldPreco} onChange={(e) => setLdPreco(e.target.value)} placeholder="0,00" inputMode="decimal"
                   className="eco-input" />
               </div>
@@ -3131,11 +3165,11 @@ function CustoObraApp({ usuario }) {
                 </div>
               )}
               <div className="col-span-2 sm:col-span-2 lg:col-span-2">
-                <label className="text-xs text-stone-500 block mb-1">Fornecedor (opcional)</label>
+                <label className="text-xs text-stone-500 block mb-1">{voc.quem}</label>
                 <input
                   value={ldFornecedor}
                   onChange={(e) => { setLdFornecedor(e.target.value); setLdFornecedorAutomatico(false); }}
-                  placeholder="Ex: Depósito São José"
+                  placeholder={voc.quemPlaceholder}
                   list="lista-fornecedores-lancamento"
                   className="eco-input"
                 />
@@ -3150,7 +3184,7 @@ function CustoObraApp({ usuario }) {
               </div>
               <div className="col-span-2 sm:col-span-2 lg:col-span-2">
                 <label className="text-xs text-stone-500 block mb-1">Observação (opcional)</label>
-                <input value={ldObservacao} onChange={(e) => setLdObservacao(e.target.value)} placeholder="Ex: comprado em outra loja"
+                <input value={ldObservacao} onChange={(e) => setLdObservacao(e.target.value)} placeholder={voc.observacaoPlaceholder}
                   className="eco-input" />
               </div>
               <div className="col-span-2 sm:col-span-4 lg:col-span-2 flex gap-2">
@@ -3164,7 +3198,8 @@ function CustoObraApp({ usuario }) {
                 )}
               </div>
             </div>
-            )}
+            );
+            })()}
             {!obraConcluida && categoriaAtiva === 'produto_loja' && produtos.length === 0 && (
               <p className="text-xs text-stone-400 -mt-3">Ainda não tem produto cadastrado — pode digitar o nome, a unidade e o preço aqui mesmo que ele já entra no catálogo sozinho.</p>
             )}
@@ -3175,13 +3210,14 @@ function CustoObraApp({ usuario }) {
               const conta = resumoLancamentos(listaFiltrada);
               const fora = lancamentosEmOutrasCategorias(lancamentos, alvo);
               const procurando = buscaLancamento.trim().length > 0;
+              const vocLista = vocabularioDe(categoriaAtiva);
               return (
                 <div className="eco-card overflow-hidden">
                   <div className="p-2 border-b border-stone-100">
                     <input
                       value={buscaLancamento}
                       onChange={(e) => setBuscaLancamento(e.target.value)}
-                      placeholder="Buscar por descrição, fornecedor ou observação..."
+                      placeholder={vocLista.busca}
                       className="eco-input"
                     />
                   </div>
@@ -3200,7 +3236,7 @@ function CustoObraApp({ usuario }) {
                     <tbody>
                       {listaFiltrada.length === 0 && (
                         <tr><td colSpan={6} className="px-3 py-6 text-center text-stone-400">
-                          {buscaLancamento ? 'Nada encontrado para essa busca.' : 'Nenhum lançamento nesta categoria ainda.'}
+                          {buscaLancamento ? 'Nada encontrado para essa busca.' : vocLista.vazio}
                         </td></tr>
                       )}
                       {listaFiltrada.map((l) => (
@@ -3212,7 +3248,9 @@ function CustoObraApp({ usuario }) {
                               const et = etapas.find((x) => x.id === l.etapaId);
                               return et ? <div className="text-xs text-green-700">📍 {et.nome}</div> : null;
                             })()}
-                            {l.fornecedorNome && <div className="text-xs text-stone-500">🏪 {l.fornecedorNome}</div>}
+                            {/* loja para compra, capacete para serviço:
+                                quem faz mão de obra não é fornecedor */}
+                            {l.fornecedorNome && <div className="text-xs text-stone-500">{vocLista.quemIcone} {l.fornecedorNome}</div>}
                             {l.observacao && <div className="text-xs text-stone-400 italic">{l.observacao}</div>}
                           </td>
                           <td className="px-3 py-2 text-right">{l.quantidade} {l.unidade}</td>
