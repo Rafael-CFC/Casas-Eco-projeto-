@@ -203,8 +203,15 @@ Registrar** o formulário é o da **nota inteira**:
    boletos daquela nota — não precisa repetir a cada boleto.
 2. **Preencha o valor e o vencimento do primeiro boleto.**
 3. Clique em **"+ Mais um boleto"** para cada boleto que veio na nota. A linha nova
-   já vem com o mesmo valor da anterior e o vencimento 30 dias depois (é o
-   30/60/90 de sempre) — se o seu for diferente, é só corrigir na hora.
+   já vem com o mesmo valor da anterior e o vencimento **no mesmo dia do mês
+   seguinte** — é o 30/60/90 de sempre. Se o seu for diferente, é só corrigir na hora.
+
+   Antes o sistema somava 30 dias corridos, e isso desencontrava do papel: de 10/10
+   dava 09/11, um dia antes. Agora venceu dia 10, o próximo vence dia 10.
+
+   Quando o dia não existe no mês (dia 31 em fevereiro), a data cai no **último dia
+   daquele mês** e volta para o dia certo no mês seguinte — 31/12, 31/01, 28/02,
+   31/03, 30/04. Antes, somando 30 dias, fevereiro era pulado inteiro.
 4. Embaixo aparece a conferência: **quantos boletos e o total da nota**. Confira com
    o papel na mão e clique em **"Registrar 3 boletos"**.
 
@@ -215,6 +222,53 @@ Depois de registrar, cada boleto vira **uma conta separada** na lista de baixo, 
 seu próprio vencimento — some, marque como paga e apague um por um, como sempre. A
 distribuidora continua escolhida, porque quase sempre vem outra nota da mesma logo
 em seguida.
+
+### Contas > Fixas do mês — o que vence todo mês
+
+Energia, água, aluguel, internet, salário: conta que vence todo mês, sempre no mesmo
+dia. Antes era preciso digitar tudo de novo a cada mês. Agora você cadastra **uma vez**
+e o sistema lembra.
+
+**Cadastrar.** Aba **Contas > Fixas do mês**, botão **"Nova conta fixa"**:
+
+- **Nome da conta** — ENERGIA ELÉTRICA, ALUGUEL DO GALPÃO.
+- **Quem cobra** (opcional) — CEMIG, o nome do dono do galpão. Sai da mesma lista dos
+  fornecedores. Deixando em branco, a conta aparece pelo próprio nome.
+- **Valor de sempre** — é só o valor sugerido, para adiantar a digitação.
+- **Dia do vencimento** — de 1 a 31.
+- **Observação** (opcional) — "débito em conta no Sicoob", por exemplo.
+
+**Dia 31 em mês que não tem 31** (fevereiro, abril, junho, setembro, novembro) cai no
+último dia do mês, nunca no dia 1º do mês seguinte.
+
+**Lançar.** Em cima fica o quadro do mês, com o que já foi lançado e o que ainda falta,
+na ordem em que o dinheiro sai. Duas formas:
+
+- **Uma de cada vez** (botão **Lançar** na linha): o sistema pergunta quanto veio, já
+  com o valor de sempre preenchido. É o jeito da energia e da água, que mudam todo mês —
+  você está com a fatura na mão, corrige o valor e confirma.
+- **Todas de uma vez** (botão **"Lançar as N de setembro"**): entra tudo pelo valor de
+  sempre. Serve para o mês em que nada mudou; o que veio diferente você corrige depois,
+  na lista de contas.
+
+O boleto lançado vira uma **conta a pagar normal**: aparece em Por dia, no Relatório,
+nos avisos de vencimento e nos totais. Some, marque como paga e apague como qualquer
+outra.
+
+**Nada é lançado sozinho.** O sistema mostra o que falta e espera você confirmar — valor
+de energia muda todo mês, e um número que ninguém conferiu erraria o total a pagar, que
+é justamente o que você usa para se organizar. Enquanto houver conta fixa do mês sem
+lançar, aparece um **aviso amarelo na tela de Início** dizendo quantas são e quanto dá.
+
+**Pausar e apagar** mexem só no cadastro — os boletos já lançados continuam nas contas a
+pagar. Pausar (botão de pause) serve para a conta que parou por um tempo e ainda vai
+voltar; apagar tira de vez.
+
+**Setas ‹ ›** em cima do quadro andam para o mês anterior e para o próximo, para
+conferir o que já foi lançado ou adiantar o mês que vem.
+
+O total de todas as contas fixas ativas aparece como **"Custo fixo do mês"** — é o que
+sai mesmo num mês sem obra nenhuma.
 
 ### Contas > Por dia — o que vence hoje, amanhã e nos próximos dias
 
