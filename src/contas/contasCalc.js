@@ -227,3 +227,34 @@ export function boletosPorDia(contas, hojeISO, quantosDias = 7, { incluirPagas =
   }
   return agenda;
 }
+
+// ---- lista de distribuidoras para escolher no formulário ----
+
+// Toda distribuidora que o sistema já viu, venha de onde vier: do cadastro
+// de fornecedores, de um boleto antigo, de uma conta fixa ou do fornecedor
+// de um lançamento de obra.
+//
+// A união existe porque o cadastro nem sempre tem tudo. Boleto lançado por
+// uma versão antiga do sistema, dado que veio de backup restaurado ou nome
+// digitado direto no lançamento podiam ficar só na conta — e aí a
+// distribuidora não aparecia na hora de registrar o boleto seguinte.
+//
+// Nomes iguais escritos de jeitos diferentes ("Albertina"/"ALBERTINA")
+// contam como um só (chaveFornecedor), e a lista sai em ordem alfabética
+// de gente — com acento no lugar certo (localeCompare pt-BR).
+export function nomesDeDistribuidoras({
+  fornecedores = [], contas = [], contasFixas = [], lancamentos = [],
+} = {}) {
+  const vistas = new Map();
+  const juntar = (nome) => {
+    const limpo = String(nome == null ? '' : nome).replace(/\s+/g, ' ').trim();
+    const k = chaveFornecedor(limpo);
+    if (!k || vistas.has(k)) return;
+    vistas.set(k, limpo);
+  };
+  (fornecedores || []).forEach((f) => juntar(f && f.nome));
+  (contas || []).forEach((c) => juntar(c && c.fornecedorNome));
+  (contasFixas || []).forEach((f) => juntar(f && f.fornecedorNome));
+  (lancamentos || []).forEach((l) => juntar(l && l.fornecedorNome));
+  return [...vistas.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}

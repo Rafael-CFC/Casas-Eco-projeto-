@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Package, Plus, Trash2, AlertCircle,
@@ -15,7 +15,8 @@ import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
 import ToastStack from './ui/Toast';
 import RelatorioContas from './contas/RelatorioContas';
 import BoletosPorDia from './contas/BoletosPorDia';
-import { nomeDaConta, proximoVencimentoBoleto } from './contas/contasCalc';
+import { nomeDaConta, proximoVencimentoBoleto, nomesDeDistribuidoras } from './contas/contasCalc';
+import SeletorDistribuidora from './contas/SeletorDistribuidora';
 import ContasFixas from './contas/ContasFixas';
 import { mesDe, pendentesDoMes, rotuloMes } from './contas/contasFixasCalc';
 import TrocarSenha from './auth/TrocarSenha';
@@ -872,8 +873,16 @@ function CustoObraApp({ usuario }) {
 
   const [ctFornecedor, setCtFornecedor] = useState('');
   const [ctBoletos, setCtBoletos] = useState(() => [novoBoletoVazio()]);
-  // true quando o usuário escolheu "cadastrar nova" em vez de usar a lista
-  const [ctDigitandoDistribuidora, setCtDigitandoDistribuidora] = useState(false);
+
+  // As distribuidoras que aparecem para escolher. Não é só o cadastro de
+  // fornecedores: entra também quem já cobrou um boleto, quem está numa
+  // conta fixa e quem foi digitado num lançamento de obra. Nome que ficou
+  // só na conta — de boleto antigo, de backup restaurado — voltava a
+  // sumir da lista, e a distribuidora parecia não existir mais.
+  const nomesDistribuidoras = useMemo(
+    () => nomesDeDistribuidoras({ fornecedores, contas, contasFixas, lancamentos }),
+    [fornecedores, contas, contasFixas, lancamentos]
+  );
 
   function alterarBoleto(id, campos) {
     setCtBoletos((lista) => lista.map((b) => (b.id === id ? { ...b, ...campos } : b)));
@@ -935,7 +944,6 @@ function CustoObraApp({ usuario }) {
       // a distribuidora fica escolhida: quase sempre vem outra nota da
       // mesma de uma vez. Os boletos, esses sim, voltam para o zero.
       setCtBoletos([novoBoletoVazio()]);
-      setCtDigitandoDistribuidora(false);
     }
   }
 
@@ -2424,41 +2432,13 @@ function CustoObraApp({ usuario }) {
               <div className="eco-card p-4 space-y-4">
                 <div>
                   <label className="text-xs text-stone-500 block mb-1">Distribuidora</label>
-                  {ctDigitandoDistribuidora || fornecedores.length === 0 ? (
-                    <div className="flex gap-1.5">
-                      <input
-                        value={ctFornecedor}
-                        onChange={(e) => setCtFornecedor(upperInput(e.target.value))}
-                        placeholder="Nome da distribuidora"
-                        autoFocus={ctDigitandoDistribuidora}
-                        className="eco-input"
-                      />
-                      {fornecedores.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => { setCtDigitandoDistribuidora(false); setCtFornecedor(''); }}
-                          className="eco-btn-secondary flex-shrink-0"
-                        >
-                          <X size={14} />
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <select
-                      value={ctFornecedor}
-                      onChange={(e) => {
-                        if (e.target.value === '__nova__') { setCtDigitandoDistribuidora(true); setCtFornecedor(''); }
-                        else setCtFornecedor(e.target.value);
-                      }}
-                      className="eco-input"
-                    >
-                      <option value="">Escolha a distribuidora…</option>
-                      {fornecedores.map((f) => <option key={f.id} value={f.nome}>{f.nome}</option>)}
-                      <option value="__nova__">+ Cadastrar nova distribuidora</option>
-                    </select>
-                  )}
+                  <SeletorDistribuidora
+                    value={ctFornecedor}
+                    onChange={setCtFornecedor}
+                    nomes={nomesDistribuidoras}
+                  />
                   <p className="text-xs text-stone-400 mt-1">
-                    Escolhida uma vez só — vale para todos os boletos da nota.
+                    Digite parte do nome para procurar. Escolhida uma vez só — vale para todos os boletos da nota.
                   </p>
                 </div>
 
