@@ -201,6 +201,23 @@ Registrar** o formulário é o da **nota inteira**:
 
 1. **Escolha a distribuidora uma vez só**, lá em cima. Ela vale para todos os
    boletos daquela nota — não precisa repetir a cada boleto.
+
+   O campo é de **digitar e procurar**: escreva um pedaço do nome ("dou" acha
+   "DOUTORA MADEIRAS") e a lista filtra na hora, sem acento e sem caixa alta para
+   atrapalhar. Clicando na setinha, ela abre inteira, em ordem alfabética, com a
+   contagem embaixo ("38 distribuidoras cadastradas") — assim dá para ver que
+   nenhuma ficou de fora. Antes era uma lista fixa na ordem de cadastro: com o
+   cadastro grande, achar uma distribuidora no meio dela virava rolagem no escuro
+   e parecia que ela tinha sumido.
+
+   A lista não é só o cadastro de fornecedores: entra também **quem já cobrou um
+   boleto, quem está nas contas fixas e quem foi digitado num lançamento de obra**.
+   Nome que ficou só na conta — boleto antigo, dado que voltou de um backup — antes
+   não aparecia aqui.
+
+   Distribuidora nova? Digite o nome e clique em **"Cadastrar nova"**: ela entra no
+   cadastro sozinha quando os boletos são gravados.
+
 2. **Preencha o valor e o vencimento do primeiro boleto.**
 3. Clique em **"+ Mais um boleto"** para cada boleto que veio na nota. A linha nova
    já vem com o mesmo valor da anterior e o vencimento **no mesmo dia do mês
