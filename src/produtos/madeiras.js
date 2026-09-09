@@ -76,3 +76,22 @@ export function vincularMadeirasAoFornecedor(lancamentos, fornecedor) {
   if (alvos.size === 0) return lancamentos;
   return lancamentos.map((l) => (alvos.has(l.id) ? { ...l, fornecedorNome: nome } : l));
 }
+
+// ---- relatórios: madeira separada das outras categorias ----
+//
+// Nos RELATÓRIOS de gasto a madeira sai da categoria em que foi lançada e
+// vira um grupo próprio. Motivo prático: quase toda madeira é lançada como
+// "Produto da Loja", e como é o item mais caro da obra ela inflava esse
+// total e escondia o resto — o dono olhava "Produtos da Loja" e via, na
+// verdade, madeira.
+//
+// Isto NÃO muda o lançamento: madeira continua sendo lançada na categoria
+// de sempre, e nada no banco é reescrito. É só como o gasto é agrupado na
+// hora de mostrar.
+export const GRUPO_MADEIRAS = 'madeiras';
+
+export function grupoDeGasto(lancamento) {
+  if (!lancamento) return '';
+  if (ehMadeira(lancamento.descricao, lancamento.categoria)) return GRUPO_MADEIRAS;
+  return lancamento.categoria;
+}

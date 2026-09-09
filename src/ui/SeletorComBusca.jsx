@@ -1,28 +1,48 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Search, Plus, X, Check } from 'lucide-react';
-import { upperInput, combinaBusca, chaveFornecedor } from '../textUtils';
-import usarLayoutMobile from '../ui/usarLayoutMobile';
+import { upperInput, combinaBusca, semAcento } from '../textUtils';
+import usarLayoutMobile from './usarLayoutMobile';
 
-// Escolha da distribuidora na hora de registrar o boleto.
+// Campo de escolher um NOME que se repete no dia a dia — a distribuidora
+// do boleto, o pedreiro que recebeu o pagamento — sem virar um cadastro
+// de produto.
 //
-// Antes isso era um <select> comum, com as distribuidoras na ordem em que
-// foram cadastradas. Com o cadastro grande, achar uma pelo nome virava
-// rolar a lista inteira no escuro — quem procurava "DOUTORA" no meio de
-// dezenas simplesmente não achava e concluía que ela não estava lá.
+// Antes esses campos eram um <select> comum, com os nomes na ordem em que
+// foram cadastrados. Com a lista grande, achar um pelo nome virava rolar no
+// escuro: quem procurava "DOUTORA" no meio de dezenas simplesmente não
+// achava e concluía que ela não estava lá.
 //
-// Aqui é um campo de digitar com busca: escreve um pedaço do nome e a
-// lista filtra. Nada é escondido — a lista chega inteira em `nomes` e o
-// rodapé diz quantas distribuidoras existem, para ninguém ficar na dúvida
-// se o sistema cortou alguma. Digitar um nome que não existe continua
-// valendo: ele é cadastrado sozinho quando o boleto é gravado.
+// Aqui é um campo de digitar com busca: escreve um pedaço do nome e a lista
+// filtra, sem acento e sem caixa alta atrapalhando. Nada é escondido — a
+// lista chega inteira em `nomes` e o rodapé mostra a contagem, para ninguém
+// ficar na dúvida se o sistema cortou alguma. Digitar um nome que ainda não
+// existe continua valendo: é o caminho normal de cadastrar um novo.
 //
 // O painel vai para um portal em document.body pelo mesmo motivo do
 // ProdutoSeletor: um ancestral com `transform` (as animações de entrada do
 // app) viraria o "containing block" de um filho position:fixed e
 // desalinharia o dropdown.
 
-export default function SeletorDistribuidora({ value, onChange, nomes, id }) {
+// Chave "à prova de digitação": sem acento e sem caixa, para "ALBERTINA" e
+// "Albertina" contarem como o mesmo nome.
+function chave(nome) {
+  return semAcento(nome).replace(/\s+/g, ' ').trim();
+}
+
+export default function SeletorComBusca({
+  value,
+  onChange,
+  nomes,
+  titulo,
+  placeholder,
+  buscaPlaceholder = 'Procurar…',
+  textoNovo = 'Usar este nome',
+  textoListaVazia = 'Nada cadastrado ainda — digite o nome.',
+  contagem,
+  detalhe,
+  id,
+}) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState('');
   const [indiceAtivo, setIndiceAtivo] = useState(-1);
@@ -38,19 +58,19 @@ export default function SeletorDistribuidora({ value, onChange, nomes, id }) {
   const termo = mobile ? busca : value;
 
   const lista = useMemo(() => {
-    const todas = nomes || [];
-    const escolhida = chaveFornecedor(value);
-    // Depois de escolher uma, o campo fica com o nome inteiro dentro. Se
-    // esse texto continuasse filtrando, abrir a lista mostraria só ela —
-    // e daria a impressão de que as outras sumiram.
-    if (!mobile && escolhida && todas.some((n) => chaveFornecedor(n) === escolhida)) return todas;
-    return todas.filter((n) => combinaBusca(termo, n));
+    const todos = nomes || [];
+    const escolhido = chave(value);
+    // Depois de escolher um, o campo fica com o nome inteiro dentro. Se
+    // esse texto continuasse filtrando, abrir a lista mostraria só ele —
+    // e daria a impressão de que os outros sumiram.
+    if (!mobile && escolhido && todos.some((n) => chave(n) === escolhido)) return todos;
+    return todos.filter((n) => combinaBusca(termo, n));
   }, [nomes, termo, value, mobile]);
 
   const digitado = String(value || '').trim();
-  const jaExiste = (nomes || []).some((n) => chaveFornecedor(n) === chaveFornecedor(digitado));
-  const mostrarNova = digitado.length > 0 && !jaExiste;
-  const idxNova = lista.length;
+  const jaExiste = (nomes || []).some((n) => chave(n) === chave(digitado));
+  const mostrarNovo = digitado.length > 0 && !jaExiste;
+  const idxNovo = lista.length;
 
   useEffect(() => { setIndiceAtivo(-1); }, [termo, aberto]);
 
@@ -106,7 +126,7 @@ export default function SeletorDistribuidora({ value, onChange, nomes, id }) {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (!aberto) { abrir(); return; }
-      setIndiceAtivo((i) => Math.min(lista.length - 1 + (mostrarNova ? 1 : 0), i + 1));
+      setIndiceAtivo((i) => Math.min(lista.length - 1 + (mostrarNovo ? 1 : 0), i + 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setIndiceAtivo((i) => Math.max(0, i - 1));
@@ -122,7 +142,18 @@ export default function SeletorDistribuidora({ value, onChange, nomes, id }) {
   }
 
   const total = (nomes || []).length;
-  const escolhidaChave = chaveFornecedor(value);
+  const escolhidoChave = chave(value);
+
+  // No computador o painel acompanha a largura do campo, mas nunca fica
+  // estreito demais: campo curto cortava o nome no meio ("JOÃO PEDR…").
+  // Se abrir perto da borda direita, ele encosta na borda em vez de sair
+  // da tela.
+  const estilodesktop = () => {
+    if (!ancora) return { display: 'none' };
+    const largura = Math.max(ancora.width, 300);
+    const esquerda = Math.max(8, Math.min(ancora.left, window.innerWidth - largura - 8));
+    return { top: ancora.bottom + 6, left: esquerda, width: largura };
+  };
 
   const painelConteudo = (
     <>
@@ -131,7 +162,7 @@ export default function SeletorDistribuidora({ value, onChange, nomes, id }) {
       )}
       <div
         ref={painelRef}
-        style={mobile ? undefined : (ancora ? { top: ancora.bottom + 6, left: ancora.left, width: ancora.width } : { display: 'none' })}
+        style={mobile ? undefined : estilodesktop()}
         className={mobile
           ? 'fixed inset-x-0 bottom-0 z-50 rounded-t-2xl shadow-popover bg-white flex flex-col max-h-[75vh] animate-sheet-up'
           : 'fixed z-50 rounded-xl shadow-popover bg-white flex flex-col max-h-80 animate-scale-in'}
@@ -142,7 +173,7 @@ export default function SeletorDistribuidora({ value, onChange, nomes, id }) {
               <span className="w-10 h-1 rounded-full bg-stone-200" />
             </div>
             <div className="flex items-center justify-between px-4 pb-2 border-b border-stone-100">
-              <p className="text-sm font-semibold text-stone-700">Distribuidora</p>
+              <p className="text-sm font-semibold text-stone-700">{titulo}</p>
               <button type="button" onClick={fechar} className="eco-icon-btn -mr-1.5">
                 <X size={16} />
               </button>
@@ -154,7 +185,7 @@ export default function SeletorDistribuidora({ value, onChange, nomes, id }) {
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
                   onKeyDown={aoTeclar}
-                  placeholder="Procurar distribuidora…"
+                  placeholder={buscaPlaceholder}
                   autoFocus
                   className="eco-input-sm pl-8 w-full"
                 />
@@ -166,10 +197,11 @@ export default function SeletorDistribuidora({ value, onChange, nomes, id }) {
         <div ref={listRef} className="overflow-y-auto flex-1">
           {lista.map((nome, idx) => {
             const ativo = idx === indiceAtivo;
-            const marcada = escolhidaChave && chaveFornecedor(nome) === escolhidaChave;
+            const marcado = escolhidoChave && chave(nome) === escolhidoChave;
+            const extra = detalhe ? detalhe(nome) : null;
             return (
               <button
-                key={chaveFornecedor(nome)}
+                key={chave(nome)}
                 type="button"
                 data-idx={idx}
                 onMouseEnter={() => setIndiceAtivo(idx)}
@@ -178,40 +210,41 @@ export default function SeletorDistribuidora({ value, onChange, nomes, id }) {
                   ativo ? 'bg-green-50 text-green-800' : 'text-stone-700 hover:bg-stone-50'
                 }`}
               >
-                <span className="truncate">{nome}</span>
-                {marcada && <Check size={14} className="flex-shrink-0 text-green-600" />}
+                <span className="flex-shrink-0 max-w-full truncate">{nome}</span>
+                <span className="flex items-center gap-2 min-w-0 text-xs text-stone-400">
+                  {extra && <span className="truncate">{extra}</span>}
+                  {marcado && <Check size={14} className="flex-shrink-0 text-green-600" />}
+                </span>
               </button>
             );
           })}
 
           {lista.length === 0 && (
             <p className="px-3 py-6 text-center text-sm text-stone-400">
-              {total === 0
-                ? 'Nenhuma distribuidora cadastrada ainda — digite o nome.'
-                : `Nenhuma distribuidora com "${String(termo).trim()}".`}
+              {total === 0 ? textoListaVazia : `Nada com "${String(termo).trim()}".`}
             </p>
           )}
 
-          {mostrarNova && (
+          {mostrarNovo && (
             <button
               type="button"
-              data-idx={idxNova}
-              onMouseEnter={() => setIndiceAtivo(idxNova)}
+              data-idx={idxNovo}
+              onMouseEnter={() => setIndiceAtivo(idxNovo)}
               onClick={() => escolher(digitado)}
               className={`w-full flex items-center gap-2 px-3 py-2.5 sm:py-2 text-left text-sm border-t border-dashed border-stone-200 transition-colors duration-100 ${
-                indiceAtivo === idxNova ? 'bg-green-50 text-green-800' : 'text-green-700 hover:bg-green-50'
+                indiceAtivo === idxNovo ? 'bg-green-50 text-green-800' : 'text-green-700 hover:bg-green-50'
               }`}
             >
-              <Plus size={14} /> Cadastrar nova: "{digitado}"
+              <Plus size={14} /> {textoNovo}: "{digitado}"
             </button>
           )}
         </div>
 
-        {total > 0 && (
+        {total > 0 && contagem && lista.length > 0 && (
           <p className="flex-shrink-0 border-t border-stone-100 px-3 py-2 text-[11px] text-stone-400">
             {lista.length === total
-              ? `${total} distribuidora${total === 1 ? '' : 's'} cadastrada${total === 1 ? '' : 's'}`
-              : `${lista.length} de ${total} distribuidoras`}
+              ? `${total} ${total === 1 ? contagem.singular : contagem.plural}`
+              : `${lista.length} de ${total}`}
           </p>
         )}
       </div>
@@ -227,11 +260,12 @@ export default function SeletorDistribuidora({ value, onChange, nomes, id }) {
           role="combobox"
           aria-expanded={aberto}
           aria-autocomplete="list"
+          aria-label={titulo}
           value={value}
           onChange={(e) => { onChange(upperInput(e.target.value)); if (!aberto) setAberto(true); }}
           onFocus={() => setAberto(true)}
           onKeyDown={aoTeclar}
-          placeholder="Digite ou escolha a distribuidora"
+          placeholder={placeholder}
           className="eco-input rounded-r-none border-r-0 flex-1 min-w-0"
           autoComplete="off"
         />
@@ -240,7 +274,7 @@ export default function SeletorDistribuidora({ value, onChange, nomes, id }) {
             type="button"
             onClick={() => { onChange(''); inputRef.current?.focus(); }}
             className="px-2.5 border border-stone-200 rounded-r-lg bg-white text-stone-400 hover:text-stone-600 hover:bg-stone-50 transition-colors duration-150 flex-shrink-0"
-            aria-label="Limpar distribuidora"
+            aria-label="Limpar"
           >
             <X size={16} />
           </button>
@@ -250,7 +284,7 @@ export default function SeletorDistribuidora({ value, onChange, nomes, id }) {
             tabIndex={-1}
             onClick={() => { if (aberto) fechar(); else { abrir(); inputRef.current?.focus(); } }}
             className="px-2.5 border border-stone-200 rounded-r-lg bg-white text-stone-400 hover:text-stone-600 hover:bg-stone-50 transition-colors duration-150 flex-shrink-0"
-            aria-label="Ver todas as distribuidoras"
+            aria-label={`Ver a lista de ${titulo}`}
           >
             <ChevronDown size={16} className={`transition-transform duration-150 ${aberto ? 'rotate-180' : ''}`} />
           </button>

@@ -10,13 +10,13 @@ import {
   LogOut, KeyRound, BarChart3, PlayCircle, CalendarDays, Repeat,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit, chaveFornecedor } from './textUtils';
-import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
+import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, GRUPOS_GASTO, CLS } from './domain';
 import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
 import ToastStack from './ui/Toast';
 import RelatorioContas from './contas/RelatorioContas';
 import BoletosPorDia from './contas/BoletosPorDia';
 import { nomeDaConta, proximoVencimentoBoleto, nomesDeDistribuidoras } from './contas/contasCalc';
-import SeletorDistribuidora from './contas/SeletorDistribuidora';
+import SeletorComBusca from './ui/SeletorComBusca';
 import ContasFixas from './contas/ContasFixas';
 import { mesDe, pendentesDoMes, rotuloMes } from './contas/contasFixasCalc';
 import TrocarSenha from './auth/TrocarSenha';
@@ -33,9 +33,10 @@ import {
   filtrarLancamentos, resumoLancamentos, textoQuantidades, lancamentosEmOutrasCategorias,
 } from './obra/buscaLancamentos';
 import ResumoFinalObra from './obra/ResumoFinalObra';
+import { ehPagamentoDeMaoDeObra, nomesDeQuemRecebe, totalJaRecebido } from './obra/maoDeObra';
 import ProdutoSeletor from './produtos/ProdutoSeletor';
 import { catalogoPorCategoria, filtrarOrdenarProdutos, ORDENS_CATALOGO } from './produtos/catalogoUtils';
-import { ehMadeira, fornecedorDasMadeiras, madeirasSemFornecedor, vincularMadeirasAoFornecedor } from './produtos/madeiras';
+import { ehMadeira, fornecedorDasMadeiras, grupoDeGasto, madeirasSemFornecedor, vincularMadeirasAoFornecedor } from './produtos/madeiras';
 import OrcamentoVenda from './venda/OrcamentoVenda';
 import Contratos from './contratos/Contratos';
 import Configuracoes from './config/Configuracoes';
@@ -969,7 +970,7 @@ function CustoObraApp({ usuario }) {
     itens.forEach((l) => {
       const et = etapas.find((e) => e.id === l.etapaId);
       linhas.push([
-        formatDateBR(l.data), CATEGORIAS[l.categoria].label, l.descricao, et ? et.nome : '',
+        formatDateBR(l.data), GRUPOS_GASTO[grupoDeGasto(l)].label, l.descricao, et ? et.nome : '',
         l.fornecedorNome || '', l.quantidade, l.unidade, l.preco, l.total, l.observacao || '',
       ]);
     });
@@ -982,7 +983,7 @@ function CustoObraApp({ usuario }) {
       const o = obras.find((ob) => ob.id === l.obraId);
       const et = etapas.find((e) => e.id === l.etapaId);
       linhas.push([
-        o ? o.nome : '', formatDateBR(l.data), CATEGORIAS[l.categoria].label, l.descricao, et ? et.nome : '',
+        o ? o.nome : '', formatDateBR(l.data), GRUPOS_GASTO[grupoDeGasto(l)].label, l.descricao, et ? et.nome : '',
         l.fornecedorNome || '', l.quantidade, l.unidade, l.preco, l.total, l.observacao || '',
       ]);
     });
@@ -1125,10 +1126,13 @@ function CustoObraApp({ usuario }) {
     }
   }
 
+  // Gasto por categoria do RELATÓRIO: a madeira é somada à parte, em vez de
+  // ficar dentro de "Produtos da Loja" inflando o total da loja (ver
+  // grupoDeGasto em src/produtos/madeiras.js).
   function gastosPorCategoriaGeral() {
-    return Object.entries(CATEGORIAS).map(([key, cat]) => ({
-      label: cat.label,
-      total: lancamentos.filter((l) => l.categoria === key).reduce((a, l) => a + l.total, 0),
+    return Object.entries(GRUPOS_GASTO).map(([key, grupo]) => ({
+      label: grupo.label,
+      total: lancamentos.filter((l) => grupoDeGasto(l) === key).reduce((a, l) => a + l.total, 0),
     })).filter((c) => c.total > 0).sort((a, b) => b.total - a.total);
   }
 
@@ -1163,12 +1167,17 @@ function CustoObraApp({ usuario }) {
       : 'Início da obra: ainda não registrado\n';
     if (obra.orcamento) texto += `Orçamento: ${formatMoney(obra.orcamento)}\n`;
     texto += `Total gasto: ${formatMoney(totalObra(obra.id))}\n\n`;
-    Object.entries(CATEGORIAS).forEach(([key, cat]) => {
-      const doGrupo = itens.filter((i) => i.categoria === key);
+    Object.entries(GRUPOS_GASTO).forEach(([key, grupo]) => {
+      const doGrupo = itens.filter((i) => grupoDeGasto(i) === key);
       if (doGrupo.length === 0) return;
-      texto += `--- ${cat.label} (${formatMoney(totalObraCategoria(obra.id, key))}) ---\n`;
+      const totalDoGrupo = doGrupo.reduce((a, i) => a + (Number(i.total) || 0), 0);
+      texto += `--- ${grupo.label} (${formatMoney(totalDoGrupo)}) ---\n`;
       doGrupo.forEach((i) => {
-        texto += `${formatDateBR(i.data)} | ${i.descricao} | ${i.quantidade} ${i.unidade} x ${formatMoney(i.preco)} = ${formatMoney(i.total)}\n`;
+        // Pagamento de mão de obra não tem quantidade nem preço unitário:
+        // escrever "1  x R$ 500,00 = R$ 500,00" só confundiria quem lê.
+        texto += ehPagamentoDeMaoDeObra(i.categoria)
+          ? `${formatDateBR(i.data)} | ${i.descricao} | ${formatMoney(i.total)}\n`
+          : `${formatDateBR(i.data)} | ${i.descricao} | ${i.quantidade} ${i.unidade} x ${formatMoney(i.preco)} = ${formatMoney(i.total)}\n`;
       });
       texto += '\n';
     });
@@ -1393,9 +1402,19 @@ function CustoObraApp({ usuario }) {
     setCategoriaAtiva(item.categoria);
     setEditandoId(item.id);
     setLdDescricao(item.descricao);
-    setLdQuantidade(String(item.quantidade));
-    setLdUnidade(item.unidade);
-    setLdPreco(String(item.preco));
+    if (ehPagamentoDeMaoDeObra(item.categoria)) {
+      // O formulário de mão de obra tem um valor só: o que foi pago.
+      // Lançamento antigo, feito quando a tela pedia quantidade e preço
+      // unitário ("5 diárias x R$ 150"), volta pelo TOTAL — assim editar
+      // a data não muda o valor que já estava gravado.
+      setLdQuantidade('1');
+      setLdUnidade('');
+      setLdPreco(String(item.total));
+    } else {
+      setLdQuantidade(String(item.quantidade));
+      setLdUnidade(item.unidade);
+      setLdPreco(String(item.preco));
+    }
     setLdData(item.data);
     setLdObservacao(item.observacao || '');
     setLdEtapaId(item.etapaId || '');
@@ -1407,14 +1426,24 @@ function CustoObraApp({ usuario }) {
   async function lancar(e) {
     if (e && e.preventDefault) e.preventDefault();
     setErro('');
-    const quantidade = parsePrecoBR(ldQuantidade);
+    // Mão de obra é pagamento de gente: só quem recebeu, quanto e quando.
+    // Não passa por quantidade, unidade nem preço unitário — o valor pago
+    // é o total (quantidade 1), que é o que o Financeiro e o resumo somam.
+    const pagamento = ehPagamentoDeMaoDeObra(categoriaAtiva);
+    const quantidade = pagamento ? 1 : parsePrecoBR(ldQuantidade);
     const preco = parsePrecoBR(ldPreco);
     const nome = normalizeProductName(ldDescricao);
-    const unidade = normalizeUnit(ldUnidade) || 'UN';
+    const unidade = pagamento ? '' : (normalizeUnit(ldUnidade) || 'UN');
 
-    if (!nome) { setErro('Descreva o item.'); return; }
-    if (isNaN(quantidade) || quantidade <= 0) { setErro('Informe uma quantidade válida.'); return; }
-    if (isNaN(preco) || preco < 0) { setErro('Informe um valor válido.'); return; }
+    if (!nome) { setErro(pagamento ? 'Diga quem recebeu o pagamento.' : 'Descreva o item.'); return; }
+    if (!pagamento && (isNaN(quantidade) || quantidade <= 0)) { setErro('Informe uma quantidade válida.'); return; }
+    if (isNaN(preco) || preco < 0 || (pagamento && preco === 0)) {
+      setErro(pagamento ? 'Informe quanto foi pago.' : 'Informe um valor válido.');
+      return;
+    }
+    // Pagamento sem data não serve para nada: a data é metade do que se
+    // quer saber ("quanto o pedreiro recebeu e quando").
+    if (pagamento && !ldData) { setErro('Informe a data do pagamento.'); return; }
 
     const hoje = ldData || todayISO();
     let produtoId = null;
@@ -1453,7 +1482,11 @@ function CustoObraApp({ usuario }) {
       if (ok) setAviso(`"${item.descricao}" atualizado.`);
     } else {
       ok = await salvarLancamentos([item, ...lancamentos]);
-      if (ok) setAviso(`"${item.descricao}" lançado.`);
+      if (ok) {
+        setAviso(pagamento
+          ? `${formatMoney(item.total)} pagos a ${item.descricao} em ${formatDateBR(item.data)}.`
+          : `"${item.descricao}" lançado.`);
+      }
     }
 
     if (ok) resetFormLancamento();
@@ -1466,6 +1499,10 @@ function CustoObraApp({ usuario }) {
   const obraAtiva = obras.find((o) => o.id === obraAtivaId);
   const obraConcluida = obraEstaConcluida(obraAtiva);
   const catalogoAtivo = catalogoPorCategoria(categoriaAtiva, produtos, lancamentos);
+  // Mão de obra não tem catálogo de item: o que se repete é o NOME de quem
+  // recebe. Ver src/obra/maoDeObra.js.
+  const pagamentoMaoDeObra = ehPagamentoDeMaoDeObra(categoriaAtiva);
+  const nomesQuemRecebe = pagamentoMaoDeObra ? nomesDeQuemRecebe({ lancamentos, montadores }) : [];
   // lista que a tela do Catálogo mostra: o catálogo inteiro passado pela
   // busca e pela ordenação escolhidas na própria tela.
   const produtosDoCatalogo = filtrarOrdenarProdutos(produtos, buscaCatalogo, ordemCatalogo);
@@ -1731,7 +1768,7 @@ function CustoObraApp({ usuario }) {
                   </div>
                   {/* ---- resumo do mês ---- */}
                   {(() => {
-                    const r = resumoDoMes({ lancamentos, obras, contas, CATEGORIAS }, hoje);
+                    const r = resumoDoMes({ lancamentos, obras, contas, GRUPOS_GASTO }, hoje);
                     if (r.lancamentosNoMes === 0 && r.totalAnterior === 0) return null;
                     const subiu = r.variacaoPct != null && r.variacaoPct > 0;
                     return (
@@ -2432,10 +2469,16 @@ function CustoObraApp({ usuario }) {
               <div className="eco-card p-4 space-y-4">
                 <div>
                   <label className="text-xs text-stone-500 block mb-1">Distribuidora</label>
-                  <SeletorDistribuidora
+                  <SeletorComBusca
                     value={ctFornecedor}
                     onChange={setCtFornecedor}
                     nomes={nomesDistribuidoras}
+                    titulo="Distribuidora"
+                    placeholder="Digite ou escolha a distribuidora"
+                    buscaPlaceholder="Procurar distribuidora…"
+                    textoNovo="Cadastrar nova"
+                    textoListaVazia="Nenhuma distribuidora cadastrada ainda — digite o nome."
+                    contagem={{ singular: 'distribuidora cadastrada', plural: 'distribuidoras cadastradas' }}
                   />
                   <p className="text-xs text-stone-400 mt-1">
                     Digite parte do nome para procurar. Escolhida uma vez só — vale para todos os boletos da nota.
@@ -2687,7 +2730,10 @@ function CustoObraApp({ usuario }) {
 
               <div className="eco-stagger grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="eco-card p-4">
-                  <p className="text-sm font-semibold text-stone-700 mb-3">Gastos por categoria</p>
+                  <p className="text-sm font-semibold text-stone-700">Gastos por categoria</p>
+                  <p className="text-xs text-stone-400 mb-3">
+                    <Trees size={11} className="inline -mt-0.5" /> Madeiras conta separado — não está somada dentro de Produtos da Loja nem de Materiais Brutos.
+                  </p>
                   {porCategoria.length === 0 ? (
                     <p className="text-xs text-stone-400">Sem lançamentos ainda.</p>
                   ) : (
@@ -3061,40 +3107,70 @@ function CustoObraApp({ usuario }) {
             )}
             {!obraConcluida && (
             <div className="eco-card p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 items-end">
+              {/* Mão de obra é pagamento de gente: quem recebeu, quanto e
+                  quando. Sem quantidade, unidade, preço unitário nem
+                  distribuidora — campo de compra de material só atrapalhava
+                  quem só quer anotar o que o pedreiro já recebeu. */}
               <div className="col-span-2 sm:col-span-4 lg:col-span-2">
                 <label className="text-xs text-stone-500 block mb-1">
-                  {categoriaAtiva === 'produto_loja' ? 'Produto' : 'Descrição'}
+                  {pagamentoMaoDeObra ? 'Quem recebeu' : categoriaAtiva === 'produto_loja' ? 'Produto' : 'Descrição'}
                 </label>
-                <ProdutoSeletor
-                  value={ldDescricao}
-                  onChangeTexto={aoDigitarDescricao}
-                  onSelecionar={selecionarItemCatalogo}
-                  itens={catalogoAtivo}
-                  categoriaLabel={CATEGORIAS[categoriaAtiva].label}
-                  placeholder={
-                    categoriaAtiva === 'produto_loja'
-                      ? 'Digite ou escolha — se já existir, o preço vem sozinho'
-                      : categoriaAtiva === 'mao_de_obra' ? 'Ex: Pedreiro - diária' : 'Ex: Areia lavada'
-                  }
-                />
+                {pagamentoMaoDeObra ? (
+                  <SeletorComBusca
+                    value={ldDescricao}
+                    onChange={setLdDescricao}
+                    nomes={nomesQuemRecebe}
+                    titulo="Quem recebeu"
+                    placeholder="Ex: JOÃO PEDREIRO"
+                    buscaPlaceholder="Procurar pelo nome…"
+                    textoNovo="Usar este nome"
+                    textoListaVazia="Ninguém recebeu pagamento ainda — digite o nome."
+                    contagem={{ singular: 'nome já usado', plural: 'nomes já usados' }}
+                    detalhe={(nome) => {
+                      const jaRecebeu = totalJaRecebido(lancamentos, obraAtiva.id, nome);
+                      return jaRecebeu > 0 ? `já recebeu ${formatMoney(jaRecebeu)}` : null;
+                    }}
+                  />
+                ) : (
+                  <ProdutoSeletor
+                    value={ldDescricao}
+                    onChangeTexto={aoDigitarDescricao}
+                    onSelecionar={selecionarItemCatalogo}
+                    itens={catalogoAtivo}
+                    categoriaLabel={CATEGORIAS[categoriaAtiva].label}
+                    placeholder={
+                      categoriaAtiva === 'produto_loja'
+                        ? 'Digite ou escolha — se já existir, o preço vem sozinho'
+                        : 'Ex: Areia lavada'
+                    }
+                  />
+                )}
               </div>
+              {!pagamentoMaoDeObra && (
+                <div className="col-span-1">
+                  <label className="text-xs text-stone-500 block mb-1">Qtd.</label>
+                  <input value={ldQuantidade} onChange={(e) => setLdQuantidade(e.target.value)} inputMode="decimal"
+                    className="eco-input" />
+                </div>
+              )}
+              {!pagamentoMaoDeObra && (
+                <div className="col-span-1">
+                  <label className="text-xs text-stone-500 block mb-1">Unid.</label>
+                  <input value={ldUnidade} onChange={(e) => setLdUnidade(upperInput(e.target.value))} placeholder="UN, M³..."
+                    className="eco-input" />
+                </div>
+              )}
               <div className="col-span-1">
-                <label className="text-xs text-stone-500 block mb-1">Qtd.</label>
-                <input value={ldQuantidade} onChange={(e) => setLdQuantidade(e.target.value)} inputMode="decimal"
-                  className="eco-input" />
-              </div>
-              <div className="col-span-1">
-                <label className="text-xs text-stone-500 block mb-1">Unid.</label>
-                <input value={ldUnidade} onChange={(e) => setLdUnidade(upperInput(e.target.value))} placeholder="UN, M³..."
-                  className="eco-input" />
-              </div>
-              <div className="col-span-1">
-                <label className="text-xs text-stone-500 block mb-1">Valor (R$)</label>
+                <label className="text-xs text-stone-500 block mb-1">
+                  {pagamentoMaoDeObra ? 'Quanto recebeu (R$)' : 'Valor (R$)'}
+                </label>
                 <input value={ldPreco} onChange={(e) => setLdPreco(e.target.value)} placeholder="0,00" inputMode="decimal"
                   className="eco-input" />
               </div>
               <div className="col-span-1">
-                <label className="text-xs text-stone-500 block mb-1">Data</label>
+                <label className="text-xs text-stone-500 block mb-1">
+                  {pagamentoMaoDeObra ? 'Data do pagamento' : 'Data'}
+                </label>
                 <input type="date" value={ldData} onChange={(e) => setLdData(e.target.value)}
                   className="eco-input" />
               </div>
@@ -3110,32 +3186,35 @@ function CustoObraApp({ usuario }) {
                   </select>
                 </div>
               )}
-              <div className="col-span-2 sm:col-span-2 lg:col-span-2">
-                <label className="text-xs text-stone-500 block mb-1">Fornecedor (opcional)</label>
-                <input
-                  value={ldFornecedor}
-                  onChange={(e) => { setLdFornecedor(e.target.value); setLdFornecedorAutomatico(false); }}
-                  placeholder="Ex: Depósito São José"
-                  list="lista-fornecedores-lancamento"
-                  className="eco-input"
-                />
-                <datalist id="lista-fornecedores-lancamento">
-                  {fornecedores.map((f) => <option key={f.id} value={f.nome} />)}
-                </datalist>
-                {ldFornecedorAutomatico && (
-                  <p className="text-[11px] text-green-700 mt-1 flex items-center gap-1">
-                    <Trees size={11} /> madeira — gasto vinculado a {ldFornecedor} (dá para trocar)
-                  </p>
-                )}
-              </div>
+              {!pagamentoMaoDeObra && (
+                <div className="col-span-2 sm:col-span-2 lg:col-span-2">
+                  <label className="text-xs text-stone-500 block mb-1">Fornecedor (opcional)</label>
+                  <input
+                    value={ldFornecedor}
+                    onChange={(e) => { setLdFornecedor(e.target.value); setLdFornecedorAutomatico(false); }}
+                    placeholder="Ex: Depósito São José"
+                    list="lista-fornecedores-lancamento"
+                    className="eco-input"
+                  />
+                  <datalist id="lista-fornecedores-lancamento">
+                    {fornecedores.map((f) => <option key={f.id} value={f.nome} />)}
+                  </datalist>
+                  {ldFornecedorAutomatico && (
+                    <p className="text-[11px] text-green-700 mt-1 flex items-center gap-1">
+                      <Trees size={11} /> madeira — gasto vinculado a {ldFornecedor} (dá para trocar)
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="col-span-2 sm:col-span-2 lg:col-span-2">
                 <label className="text-xs text-stone-500 block mb-1">Observação (opcional)</label>
-                <input value={ldObservacao} onChange={(e) => setLdObservacao(e.target.value)} placeholder="Ex: comprado em outra loja"
+                <input value={ldObservacao} onChange={(e) => setLdObservacao(e.target.value)}
+                  placeholder={pagamentoMaoDeObra ? 'Ex: adiantamento da semana' : 'Ex: comprado em outra loja'}
                   className="eco-input" />
               </div>
               <div className="col-span-2 sm:col-span-4 lg:col-span-2 flex gap-2">
                 <button type="button" onClick={lancar} className={`flex-1 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-[0.97] ${CLS[CATEGORIAS[categoriaAtiva].cls].solid} hover:opacity-90`}>
-                  <Plus size={15} /> {editandoId ? 'Salvar edição' : 'Lançar'}
+                  <Plus size={15} /> {editandoId ? 'Salvar edição' : pagamentoMaoDeObra ? 'Registrar pagamento' : 'Lançar'}
                 </button>
                 {editandoId && (
                   <button type="button" onClick={resetFormLancamento} className="eco-btn-secondary flex-1">
@@ -3155,6 +3234,9 @@ function CustoObraApp({ usuario }) {
               const conta = resumoLancamentos(listaFiltrada);
               const fora = lancamentosEmOutrasCategorias(lancamentos, alvo);
               const procurando = buscaLancamento.trim().length > 0;
+              // 6 colunas na compra de material; em mão de obra saem
+              // Qtd. e Valor unit., sobram 4.
+              const colunasTabela = pagamentoMaoDeObra ? 4 : 6;
               return (
                 <div className="eco-card overflow-hidden">
                   <div className="p-2 border-b border-stone-100">
@@ -3166,21 +3248,28 @@ function CustoObraApp({ usuario }) {
                     />
                   </div>
                   <div className="overflow-x-auto">
-                  <table className="w-full text-sm min-w-[600px]">
+                  {/* Em mão de obra a lista é um extrato de pagamentos:
+                      data, quem recebeu e quanto. Quantidade e valor
+                      unitário não existem aqui — e lançamento antigo, que
+                      foi gravado como "5 diárias x R$ 150", continua certo
+                      porque o que aparece é o total. */}
+                  <table className={`w-full text-sm ${pagamentoMaoDeObra ? 'min-w-[420px]' : 'min-w-[600px]'}`}>
                     <thead className="bg-stone-50 text-stone-500 text-xs uppercase tracking-wide font-semibold">
                       <tr>
                         <th className="text-left px-3 py-2">Data</th>
-                        <th className="text-left px-3 py-2">Descrição</th>
-                        <th className="text-right px-3 py-2">Qtd.</th>
-                        <th className="text-right px-3 py-2">Valor unit.</th>
-                        <th className="text-right px-3 py-2">Total</th>
+                        <th className="text-left px-3 py-2">{pagamentoMaoDeObra ? 'Quem recebeu' : 'Descrição'}</th>
+                        {!pagamentoMaoDeObra && <th className="text-right px-3 py-2">Qtd.</th>}
+                        {!pagamentoMaoDeObra && <th className="text-right px-3 py-2">Valor unit.</th>}
+                        <th className="text-right px-3 py-2">{pagamentoMaoDeObra ? 'Valor pago' : 'Total'}</th>
                         <th className="px-3 py-2"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {listaFiltrada.length === 0 && (
-                        <tr><td colSpan={6} className="px-3 py-6 text-center text-stone-400">
-                          {buscaLancamento ? 'Nada encontrado para essa busca.' : 'Nenhum lançamento nesta categoria ainda.'}
+                        <tr><td colSpan={colunasTabela} className="px-3 py-6 text-center text-stone-400">
+                          {buscaLancamento
+                            ? 'Nada encontrado para essa busca.'
+                            : pagamentoMaoDeObra ? 'Nenhum pagamento registrado nesta obra ainda.' : 'Nenhum lançamento nesta categoria ainda.'}
                         </td></tr>
                       )}
                       {listaFiltrada.map((l) => (
@@ -3195,8 +3284,8 @@ function CustoObraApp({ usuario }) {
                             {l.fornecedorNome && <div className="text-xs text-stone-500">🏪 {l.fornecedorNome}</div>}
                             {l.observacao && <div className="text-xs text-stone-400 italic">{l.observacao}</div>}
                           </td>
-                          <td className="px-3 py-2 text-right">{l.quantidade} {l.unidade}</td>
-                          <td className="px-3 py-2 text-right">{formatMoney(l.preco)}</td>
+                          {!pagamentoMaoDeObra && <td className="px-3 py-2 text-right">{l.quantidade} {l.unidade}</td>}
+                          {!pagamentoMaoDeObra && <td className="px-3 py-2 text-right">{formatMoney(l.preco)}</td>}
                           <td className="px-3 py-2 text-right font-medium">{formatMoney(l.total)}</td>
                           <td className="px-3 py-2 text-right whitespace-nowrap">
                             {obraConcluida ? (
@@ -3226,18 +3315,24 @@ function CustoObraApp({ usuario }) {
                               {procurando ? `Total de "${buscaLancamento.trim()}"` : 'Total da categoria'}
                             </span>
                             <span className="text-stone-400">
-                              {` · ${conta.lancamentos} lançamento${conta.lancamentos > 1 ? 's' : ''}`}
+                              {pagamentoMaoDeObra
+                                ? ` · ${conta.lancamentos} pagamento${conta.lancamentos > 1 ? 's' : ''}`
+                                : ` · ${conta.lancamentos} lançamento${conta.lancamentos > 1 ? 's' : ''}`}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-right font-medium text-stone-700 whitespace-nowrap">
-                            {textoQuantidades(conta.quantidades)}
-                          </td>
-                          <td className="px-3 py-2 text-right text-stone-500 whitespace-nowrap">
-                            {/* média ponderada: dinheiro dividido pela
-                                quantidade. Só aparece quando tudo o que a
-                                busca achou está na mesma unidade. */}
-                            {conta.precoMedio != null ? `média ${formatMoney(conta.precoMedio)}` : ''}
-                          </td>
+                          {!pagamentoMaoDeObra && (
+                            <td className="px-3 py-2 text-right font-medium text-stone-700 whitespace-nowrap">
+                              {textoQuantidades(conta.quantidades)}
+                            </td>
+                          )}
+                          {!pagamentoMaoDeObra && (
+                            <td className="px-3 py-2 text-right text-stone-500 whitespace-nowrap">
+                              {/* média ponderada: dinheiro dividido pela
+                                  quantidade. Só aparece quando tudo o que a
+                                  busca achou está na mesma unidade. */}
+                              {conta.precoMedio != null ? `média ${formatMoney(conta.precoMedio)}` : ''}
+                            </td>
+                          )}
                           <td className="px-3 py-2 text-right font-semibold text-green-800 whitespace-nowrap">
                             {formatMoney(conta.total)}
                           </td>
@@ -3248,7 +3343,7 @@ function CustoObraApp({ usuario }) {
                             lido como "tudo o que gastei disso" */}
                         {fora.lancamentos > 0 && (
                           <tr className="bg-stone-50">
-                            <td colSpan={6} className="px-3 pb-2 text-xs text-amber-700">
+                            <td colSpan={colunasTabela} className="px-3 pb-2 text-xs text-amber-700">
                               Fora desta categoria há mais {fora.lancamentos} lançamento
                               {fora.lancamentos > 1 ? 's' : ''} de "{buscaLancamento.trim()}" nesta obra,
                               somando {formatMoney(fora.total)}. Este total é só de {CATEGORIAS[categoriaAtiva].label}.
@@ -3343,6 +3438,7 @@ function CustoObraApp({ usuario }) {
         onIr={(destino) => {
           if (destino.view === 'obra' && destino.obraId) {
             setObraAtivaId(destino.obraId);
+            if (destino.categoria) setCategoriaAtiva(destino.categoria);
             setView('obra');
           } else {
             if (destino.material) setMaterialFoco(destino.material);
