@@ -7,7 +7,8 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
-import { formatMoney, formatDateBR, todayISO, CATEGORIAS, CLS, CORES_CATEGORIA, formatPct } from '../domain';
+import { formatMoney, formatDateBR, todayISO, CATEGORIAS, GRUPOS_GASTO, CLS, CORES_CATEGORIA, formatPct } from '../domain';
+import { grupoDeGasto } from '../produtos/madeiras';
 import { usarEstaEscuro } from '../ui/usarTema';
 import useCountUp from '../ui/useCountUp';
 import {
@@ -300,7 +301,7 @@ function TabelaLancamentos({ titulo, itens }) {
                   <td className="px-2 py-2 text-stone-800">{l.descricao}</td>
                   <td className="px-2 py-2">
                     <span className={`text-xs px-1.5 py-0.5 rounded ${CLS[CATEGORIAS[l.categoria]?.cls]?.bg || 'bg-stone-100'} ${CLS[CATEGORIAS[l.categoria]?.cls]?.text || 'text-stone-500'}`}>
-                      {CATEGORIAS[l.categoria]?.label || l.categoria}
+                      {GRUPOS_GASTO[grupoDeGasto(l)]?.label || l.categoria}
                     </span>
                   </td>
                   <td className="px-4 py-2 text-right font-medium text-stone-900 whitespace-nowrap">{formatMoney(l.total)}</td>
@@ -347,7 +348,7 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
   const pctUtilizado = orcamentoTotal ? (custoTotal / orcamentoTotal) * 100 : null;
   const mediaGastos = periodoLancamentos.length ? custoPeriodo / periodoLancamentos.length : 0;
 
-  const categoriaDados = useMemo(() => agruparPorCategoria(periodoLancamentos, CATEGORIAS), [periodoLancamentos]);
+  const categoriaDados = useMemo(() => agruparPorCategoria(periodoLancamentos, GRUPOS_GASTO), [periodoLancamentos]);
   const maiorCategoria = categoriaDados[0] || null;
 
   const obraDados = useMemo(() => agruparPorObra(periodoLancamentos, obras), [periodoLancamentos, obras]);
@@ -357,7 +358,7 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
 
   const obrasEscopo = obraId === 'todas' ? obras : obras.filter((o) => o.id === obraId);
   const alertas = useMemo(
-    () => gerarAlertasFinanceiro(obrasEscopo, escopo, categoria, CATEGORIAS),
+    () => gerarAlertasFinanceiro(obrasEscopo, escopo, categoria, GRUPOS_GASTO),
     [obrasEscopo, escopo, categoria]
   );
 
@@ -425,7 +426,7 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
             <select value={categoria} onChange={(e) => setCategoria(e.target.value)}
               className="eco-input">
               <option value="todas">Todas as categorias</option>
-              {Object.entries(CATEGORIAS).map(([key, c]) => <option key={key} value={key}>{c.label}</option>)}
+              {Object.entries(GRUPOS_GASTO).map(([key, g]) => <option key={key} value={key}>{g.label}</option>)}
             </select>
           </div>
           <div>

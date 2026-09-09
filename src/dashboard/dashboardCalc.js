@@ -6,6 +6,7 @@
 // dados reais.
 
 import { chaveFornecedor } from '../textUtils';
+import { grupoDeGasto } from '../produtos/madeiras';
 
 const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -53,7 +54,9 @@ function dentroDoPeriodo(dataISO, range) {
 export function filtrarLancamentos(lancamentos, { obraId, categoria, fornecedor, periodoRange }) {
   const escopo = lancamentos.filter((l) => {
     if (obraId && obraId !== 'todas' && l.obraId !== obraId) return false;
-    if (categoria && categoria !== 'todas' && l.categoria !== categoria) return false;
+    // "categoria" aqui é o grupo do RELATÓRIO: escolher Madeiras traz só
+    // madeira, e escolher Produtos da Loja traz a loja SEM a madeira.
+    if (categoria && categoria !== 'todas' && grupoDeGasto(l) !== categoria) return false;
     if (fornecedor && fornecedor !== 'todos' && chaveFornecedor(l.fornecedorNome) !== chaveFornecedor(fornecedor)) return false;
     return true;
   });
@@ -91,15 +94,21 @@ export function agruparPorObra(lancamentos, obras) {
     .sort((a, b) => b.total - a.total);
 }
 
-export function agruparPorCategoria(lancamentos, CATEGORIAS) {
+// Agrupa o gasto pelos grupos do relatório (`grupos` = GRUPOS_GASTO), não
+// pela categoria crua do lançamento: a madeira é somada num grupo próprio,
+// senão ela infla "Produtos da Loja" e esconde o resto do gasto.
+export function agruparPorCategoria(lancamentos, grupos) {
   const somas = {};
-  Object.keys(CATEGORIAS).forEach((k) => { somas[k] = 0; });
-  lancamentos.forEach((l) => { somas[l.categoria] = (somas[l.categoria] || 0) + (Number(l.total) || 0); });
+  Object.keys(grupos).forEach((k) => { somas[k] = 0; });
+  lancamentos.forEach((l) => {
+    const k = grupoDeGasto(l);
+    somas[k] = (somas[k] || 0) + (Number(l.total) || 0);
+  });
   const total = Object.values(somas).reduce((a, v) => a + v, 0);
   return Object.entries(somas)
     // um lançamento antigo com categoria que não existe mais não pode
     // derrubar a tela inteira: ele aparece agrupado como "Outros"
-    .map(([key, valor]) => ({ key, label: (CATEGORIAS[key] || {}).label || 'Outros', valor, pct: total > 0 ? (valor / total) * 100 : 0 }))
+    .map(([key, valor]) => ({ key, label: (grupos[key] || {}).label || 'Outros', valor, pct: total > 0 ? (valor / total) * 100 : 0 }))
     .filter((c) => c.valor > 0)
     .sort((a, b) => b.valor - a.valor);
 }
@@ -171,7 +180,10 @@ export function orcamentoTotalEscopo(obras, obraId, categoria) {
   return algumDefinido ? total : null;
 }
 
-export function gerarAlertasFinanceiro(obras, lancamentosTodos, categoria, CATEGORIAS) {
+// `grupos` é GRUPOS_GASTO: o alerta "tal categoria representa X% dos
+// gastos" fala dos grupos do relatório, com Madeiras separada — senão
+// "PRODUTOS DA LOJA" apareceria com um percentual que na verdade é madeira.
+export function gerarAlertasFinanceiro(obras, lancamentosTodos, categoria, grupos) {
   const alertas = [];
   obras.forEach((obra) => {
     const gastos = lancamentosTodos.filter((l) => l.obraId === obra.id);
@@ -189,12 +201,15 @@ export function gerarAlertasFinanceiro(obras, lancamentosTodos, categoria, CATEG
     }
     if (!categoria || categoria === 'todas') {
       const porCategoria = {};
-      gastos.forEach((l) => { porCategoria[l.categoria] = (porCategoria[l.categoria] || 0) + (Number(l.total) || 0); });
+      gastos.forEach((l) => {
+        const k = grupoDeGasto(l);
+        porCategoria[k] = (porCategoria[k] || 0) + (Number(l.total) || 0);
+      });
       const totalObra = gasto;
       Object.entries(porCategoria).forEach(([cat, valor]) => {
         const pctCat = totalObra > 0 ? (valor / totalObra) * 100 : 0;
         if (pctCat >= 60 && totalObra > 0) {
-          const label = CATEGORIAS[cat] ? CATEGORIAS[cat].label : cat;
+          const label = grupos[cat] ? grupos[cat].label : cat;
           alertas.push({ tipo: 'warning', texto: `Em ${obra.nome.toUpperCase()}, a categoria ${label.toUpperCase()} representa ${pctCat.toFixed(0)}% dos gastos.`, categoriaKey: cat });
         }
       });

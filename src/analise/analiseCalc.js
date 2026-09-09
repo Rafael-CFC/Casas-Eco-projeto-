@@ -7,6 +7,7 @@
 
 import { chaveFornecedor } from '../textUtils';
 import { ehPagamentoDeMaoDeObra } from '../obra/maoDeObra';
+import { grupoDeGasto } from '../produtos/madeiras';
 
 // Pagamento de mão de obra não é compra de material: "PEDREIRO" não tem
 // preço por unidade, não se compara entre fornecedores e não é um item que
@@ -122,7 +123,7 @@ function mesAnterior(mesISO) {
 }
 
 export function resumoDoMes(dados, hojeISO) {
-  const { lancamentos = [], obras = [], contas = [], CATEGORIAS = {} } = dados;
+  const { lancamentos = [], obras = [], contas = [], GRUPOS_GASTO = {} } = dados;
   const mes = hojeISO.slice(0, 7);
   const anterior = mesAnterior(mes);
 
@@ -140,12 +141,16 @@ export function resumoDoMes(dados, hojeISO) {
     ? { nome: obras.find((o) => o.id === topObraId)?.nome || 'Obra removida', valor: porObra[topObraId] }
     : null;
 
-  // categoria que mais consumiu
+  // categoria que mais consumiu — pelos grupos do relatório, com a madeira
+  // separada da loja (senão a resposta era sempre "Produtos da Loja")
   const porCategoria = {};
-  doMes.forEach((l) => { porCategoria[l.categoria] = (porCategoria[l.categoria] || 0) + (Number(l.total) || 0); });
+  doMes.forEach((l) => {
+    const k = grupoDeGasto(l);
+    porCategoria[k] = (porCategoria[k] || 0) + (Number(l.total) || 0);
+  });
   const topCatKey = Object.keys(porCategoria).sort((a, b) => porCategoria[b] - porCategoria[a])[0];
   const topCategoria = topCatKey
-    ? { label: CATEGORIAS[topCatKey]?.label || topCatKey, valor: porCategoria[topCatKey] }
+    ? { label: GRUPOS_GASTO[topCatKey]?.label || topCatKey, valor: porCategoria[topCatKey] }
     : null;
 
   // fornecedor que mais recebeu

@@ -7,7 +7,7 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
-import { formatMoney, formatDateBR, CATEGORIAS, CORES_CATEGORIA, formatPct } from '../domain';
+import { formatMoney, formatDateBR, GRUPOS_GASTO, CORES_CATEGORIA, formatPct } from '../domain';
 import { StatCard, SectionCard, CustomTooltip, RankingFornecedores } from '../dashboard/FinanceiroDashboard';
 import { calcularResumoObra } from './obraResumoCalc';
 import { gerarPdfResumoObra } from './gerarPdfResumoObra';
@@ -112,7 +112,7 @@ function TabelaMaioresDespesas({ itens }) {
 
 export default function ResumoFinalObra({ obra, lancamentos, onVoltar }) {
   const [gerandoPdf, setGerandoPdf] = useState(false);
-  const resumo = useMemo(() => calcularResumoObra(obra, lancamentos, CATEGORIAS), [obra, lancamentos]);
+  const resumo = useMemo(() => calcularResumoObra(obra, lancamentos, GRUPOS_GASTO), [obra, lancamentos]);
 
   const acimaDoOrcamento = resumo.statusOrcamentario === 'acima';
   const dentroDoOrcamento = resumo.statusOrcamentario === 'dentro';

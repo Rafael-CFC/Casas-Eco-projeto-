@@ -67,7 +67,30 @@ export const CLS = {
 // da Obra). Validada com o script de acessibilidade (contraste/CVD) do
 // projeto — mantida separada das cores de badge acima (CLS), que já existiam
 // antes e são usadas em outros lugares do app.
-export const CORES_CATEGORIA = { mao_de_obra: '#d97706', material_bruto: '#0d9488', produto_loja: '#2563eb' };
+// A madeira é um marrom de propósito (é o que a cor lembra), mais escuro e
+// menos saturado que o âmbar da mão de obra: sendo cores vizinhas, quem tem
+// daltonismo separa as duas pela claridade, não pelo tom. Conferido no
+// claro (5,2:1 no branco) e no escuro (3,3:1 na superfície #1c1917), e a
+// distância entre todos os pares fica acima de 28 (ΔE) também nas
+// simulações de deuteranopia, protanopia e tritanopia.
+export const CORES_CATEGORIA = {
+  mao_de_obra: '#d97706',
+  madeiras: '#926230',
+  material_bruto: '#0d9488',
+  produto_loja: '#2563eb',
+};
+
+// Grupos dos RELATÓRIOS de gasto: as categorias de lançamento com a
+// madeira separada num grupo próprio (ver grupoDeGasto em
+// src/produtos/madeiras.js). Fica fora de CATEGORIAS de propósito —
+// CATEGORIAS é o que a tela da obra oferece para LANÇAR, e madeira
+// continua sendo lançada como Produto da Loja ou Material Bruto.
+export const GRUPOS_GASTO = {
+  mao_de_obra: { label: CATEGORIAS.mao_de_obra.label },
+  madeiras: { label: 'Madeiras' },
+  material_bruto: { label: CATEGORIAS.material_bruto.label },
+  produto_loja: { label: CATEGORIAS.produto_loja.label },
+};
 
 export function formatPct(v) {
   if (v === null || v === undefined || Number.isNaN(v)) return '—';

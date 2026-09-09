@@ -5,9 +5,12 @@
 // lançamentos reais daquela obra.
 import { somarTotal, agruparPorCategoria, agruparPorFornecedor, evoluirPorPeriodo } from '../dashboard/dashboardCalc';
 import { diasCorridos } from '../domain';
+import { grupoDeGasto } from '../produtos/madeiras';
 import { obraFoiIniciada } from './obraStatus';
 
-export function calcularResumoObra(obra, todosLancamentos, CATEGORIAS, topN = 8) {
+// `grupos` é GRUPOS_GASTO (categorias do relatório, com Madeiras separada
+// de Produtos da Loja) — ver src/produtos/madeiras.js.
+export function calcularResumoObra(obra, todosLancamentos, grupos, topN = 8) {
   const lancamentosObra = todosLancamentos.filter((l) => l.obraId === obra.id);
   const totalGasto = somarTotal(lancamentosObra);
   const orcamento = obra.orcamento || null;
@@ -15,7 +18,7 @@ export function calcularResumoObra(obra, todosLancamentos, CATEGORIAS, topN = 8)
   const pctUtilizado = orcamento ? (totalGasto / orcamento) * 100 : null;
   const statusOrcamentario = orcamento == null ? null : (totalGasto > orcamento ? 'acima' : 'dentro');
 
-  const porCategoria = agruparPorCategoria(lancamentosObra, CATEGORIAS);
+  const porCategoria = agruparPorCategoria(lancamentosObra, grupos);
   const porFornecedor = agruparPorFornecedor(lancamentosObra, topN);
   const evolucaoMensal = evoluirPorPeriodo(lancamentosObra, 'mensal');
 
@@ -25,7 +28,7 @@ export function calcularResumoObra(obra, todosLancamentos, CATEGORIAS, topN = 8)
     .map((l) => ({
       descricao: l.descricao,
       categoria: l.categoria,
-      categoriaLabel: CATEGORIAS[l.categoria] ? CATEGORIAS[l.categoria].label : l.categoria,
+      categoriaLabel: (grupos[grupoDeGasto(l)] || {}).label || l.categoria,
       total: Number(l.total) || 0,
       data: l.data,
       fornecedorNome: l.fornecedorNome || '',

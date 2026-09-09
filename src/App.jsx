@@ -10,7 +10,7 @@ import {
   LogOut, KeyRound, BarChart3, PlayCircle, CalendarDays, Repeat,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit, chaveFornecedor } from './textUtils';
-import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, CLS } from './domain';
+import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, GRUPOS_GASTO, CLS } from './domain';
 import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
 import ToastStack from './ui/Toast';
 import RelatorioContas from './contas/RelatorioContas';
@@ -36,7 +36,7 @@ import ResumoFinalObra from './obra/ResumoFinalObra';
 import { ehPagamentoDeMaoDeObra, nomesDeQuemRecebe, totalJaRecebido } from './obra/maoDeObra';
 import ProdutoSeletor from './produtos/ProdutoSeletor';
 import { catalogoPorCategoria, filtrarOrdenarProdutos, ORDENS_CATALOGO } from './produtos/catalogoUtils';
-import { ehMadeira, fornecedorDasMadeiras, madeirasSemFornecedor, vincularMadeirasAoFornecedor } from './produtos/madeiras';
+import { ehMadeira, fornecedorDasMadeiras, grupoDeGasto, madeirasSemFornecedor, vincularMadeirasAoFornecedor } from './produtos/madeiras';
 import OrcamentoVenda from './venda/OrcamentoVenda';
 import Contratos from './contratos/Contratos';
 import Configuracoes from './config/Configuracoes';
@@ -970,7 +970,7 @@ function CustoObraApp({ usuario }) {
     itens.forEach((l) => {
       const et = etapas.find((e) => e.id === l.etapaId);
       linhas.push([
-        formatDateBR(l.data), CATEGORIAS[l.categoria].label, l.descricao, et ? et.nome : '',
+        formatDateBR(l.data), GRUPOS_GASTO[grupoDeGasto(l)].label, l.descricao, et ? et.nome : '',
         l.fornecedorNome || '', l.quantidade, l.unidade, l.preco, l.total, l.observacao || '',
       ]);
     });
@@ -983,7 +983,7 @@ function CustoObraApp({ usuario }) {
       const o = obras.find((ob) => ob.id === l.obraId);
       const et = etapas.find((e) => e.id === l.etapaId);
       linhas.push([
-        o ? o.nome : '', formatDateBR(l.data), CATEGORIAS[l.categoria].label, l.descricao, et ? et.nome : '',
+        o ? o.nome : '', formatDateBR(l.data), GRUPOS_GASTO[grupoDeGasto(l)].label, l.descricao, et ? et.nome : '',
         l.fornecedorNome || '', l.quantidade, l.unidade, l.preco, l.total, l.observacao || '',
       ]);
     });
@@ -1126,10 +1126,13 @@ function CustoObraApp({ usuario }) {
     }
   }
 
+  // Gasto por categoria do RELATÓRIO: a madeira é somada à parte, em vez de
+  // ficar dentro de "Produtos da Loja" inflando o total da loja (ver
+  // grupoDeGasto em src/produtos/madeiras.js).
   function gastosPorCategoriaGeral() {
-    return Object.entries(CATEGORIAS).map(([key, cat]) => ({
-      label: cat.label,
-      total: lancamentos.filter((l) => l.categoria === key).reduce((a, l) => a + l.total, 0),
+    return Object.entries(GRUPOS_GASTO).map(([key, grupo]) => ({
+      label: grupo.label,
+      total: lancamentos.filter((l) => grupoDeGasto(l) === key).reduce((a, l) => a + l.total, 0),
     })).filter((c) => c.total > 0).sort((a, b) => b.total - a.total);
   }
 
@@ -1164,10 +1167,11 @@ function CustoObraApp({ usuario }) {
       : 'Início da obra: ainda não registrado\n';
     if (obra.orcamento) texto += `Orçamento: ${formatMoney(obra.orcamento)}\n`;
     texto += `Total gasto: ${formatMoney(totalObra(obra.id))}\n\n`;
-    Object.entries(CATEGORIAS).forEach(([key, cat]) => {
-      const doGrupo = itens.filter((i) => i.categoria === key);
+    Object.entries(GRUPOS_GASTO).forEach(([key, grupo]) => {
+      const doGrupo = itens.filter((i) => grupoDeGasto(i) === key);
       if (doGrupo.length === 0) return;
-      texto += `--- ${cat.label} (${formatMoney(totalObraCategoria(obra.id, key))}) ---\n`;
+      const totalDoGrupo = doGrupo.reduce((a, i) => a + (Number(i.total) || 0), 0);
+      texto += `--- ${grupo.label} (${formatMoney(totalDoGrupo)}) ---\n`;
       doGrupo.forEach((i) => {
         // Pagamento de mão de obra não tem quantidade nem preço unitário:
         // escrever "1  x R$ 500,00 = R$ 500,00" só confundiria quem lê.
@@ -1764,7 +1768,7 @@ function CustoObraApp({ usuario }) {
                   </div>
                   {/* ---- resumo do mês ---- */}
                   {(() => {
-                    const r = resumoDoMes({ lancamentos, obras, contas, CATEGORIAS }, hoje);
+                    const r = resumoDoMes({ lancamentos, obras, contas, GRUPOS_GASTO }, hoje);
                     if (r.lancamentosNoMes === 0 && r.totalAnterior === 0) return null;
                     const subiu = r.variacaoPct != null && r.variacaoPct > 0;
                     return (
@@ -2726,7 +2730,10 @@ function CustoObraApp({ usuario }) {
 
               <div className="eco-stagger grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="eco-card p-4">
-                  <p className="text-sm font-semibold text-stone-700 mb-3">Gastos por categoria</p>
+                  <p className="text-sm font-semibold text-stone-700">Gastos por categoria</p>
+                  <p className="text-xs text-stone-400 mb-3">
+                    <Trees size={11} className="inline -mt-0.5" /> Madeiras conta separado — não está somada dentro de Produtos da Loja nem de Materiais Brutos.
+                  </p>
                   {porCategoria.length === 0 ? (
                     <p className="text-xs text-stone-400">Sem lançamentos ainda.</p>
                   ) : (
