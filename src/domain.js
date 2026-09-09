@@ -2,7 +2,7 @@
 // Dashboard Financeiro. Mantidos aqui para ter uma única fonte de verdade
 // (mesmas categorias, mesmas cores, mesma formatação de data/moeda usadas em
 // todo o sistema).
-import { HardHat, Mountain, Store } from 'lucide-react';
+import { HardHat, Mountain, Store, Trees } from 'lucide-react';
 
 // Uma data (objeto Date) escrita como yyyy-mm-dd pelo relógio de quem
 // está usando o site. `toISOString()` devolveria a data em UTC — no
@@ -85,11 +85,15 @@ export const CORES_CATEGORIA = {
 // src/produtos/madeiras.js). Fica fora de CATEGORIAS de propósito —
 // CATEGORIAS é o que a tela da obra oferece para LANÇAR, e madeira
 // continua sendo lançada como Produto da Loja ou Material Bruto.
+// A ordem daqui é a ordem em que os grupos aparecem nos cards do
+// Financeiro. É fixa de propósito: no fechamento do mês o valor de cada
+// grupo tem que estar sempre no mesmo lugar, e não pulando de posição
+// conforme quem gastou mais.
 export const GRUPOS_GASTO = {
-  mao_de_obra: { label: CATEGORIAS.mao_de_obra.label },
-  madeiras: { label: 'Madeiras' },
-  material_bruto: { label: CATEGORIAS.material_bruto.label },
-  produto_loja: { label: CATEGORIAS.produto_loja.label },
+  madeiras: { label: 'Madeiras', icon: Trees },
+  produto_loja: { label: CATEGORIAS.produto_loja.label, icon: CATEGORIAS.produto_loja.icon },
+  material_bruto: { label: CATEGORIAS.material_bruto.label, icon: CATEGORIAS.material_bruto.icon },
+  mao_de_obra: { label: CATEGORIAS.mao_de_obra.label, icon: CATEGORIAS.mao_de_obra.icon },
 };
 
 export function formatPct(v) {

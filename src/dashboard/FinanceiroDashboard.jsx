@@ -349,7 +349,22 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
   const mediaGastos = periodoLancamentos.length ? custoPeriodo / periodoLancamentos.length : 0;
 
   const categoriaDados = useMemo(() => agruparPorCategoria(periodoLancamentos, GRUPOS_GASTO), [periodoLancamentos]);
-  const maiorCategoria = categoriaDados[0] || null;
+
+  // Um card por grupo de gasto, na ordem fixa de GRUPOS_GASTO — é o que se
+  // copia no fechamento do mês: quanto foi de madeira, quanto de produto da
+  // loja, quanto de material bruto e quanto de mão de obra, sem ter que ler
+  // percentual no gráfico. Grupo sem gasto no período aparece zerado, para
+  // a linha de cards não mudar de lugar de um mês para o outro.
+  const cardsPorGrupo = useMemo(() => Object.entries(GRUPOS_GASTO).map(([key, grupo]) => {
+    const achado = categoriaDados.find((c) => c.key === key);
+    return {
+      key,
+      label: grupo.label,
+      icon: grupo.icon,
+      valor: achado ? achado.valor : 0,
+      pct: achado ? achado.pct : 0,
+    };
+  }), [categoriaDados]);
 
   const obraDados = useMemo(() => agruparPorObra(periodoLancamentos, obras), [periodoLancamentos, obras]);
   const evolucaoDados = useMemo(() => evoluirPorPeriodo(periodoLancamentos, granularidade), [periodoLancamentos, granularidade]);
@@ -498,7 +513,6 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
           icon={Percent}
         />
         <StatCard label="Média por lançamento" numero={mediaGastos} formatar={formatMoney} sub={`${periodoLancamentos.length} lançamento(s) no período`} icon={Layers} />
-        <StatCard label="Maior categoria de gasto" valor={maiorCategoria ? maiorCategoria.label : '—'} sub={maiorCategoria ? `${formatMoney(maiorCategoria.valor)} · ${formatPct(maiorCategoria.pct)}` : 'Sem lançamentos'} icon={Layers} />
         {obraId === 'todas' ? (
           <StatCard label="Obras no recorte" numero={obraDados.length} formatar={(v) => String(Math.round(v))} sub={`de ${obras.length} cadastrada(s)`} icon={Building2} />
         ) : (
@@ -519,6 +533,44 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
           </>
         )}
       </div>
+
+      {/* Com filtro de categoria ativo a faixa sairia com um card
+          preenchido e três zerados — o que parece dado faltando. Nesse
+          caso o número da categoria escolhida já é o "Custo no período"
+          lá em cima, então a faixa não aparece (mesma regra do gráfico
+          de categorias mais abaixo). */}
+      {categoria === 'todas' && (
+      <>
+      {/* ---- o gasto de cada categoria, em faixa própria ----
+          É o que se copia no fechamento do mês: quanto foi de madeira,
+          quanto de produto da loja, quanto de material bruto e quanto de
+          mão de obra. Fica numa linha separada, sempre na mesma ordem e
+          sem esconder grupo zerado, para o número não pular de lugar de um
+          mês para o outro. Os quatro somam o "Custo no período" de cima. */}
+      <div>
+        <div className="flex items-baseline justify-between gap-2 mb-2">
+          <p className="text-xs font-medium text-stone-500">
+            Gasto por categoria · {PERIODOS.find((p) => p.key === periodo)?.label.toLowerCase()}
+          </p>
+          <p className="text-xs text-stone-400">
+            somam {formatMoney(custoPeriodo)}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 eco-stagger">
+          {cardsPorGrupo.map((g) => (
+            <StatCard
+              key={g.key}
+              label={g.label}
+              numero={g.valor}
+              formatar={formatMoney}
+              sub={g.valor > 0 ? `${formatPct(g.pct)} do gasto no período` : 'Nada no período'}
+              icon={g.icon}
+            />
+          ))}
+        </div>
+      </div>
+      </>
+      )}
 
       {/* ---- alertas ---- */}
       {alertas.length > 0 && (
