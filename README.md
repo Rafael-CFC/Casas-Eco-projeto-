@@ -117,10 +117,19 @@ na verdade, madeira.
 
 Onde isso aparece:
 
-- **Financeiro** — o gráfico "Gastos por categoria", o card "Maior categoria de gasto" e o
+- **Financeiro** — a faixa **"Gasto por categoria"**, o gráfico "Gastos por categoria" e o
   alerta "tal categoria representa X% dos gastos". O filtro **Categoria** ganhou a opção
   **Madeiras**: escolhendo ela você vê só madeira, e escolhendo **Produtos da Loja** vê a
   loja **sem** a madeira.
+
+  A faixa é uma linha de quatro cards logo abaixo dos indicadores — **Madeiras, Produtos da
+  Loja, Materiais Brutos e Mão de obra** —, cada um com o valor em reais e a fatia do
+  período. É o que se copia no **fechamento do mês**: escolha o período "Este mês" (o título
+  da faixa acompanha o que está filtrado) e os quatro números estão ali, na mesma ordem
+  todo mês. Do lado direito o sistema mostra que os quatro **somam** o "Custo no período" —
+  se não somar, falta lançamento. Categoria que não teve gasto aparece **R$ 0,00** em vez de
+  desaparecer, para o número não pular de lugar. Com um filtro de categoria ativo a faixa
+  não aparece (nesse caso o total já é o próprio "Custo no período").
 - **Resumo da obra** (tela e PDF) — o gráfico de categorias e a coluna de categoria das
   maiores despesas.
 - **Relatórios → Gastos por categoria**, o **Resumo do mês** na home, o resumo da obra
