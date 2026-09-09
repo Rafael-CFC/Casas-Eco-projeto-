@@ -6,6 +6,15 @@
 // foi de fato lançado no sistema.
 
 import { chaveFornecedor } from '../textUtils';
+import { ehPagamentoDeMaoDeObra } from '../obra/maoDeObra';
+
+// Pagamento de mão de obra não é compra de material: "PEDREIRO" não tem
+// preço por unidade, não se compara entre fornecedores e não é um item que
+// a loja consome. Ele ficava misturado no ranking de materiais, com preço
+// médio e tudo — dando a entender que o pedreiro era um produto comprado.
+function ehCompraDeMaterial(l) {
+  return !!l && !ehPagamentoDeMaoDeObra(l.categoria);
+}
 
 function normalizar(s) {
   return String(s || '').trim().toLowerCase();
@@ -20,7 +29,7 @@ function semAcento(s) {
 // Lista de materiais distintos comprados, com o total gasto em cada um.
 export function rankingMateriais(lancamentos, limite) {
   const mapa = {};
-  lancamentos.forEach((l) => {
+  lancamentos.filter(ehCompraDeMaterial).forEach((l) => {
     const chave = normalizar(l.descricao);
     if (!chave) return;
     if (!mapa[chave]) mapa[chave] = { descricao: l.descricao, unidade: l.unidade, total: 0, quantidade: 0, compras: 0 };
@@ -36,7 +45,7 @@ export function rankingMateriais(lancamentos, limite) {
 export function estatisticasMaterial(lancamentos, descricao) {
   const alvo = normalizar(descricao);
   const compras = lancamentos
-    .filter((l) => normalizar(l.descricao) === alvo)
+    .filter((l) => ehCompraDeMaterial(l) && normalizar(l.descricao) === alvo)
     .sort((a, b) => (a.data || '').localeCompare(b.data || ''));
 
   if (compras.length === 0) {
@@ -68,7 +77,7 @@ export function compararPrecosPorFornecedor(lancamentos, descricao) {
   const porFornecedor = {};
 
   lancamentos
-    .filter((l) => normalizar(l.descricao) === alvo && (l.fornecedorNome || '').trim())
+    .filter((l) => ehCompraDeMaterial(l) && normalizar(l.descricao) === alvo && (l.fornecedorNome || '').trim())
     .forEach((l) => {
       const nome = l.fornecedorNome.trim();
       const chave = normalizar(nome);
@@ -253,11 +262,35 @@ export function buscaGlobal(termo, dados) {
     destino: { view: 'contas' },
   })));
 
+  // Mão de obra tem grupo próprio: procurar "João" tem que achar o
+  // pedreiro e quanto ele já recebeu, e não "João" na lista de materiais
+  // comprados, que é onde esses pagamentos caíam antes.
+  const pagamentosMaoDeObra = new Map();
+  lancamentos
+    .filter((l) => ehPagamentoDeMaoDeObra(l.categoria) && bate(l.descricao))
+    .forEach((l) => {
+      // chave sem acento: "JOÃO" e "JOAO" são a mesma pessoa
+      const k = `${semAcento(l.descricao)}|${l.obraId}`;
+      const atual = pagamentosMaoDeObra.get(k);
+      if (atual) atual.total += Number(l.total) || 0;
+      else pagamentosMaoDeObra.set(k, { id: l.id, nome: l.descricao, obraId: l.obraId, total: Number(l.total) || 0 });
+    });
+  push('Mão de obra', [...pagamentosMaoDeObra.values()].map((p) => {
+    const obra = obras.find((o) => o.id === p.obraId);
+    const valor = p.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return {
+      id: p.id,
+      titulo: p.nome,
+      subtitulo: `já recebeu ${valor}${obra ? ` em ${obra.nome}` : ''}`,
+      destino: { view: 'obra', obraId: p.obraId, categoria: 'mao_de_obra' },
+    };
+  }));
+
   // materiais lançados que não estão no catálogo de produtos
   const nomesProdutos = new Set(produtos.map((p) => normalizar(p.nome)));
   const materiaisLancados = [...new Map(
     lancamentos
-      .filter((l) => bate(l.descricao) && !nomesProdutos.has(normalizar(l.descricao)))
+      .filter((l) => ehCompraDeMaterial(l) && bate(l.descricao) && !nomesProdutos.has(normalizar(l.descricao)))
       .map((l) => [normalizar(l.descricao), l])
   ).values()];
   push('Materiais comprados', materiaisLancados.map((l) => ({

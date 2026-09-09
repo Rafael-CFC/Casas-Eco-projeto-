@@ -58,6 +58,34 @@ Siga na ordem. Não precisa saber programar nem usar linha de comando — tudo �
 
 ## Como usar as telas principais
 
+### Mão de obra — o que o pedreiro já recebeu
+
+Dentro da obra, a aba **Mão de obra** não é compra de material: ela responde a uma
+pergunta só — **quanto o pedreiro já recebeu e quando**. Por isso o formulário tem
+três campos e mais nada:
+
+1. **Quem recebeu** — campo de digitar e procurar. Escreva um pedaço do nome e a lista
+   filtra; ao lado de cada nome aparece **quanto ele já recebeu nesta obra**, que é o
+   número que se quer saber antes de pagar de novo. A lista junta quem já recebeu
+   pagamento em qualquer obra e os montadores do crediário. Nome novo? Digite e clique
+   em **"Usar este nome"**.
+2. **Quanto recebeu (R$)** — o valor pago, direto. Sem quantidade, sem unidade e sem
+   preço unitário: antes a tela pedia "5 diárias x R$ 150" e tratava o pedreiro como se
+   fosse um produto comprado, com campo de fornecedor e tudo.
+3. **Data do pagamento**.
+
+Etapa e observação continuam ali, opcionais ("adiantamento da semana").
+
+A lista embaixo virou um **extrato de pagamentos**: data, quem recebeu e valor pago, com
+o total no pé. Pagamento antigo, lançado quando a tela pedia quantidade, continua certo —
+o que aparece é o total, que é o que sempre foi somado no Financeiro e no resumo da obra.
+Se você abrir um desses para editar, o valor volta pelo total.
+
+Mão de obra também **saiu da tela de Materiais** e do grupo "Materiais comprados" da
+busca: pagamento de gente não tem preço médio por unidade nem comparação entre
+fornecedores. Procurando o nome do pedreiro na busca, ele agora aparece no grupo
+**Mão de obra**, com o total já recebido, e o clique abre a obra já nessa aba.
+
 ### Madeira e a distribuidora (Albertina)
 
 A madeira vem toda de uma distribuidora só. Quando você lança madeira numa obra, o campo
