@@ -7,7 +7,7 @@ import {
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
   FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search, NotebookPen, Trees,
-  LogOut, KeyRound, BarChart3, PlayCircle, CalendarDays, Repeat,
+  LogOut, KeyRound, BarChart3, PlayCircle, CalendarDays, Repeat, FileUp,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit, chaveFornecedor } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, GRUPOS_GASTO, CLS } from './domain';
@@ -15,6 +15,7 @@ import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
 import ToastStack from './ui/Toast';
 import RelatorioContas from './contas/RelatorioContas';
 import BoletosPorDia from './contas/BoletosPorDia';
+import ImportarNotasXml from './contas/ImportarNotasXml';
 import { nomeDaConta, proximoVencimentoBoleto, nomesDeDistribuidoras } from './contas/contasCalc';
 import SeletorComBusca from './ui/SeletorComBusca';
 import ContasFixas from './contas/ContasFixas';
@@ -621,6 +622,46 @@ function CustoObraApp({ usuario }) {
     setAviso(novas.length === 1
       ? `Conta de ${fornecedorNome} criada.`
       : `${novas.length} boletos de ${fornecedorNome} registrados — ${formatMoney(total)}.`);
+    return true;
+  }
+
+  // Os boletos que vieram do XML da nota fiscal. É o mesmo que `criarContas`
+  // faz, com duas diferenças:
+  //
+  //   * podem vir de VÁRIAS distribuidoras de uma vez (o dono escolhe dez
+  //     XML juntos), então o nome vem em cada item, não de fora;
+  //   * cada conta guarda de onde veio — a chave da nota e o número da
+  //     duplicata. É por aí que o sistema reconhece o mesmo XML escolhido
+  //     duas vezes e não lança o boleto em dobro.
+  //
+  // Continua sendo uma gravação só: dez notas conferidas não podem virar
+  // meia lista lançada porque a internet caiu no meio.
+  async function importarBoletosDeNotas(itens) {
+    if (!itens || itens.length === 0) return false;
+    const novas = itens.map((i) => ({
+      id: crypto.randomUUID(),
+      fornecedorNome: i.fornecedorNome,
+      valor: i.valor,
+      vencimento: i.vencimento,
+      status: 'pendente',
+      chaveNfe: i.chaveNfe,
+      numeroNota: i.numeroNota,
+      numeroDuplicata: i.numeroDuplicata,
+      origem: 'xml',
+      criadoEm: todayISO(),
+    }));
+    const ok = await salvarContas([...contas, ...novas]);
+    if (!ok) return false;
+
+    let lista = fornecedores;
+    novas.forEach((c) => { lista = upsertFornecedor(lista, c.fornecedorNome); });
+    if (lista !== fornecedores) salvarFornecedores(lista);
+
+    const total = novas.reduce((a, c) => a + c.valor, 0);
+    const quantasNotas = new Set(novas.map((c) => c.chaveNfe)).size;
+    setAviso(novas.length === 1
+      ? `Boleto de ${novas[0].fornecedorNome} lançado — ${formatMoney(total)}.`
+      : `${novas.length} boletos de ${quantasNotas} ${quantasNotas === 1 ? 'nota' : 'notas'} lançados — ${formatMoney(total)}.`);
     return true;
   }
 
@@ -2419,7 +2460,7 @@ function CustoObraApp({ usuario }) {
           Object.keys(grupos).forEach((g) => { contasPorGrupo[g] = []; });
           contas.forEach((c) => { contasPorGrupo[classificarConta(c)].push(c); });
 
-          const abas = [['dia', 'Por dia', CalendarDays], ['registrar', 'Registrar', Plus], ['fixas', 'Fixas do mês', Repeat], ['relatorio', 'Relatório', BarChart3]];
+          const abas = [['dia', 'Por dia', CalendarDays], ['registrar', 'Registrar', Plus], ['xml', 'Importar XML', FileUp], ['fixas', 'Fixas do mês', Repeat], ['relatorio', 'Relatório', BarChart3]];
 
           return (
             <div className="space-y-6">
@@ -2452,6 +2493,15 @@ function CustoObraApp({ usuario }) {
                   onLancar={lancarContaFixa}
                   onLancarTodas={lancarTodasContasFixas}
                   onMarcarPaga={marcarContaPaga}
+                />
+              )}
+
+              {abaContas === 'xml' && (
+                <ImportarNotasXml
+                  contas={contas}
+                  nomesDistribuidoras={nomesDistribuidoras}
+                  cnpjEmpresa={configuracao?.contratada?.cnpj}
+                  onImportar={importarBoletosDeNotas}
                 />
               )}
 
