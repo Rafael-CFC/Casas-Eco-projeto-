@@ -304,6 +304,70 @@ seu próprio vencimento — some, marque como paga e apague um por um, como semp
 distribuidora continua escolhida, porque quase sempre vem outra nota da mesma logo
 em seguida.
 
+### Contas > Importar XML — os boletos direto da nota fiscal
+
+Toda NF-e traz, **dentro do próprio arquivo XML**, a lista dos boletos daquela nota:
+número, vencimento e valor de cada um. É a mesma coisa que estava sendo digitada à
+mão na aba **Registrar**. Nesta aba o sistema lê o arquivo e monta a lista sozinho —
+você só confere e lança.
+
+**De onde vem o XML.** Do e-mail que a distribuidora manda junto com a nota, do portal
+dela ou do WhatsApp do vendedor. É o arquivo terminado em `.xml` (o PDF da DANFE não
+serve: ele é a foto da nota, não os dados dela). Veio dentro de um `.zip`? Descompacte
+e escolha os `.xml` de dentro.
+
+**Como usar:**
+
+1. Abra **Contas > Importar XML** e clique em **"Escolher arquivos"**. Pode marcar
+   vários de uma vez — no computador também dá para arrastar os arquivos para cima do
+   quadro.
+2. Cada nota vira um card: a distribuidora (tirada do emitente da nota), o número da
+   nota, a data de emissão, o CNPJ e o valor total. Embaixo, um boleto por linha, já
+   marcado.
+3. **Confira e desmarque o que não for pagar** — nota devolvida, boleto que já foi
+   acertado no pix. Só entra nas contas o que ficar marcado.
+4. Clique em **"Lançar 3 boletos"**. Eles viram contas a pagar normais, uma por boleto,
+   e aparecem na agenda **Por dia** como qualquer outra.
+
+A distribuidora vem do XML, mas **casa com quem você já tem cadastrado**: se a nota diz
+"ALBERTINA MADEIRAS LTDA" e no sistema já existe "Albertina Madeiras Ltda", os boletos
+entram na que já existe, sem criar uma segunda Albertina. Nome que ainda não existe é
+cadastrado na hora de lançar. E dá para trocar a distribuidora no card antes de lançar,
+com o mesmo campo de busca da aba Registrar.
+
+**O que o sistema confere antes de deixar lançar:**
+
+* **Boleto que já foi lançado por aqui** aparece apagado, com a marca "já lançado", e
+  não pode ser marcado de novo. Cada conta guarda a chave da nota e o número da
+  duplicata de onde veio — é assim que o mesmo XML, escolhido de novo, não vira boleto
+  em dobro.
+* **Boleto igual digitado à mão** (mesma distribuidora, mesmo valor, mesmo dia) ganha o
+  aviso "já existe igual". Só avisa, não bloqueia: duas parcelas iguais no mesmo dia
+  existem de verdade.
+* **Nota cancelada ou não autorizada** pela SEFAZ entra **desmarcada**, com o aviso em
+  vermelho. Nota cancelada não gera boleto para pagar.
+* **Nota emitida pela própria Casas Eco** (o CNPJ do emitente é o da empresa, que está
+  em Configurações) entra desmarcada: aquilo é venda sua, dinheiro a **receber** —
+  lançar ali criaria uma dívida que não existe.
+* **Boletos que não somam o valor da nota** — costuma ser entrada paga na hora,
+  desconto ou frete cobrado à parte. O aviso mostra as duas somas para você conferir.
+* **Nota à vista**, sem boleto nenhum no XML, aparece com o aviso e sem linha para
+  marcar.
+* **Boleto sem data no XML** (acontece) vem com o campo de vencimento em branco: preencha
+  ali mesmo e ele libera para marcar.
+
+Arquivo que não dá para ler — XML pela metade, XML de evento (cancelamento, carta de
+correção), cupom fiscal — vira uma linha de aviso no alto, e os outros arquivos da leva
+continuam valendo.
+
+**E baixar o XML sozinho, direto da Receita?** Isso o sistema não faz, e é de propósito.
+Baixar nota na SEFAZ exige o **certificado digital da empresa (e-CNPJ)** em cada consulta
+— e certificado guardado dentro de um site é certificado na mão de quem abrir o site.
+Para buscar automático seria preciso um servidor separado, só para isso, guardando o
+certificado e consultando a SEFAZ de tempos em tempos. Dá para fazer um dia; hoje o
+arquivo chega pelo e-mail da distribuidora e entra por aqui, e o trabalho que sobrou é
+conferir, não digitar.
+
 ### Contas > Fixas do mês — o que vence todo mês
 
 Energia, água, aluguel, internet, salário: conta que vence todo mês, sempre no mesmo
