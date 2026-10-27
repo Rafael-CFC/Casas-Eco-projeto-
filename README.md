@@ -284,15 +284,25 @@ Registrar** o formulário é o da **nota inteira**:
 
 2. **Preencha o valor e o vencimento do primeiro boleto.**
 3. Clique em **"+ Mais um boleto"** para cada boleto que veio na nota. A linha nova
-   já vem com o mesmo valor da anterior e o vencimento **no mesmo dia do mês
-   seguinte** — é o 30/60/90 de sempre. Se o seu for diferente, é só corrigir na hora.
+   já vem com o mesmo valor da anterior e o vencimento **dez dias depois**. Dez porque
+   prazo curto é o que mais aparece — 10/20/30, quinzena, uma semana. Se o seu for
+   outro, corrija a data ali mesmo.
 
-   Antes o sistema somava 30 dias corridos, e isso desencontrava do papel: de 10/10
-   dava 09/11, um dia antes. Agora venceu dia 10, o próximo vence dia 10.
+   **Da terceira linha em diante o sistema copia o espaçamento que você usou.** Mudou
+   o segundo boleto para sete dias depois do primeiro? O terceiro nasce sete dias
+   depois do segundo, e assim por diante. Você acerta a data **uma vez** e o resto da
+   nota sai no mesmo passo, sem voltar o calendário a cada linha.
 
-   Quando o dia não existe no mês (dia 31 em fevereiro), a data cai no **último dia
-   daquele mês** e volta para o dia certo no mês seguinte — 31/12, 31/01, 28/02,
-   31/03, 30/04. Antes, somando 30 dias, fevereiro era pulado inteiro.
+   Antes a sugestão era sempre o mês seguinte. Para a nota de 30/60/90 estava certo,
+   mas na maioria das notas o prazo é menor, e aí era preciso voltar o mês em cada
+   boleto — que é justamente onde se erra a data.
+
+   **O 30/60/90 continua funcionando igual:** basta pôr o segundo boleto no mesmo dia
+   do mês seguinte, e o sistema entende que a nota é mensal — o terceiro cai no mesmo
+   dia do mês seguinte, não "31 dias depois" (que iria escorregando um dia a cada
+   linha). Quando o dia não existe no mês (dia 31 em fevereiro), a data cai no
+   **último dia daquele mês** e volta para o dia certo no mês seguinte: 31/12, 31/01,
+   28/02, 31/03, 30/04.
 4. Embaixo aparece a conferência: **quantos boletos e o total da nota**. Confira com
    o papel na mão e clique em **"Registrar 3 boletos"**.
 

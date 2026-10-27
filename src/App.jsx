@@ -930,20 +930,16 @@ function CustoObraApp({ usuario }) {
     setCtBoletos((lista) => lista.map((b) => (b.id === id ? { ...b, ...campos } : b)));
   }
 
-  // A linha nova já nasce com o valor da anterior e o vencimento no MESMO
-  // DIA do mês seguinte — é como o 30/60/90 da distribuidora funciona na
-  // prática: venceu dia 10, o próximo vence dia 10 do mês que vem.
-  // Somar 30 dias corridos desencontrava do papel (de 10/10 dava 09/11) e
-  // às vezes pulava um mês inteiro (de 31/01 dava 02/03).
+  // A linha nova já nasce com o valor da anterior e com o vencimento
+  // seguindo o espaçamento que o dono já usou nesta nota (ver
+  // proximoVencimentoBoleto). Com um boleto só na tela, a sugestão é dez
+  // dias — o prazo curto é o que mais aparece nas notas da loja.
   // É só um chute para adiantar a digitação: os dois campos continuam
   // editáveis, e nada é gravado sem o dono conferir.
   function adicionarBoleto() {
     setCtBoletos((lista) => {
-      const primeiro = lista[0];
       const ultimo = lista[lista.length - 1];
-      const sugerido = ultimo && ultimo.vencimento
-        ? proximoVencimentoBoleto(primeiro && primeiro.vencimento, ultimo.vencimento)
-        : '';
+      const sugerido = proximoVencimentoBoleto(lista.map((b) => b.vencimento));
       return [...lista, {
         id: crypto.randomUUID(),
         valor: ultimo ? ultimo.valor : '',

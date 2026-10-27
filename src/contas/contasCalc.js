@@ -30,28 +30,70 @@ export function somarDias(iso, dias) {
   return isoLocal(d);
 }
 
-// O vencimento sugerido para o próximo boleto da mesma nota: um mês depois
-// do último, mas no DIA do primeiro.
-//
-// O dia vem do primeiro porque é ele que o dono copiou do papel, e porque
-// senão a data escorrega e não volta mais: encadeando a partir de 31/12,
-// fevereiro corta para 28 e daí em diante todo mês vira 28 — 31/12, 31/01,
-// 28/02, 28/03. Ancorando no dia do primeiro, o corte de fevereiro é só de
-// fevereiro: 31/12, 31/01, 28/02, 31/03, 30/04.
-//
-// O mês vem do último para que corrigir uma linha à mão empurre as
-// próximas junto, e para nunca repetir uma data que já está na tela.
-export function proximoVencimentoBoleto(primeiroISO, ultimoISO) {
-  const ultimo = String(ultimoISO || '').slice(0, 10);
-  const [ano, mes] = ultimo.split('-').map(Number);
-  if (!ano || !mes) return '';
-  const primeiro = String(primeiroISO || '').slice(0, 10) || ultimo;
-  const diaDoPrimeiro = Number(primeiro.slice(8, 10)) || Number(ultimo.slice(8, 10));
+// Dias entre duas datas ISO, sem passar por fuso horário.
+export function diasEntre(deISO, ateISO) {
+  const de = new Date(`${String(deISO || '').slice(0, 10)}T00:00:00`);
+  const ate = new Date(`${String(ateISO || '').slice(0, 10)}T00:00:00`);
+  if (isNaN(de.getTime()) || isNaN(ate.getTime())) return 0;
+  return Math.round((ate - de) / 86400000);
+}
 
-  const alvo = new Date(ano, mes, 1); // dia 1º do mês seguinte ao do último
+// Quando a nota tem um boleto só na tela, o próximo é sugerido daqui a
+// tantos dias. Dez porque o prazo curto é o normal nas notas da loja —
+// 10/20/30, quinzena, uma semana. Antes a sugestão era o mês seguinte, e
+// isso obrigava a voltar o calendário em quase toda nota, o que é
+// justamente onde se erra a data.
+export const DIAS_ENTRE_BOLETOS_PADRAO = 10;
+
+// Um mês depois, caindo sempre no mesmo DIA do mês — e no último dia do
+// mês quando aquele dia não existe (31 em fevereiro).
+//
+// O dia vem de fora (`diaAncora`) porque senão a data escorrega e não
+// volta mais: encadeando a partir de 31/12, fevereiro corta para 28 e daí
+// em diante todo mês vira 28 — 31/12, 31/01, 28/02, 28/03. Com a âncora,
+// o corte de fevereiro é só de fevereiro: 31/12, 31/01, 28/02, 31/03.
+function mesSeguinte(iso, diaAncora) {
+  const [ano, mes] = iso.split('-').map(Number);
+  const alvo = new Date(ano, mes, 1); // dia 1º do mês seguinte
   const ultimoDiaDoMes = new Date(alvo.getFullYear(), alvo.getMonth() + 1, 0).getDate();
-  alvo.setDate(Math.min(diaDoPrimeiro, ultimoDiaDoMes));
+  alvo.setDate(Math.min(diaAncora, ultimoDiaDoMes));
   return isoLocal(alvo);
+}
+
+// O vencimento sugerido para o próximo boleto da mesma nota.
+//
+// A regra é copiar o espaçamento que o dono já usou nesta nota: corrigiu o
+// segundo boleto para sete dias depois do primeiro, o terceiro nasce sete
+// dias depois do segundo. Vale para quinze, vinte, o que for.
+//
+// Espaçamento de um MÊS é tratado como mês, não como 30 e poucos dias: de
+// 10/10 para 10/11 são 31 dias, e repetir "31 dias" jogaria o terceiro
+// para 11/12 — um dia depois, e escorregando mais a cada linha. Quem
+// lança 30/60/90 espera o mesmo dia todo mês.
+//
+// Sem espaçamento para copiar (só existe um boleto na tela), vale o padrão
+// curto de DIAS_ENTRE_BOLETOS_PADRAO.
+//
+// É só um chute para adiantar a digitação: a data continua editável e
+// nada é gravado sem o dono conferir.
+export function proximoVencimentoBoleto(vencimentos) {
+  const datas = (Array.isArray(vencimentos) ? vencimentos : [vencimentos])
+    .map((v) => String(v || '').slice(0, 10))
+    .filter((v) => /^\d{4}-\d{2}-\d{2}$/.test(v));
+  if (datas.length === 0) return '';
+
+  const ultimo = datas[datas.length - 1];
+  if (datas.length === 1) return somarDias(ultimo, DIAS_ENTRE_BOLETOS_PADRAO);
+
+  const penultimo = datas[datas.length - 2];
+  // O maior dia já usado na nota é a âncora: numa nota que começou dia 31,
+  // o 28/02 que o próprio sistema sugeriu não faz os meses seguintes
+  // virarem 28.
+  const diaAncora = Math.max(...datas.map((d) => Number(d.slice(8, 10))));
+  if (ultimo === mesSeguinte(penultimo, diaAncora)) return mesSeguinte(ultimo, diaAncora);
+
+  const intervalo = diasEntre(penultimo, ultimo);
+  return somarDias(ultimo, intervalo > 0 ? intervalo : DIAS_ENTRE_BOLETOS_PADRAO);
 }
 
 // ---- filtros ----
