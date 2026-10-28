@@ -14,6 +14,10 @@ import { semAcento } from '../textUtils';
 
 export const FORNECEDOR_MADEIRAS_PADRAO = 'ALBERTINA';
 
+// A seção das madeiras na obra. Era só um grupo de relatório; hoje é uma
+// das quatro seções em que se lança (ver CATEGORIAS em src/domain.js).
+export const CATEGORIA_MADEIRAS = 'madeiras';
+
 function chave(valor) {
   return semAcento(valor).replace(/\s+/g, ' ').trim();
 }
@@ -38,11 +42,17 @@ const FAMILIAS = [
 // bitola solta, do jeito que a tabela escreve: 5X10X3M, 10X20X4M, 6X12X3M…
 const PADRAO_BITOLA = /^\d{1,3}(,\d)?x\d{1,3}(,\d)?(x\d{1,3}(,\d)?m?)?$/;
 
-// `categoria` entra na conta porque "DECK" em Mão de obra é o serviço de
-// montar o deck, não a compra da madeira — e serviço não é compra da
-// distribuidora.
+// `categoria` entra na conta por dois motivos:
+//
+//   * "DECK" em Mão de obra é o serviço de montar o deck, não a compra da
+//     madeira — e serviço não é compra da distribuidora;
+//   * o que foi lançado NA SEÇÃO Madeiras é madeira por decisão de quem
+//     lançou, tenha o nome que tiver. Compra de madeira que ninguém sabe
+//     nomear ("CARGA DE MADEIRA", "RESTO DE TELHADO") entra ali e conta
+//     como madeira, sem depender da lista de nomes abaixo.
 export function ehMadeira(descricao, categoria) {
   if (categoria === 'mao_de_obra') return false;
+  if (categoria === CATEGORIA_MADEIRAS) return true;
   const nome = chave(descricao);
   if (!nome) return false;
   if (NOMES_DO_CATALOGO.has(nome)) return true;
@@ -77,21 +87,54 @@ export function vincularMadeirasAoFornecedor(lancamentos, fornecedor) {
   return lancamentos.map((l) => (alvos.has(l.id) ? { ...l, fornecedorNome: nome } : l));
 }
 
-// ---- relatórios: madeira separada das outras categorias ----
+// ---- a seção de quem já foi lançado antes dela existir ----
 //
-// Nos RELATÓRIOS de gasto a madeira sai da categoria em que foi lançada e
-// vira um grupo próprio. Motivo prático: quase toda madeira é lançada como
-// "Produto da Loja", e como é o item mais caro da obra ela inflava esse
-// total e escondia o resto — o dono olhava "Produtos da Loja" e via, na
-// verdade, madeira.
+// Hoje madeira tem seção própria e o lançamento novo já nasce nela. O
+// lançamento ANTIGO, de quando madeira era lançada dentro de Produtos da
+// Loja, é movido pela migração abaixo — mas enquanto ela não rodou (banco
+// que voltou de um backup, aba aberta desde antes, gravação que falhou), é
+// esta função que põe cada gasto no grupo certo nos relatórios.
 //
-// Isto NÃO muda o lançamento: madeira continua sendo lançada na categoria
-// de sempre, e nada no banco é reescrito. É só como o gasto é agrupado na
-// hora de mostrar.
-export const GRUPO_MADEIRAS = 'madeiras';
+// `secaoManual` é a exceção que manda em tudo: quando o dono deliberadamente
+// lançou um item de nome amadeirado em OUTRA seção — "FORRO PVC" em Produtos
+// da Loja é o caso clássico —, a escolha dele vale, e nem a migração nem o
+// relatório o puxam de volta para Madeiras.
+export const GRUPO_MADEIRAS = CATEGORIA_MADEIRAS;
 
 export function grupoDeGasto(lancamento) {
   if (!lancamento) return '';
-  if (ehMadeira(lancamento.descricao, lancamento.categoria)) return GRUPO_MADEIRAS;
+  if (lancamento.categoria === CATEGORIA_MADEIRAS) return CATEGORIA_MADEIRAS;
+  if (lancamento.secaoManual) return lancamento.categoria;
+  if (ehMadeira(lancamento.descricao, lancamento.categoria)) return CATEGORIA_MADEIRAS;
   return lancamento.categoria;
+}
+
+// Quem é madeira e está fora da seção Madeiras — o que a migração move.
+export function madeirasForaDaSecao(lancamentos) {
+  return (lancamentos || []).filter((l) => (
+    l
+    && l.categoria !== CATEGORIA_MADEIRAS
+    && !l.secaoManual
+    && ehMadeira(l.descricao, l.categoria)
+  ));
+}
+
+// Move a madeira já lançada para a seção Madeiras.
+//
+// Mexe num campo só (`categoria`) e só nos lançamentos que são madeira:
+// valor, data, obra, etapa, fornecedor e observação ficam como estavam, e
+// o id continua o mesmo — nada é recriado, então nenhum relatório perde o
+// histórico. Roda toda vez que os dados são carregados, de propósito: é
+// assim que um backup restaurado de antes da seção existir também entra no
+// lugar certo. Quem já está na seção não é tocado, então rodar de novo não
+// faz nada.
+export function migrarMadeirasParaSecao(lancamentos) {
+  const alvos = new Set(madeirasForaDaSecao(lancamentos).map((l) => l.id));
+  if (alvos.size === 0) return { lista: lancamentos || [], movidos: 0 };
+  return {
+    lista: (lancamentos || []).map((l) => (
+      alvos.has(l.id) ? { ...l, categoria: CATEGORIA_MADEIRAS } : l
+    )),
+    movidos: alvos.size,
+  };
 }

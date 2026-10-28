@@ -96,10 +96,11 @@ em "Fornecedores que mais geram custo", e nos relatórios por fornecedor.
 O campo continua editável: se aquela compra foi em outro lugar, é só trocar na hora de
 lançar, e o que você digitar à mão o sistema nunca apaga.
 
-O que conta como madeira sai da própria **tabela de madeiras da loja** — os nomes dela
-(DECK, ASSOALHO, FORRO, RIPA, TABOA, PRANCHA, EUCALIPTO, MOERÃO...), com ou sem complemento,
-e as bitolas soltas (5X10X3M, 10X20X4M...). Mão de obra nunca conta: "MONTAGEM DO DECK"
-é serviço, não compra.
+O que conta como madeira: **tudo o que for lançado na seção Madeiras da obra** (ver a seção
+seguinte) e, nas outras seções, o que o sistema reconhece pela própria **tabela de madeiras
+da loja** — os nomes dela (DECK, ASSOALHO, FORRO, RIPA, TABOA, PRANCHA, EUCALIPTO,
+MOERÃO...), com ou sem complemento, e as bitolas soltas (5X10X3M, 10X20X4M...). Mão de obra
+nunca conta: "MONTAGEM DO DECK" é serviço, não compra.
 
 Em **Configurações → Madeiras** você pode:
 - trocar o nome da distribuidora (ou deixar em branco, e aí o sistema não preenche nada);
@@ -108,41 +109,47 @@ Em **Configurações → Madeiras** você pode:
 
 O crediário dos montadores não entra nessa conta: lá não é compra da distribuidora.
 
-### Madeira separada nos relatórios de gasto
+### Madeiras — a quarta seção da obra
 
-Nos **relatórios de gasto** a madeira conta como um grupo próprio, **Madeiras**, em vez de
-ficar somada dentro de Produtos da Loja. Ela é o item mais caro da obra: junta com o resto,
-inflava o total da loja e escondia o resto do gasto — você olhava "Produtos da Loja" e via,
-na verdade, madeira.
+Dentro da obra o gasto é lançado em **quatro seções**: **Mão de obra, Materiais Brutos,
+Madeiras e Produtos da Loja**. Madeiras tem seção própria porque é quase sempre o maior
+gasto da casa: misturada em "Produtos da Loja" ela inflava o total da loja e escondia o
+resto — você olhava "Produtos da Loja" e via, na verdade, madeira.
 
-Onde isso aparece:
+Na tela da obra são quatro botões (dois em cima e dois embaixo no celular), cada um com o
+total daquela seção. A seção aberta decide onde o lançamento entra, tem **orçamento
+próprio** e lista só os lançamentos dela.
 
-- **Financeiro** — a faixa **"Gasto por categoria"**, o gráfico "Gastos por categoria" e o
-  alerta "tal categoria representa X% dos gastos". O filtro **Categoria** ganhou a opção
-  **Madeiras**: escolhendo ela você vê só madeira, e escolhendo **Produtos da Loja** vê a
-  loja **sem** a madeira.
+**A madeira que já estava lançada foi movida sozinha.** Na primeira vez que o sistema abriu
+com a seção nova, todo lançamento de madeira que estava em Produtos da Loja (ou em Materiais
+Brutos) passou para Madeiras, e um aviso verde disse quantos foram. **Só a seção mudou**:
+valor, data, obra, etapa, fornecedor e observação continuam exatamente como estavam, e o
+total da obra não se mexe — o dinheiro só trocou de prateleira. O mesmo vale para um backup
+antigo que você restaure depois: ele entra e a madeira vai para o lugar certo.
 
-  A faixa é uma linha de quatro cards logo abaixo dos indicadores — **Madeiras, Produtos da
-  Loja, Materiais Brutos e Mão de obra** —, cada um com o valor em reais e a fatia do
-  período. É o que se copia no **fechamento do mês**: escolha o período "Este mês" (o título
-  da faixa acompanha o que está filtrado) e os quatro números estão ali, na mesma ordem
-  todo mês. Do lado direito o sistema mostra que os quatro **somam** o "Custo no período" —
-  se não somar, falta lançamento. Categoria que não teve gasto aparece **R$ 0,00** em vez de
-  desaparecer, para o número não pular de lugar. Com um filtro de categoria ativo a faixa
-  não aparece (nesse caso o total já é o próprio "Custo no período").
-- **Resumo da obra** (tela e PDF) — o gráfico de categorias e a coluna de categoria das
-  maiores despesas.
-- **Relatórios → Gastos por categoria**, o **Resumo do mês** na home, o resumo da obra
-  copiado para o WhatsApp e a coluna "Categoria" dos CSVs de extrato.
+**Na seção Madeiras, tudo que você lançar conta como madeira**, tenha o nome que tiver. Isso
+resolve a compra que ninguém sabe nomear ("CARGA DO TELHADO", "RESTO DE MADEIRA"): lançada
+ali, ela entra no total de Madeiras e já vem com a distribuidora preenchida.
 
-O que **não** muda: a madeira continua sendo **lançada** como Produto da Loja (ou Material
-Bruto) — as três categorias de lançamento são as mesmas, os orçamentos por categoria não
-mexem, e nada é reescrito no banco. É só como o gasto é agrupado na hora de mostrar, e a
-soma total continua a mesma.
+**E se um item de nome amadeirado não for madeira?** "FORRO PVC" é o caso clássico. Lance
+ele na seção que você quer (Produtos da Loja) e pronto: o sistema marca que a escolha foi
+sua e **não mexe mais nele** — nem na próxima vez que abrir, nem nos relatórios. É o mesmo
+caminho para corrigir um item que a mudança automática levou para Madeiras sem ser: abra o
+lançamento no lápis, escolha a seção certa e salve.
 
-O que entra em Madeiras é o mesmo reconhecimento já usado para o fornecedor automático
-(nomes da tabela de madeiras e bitolas soltas). Mão de obra nunca entra: "MONTAGEM DO DECK"
-é serviço, e continua em Mão de obra.
+Fora da obra, **Madeiras continua sendo um grupo nos relatórios** — Financeiro, Resumo da
+obra (tela e PDF), Relatórios, Resumo do mês da home, resumo copiado para o WhatsApp e a
+coluna "Categoria" dos CSVs. No Financeiro, a faixa **"Gasto por categoria"** são os quatro
+cards (Madeiras, Produtos da Loja, Materiais Brutos e Mão de obra), na mesma ordem todo mês,
+e o filtro **Categoria** tem as quatro opções.
+
+**Orçamento por seção:** Madeiras nasce **sem orçamento definido** — ele nunca existiu
+separado. Se você usava orçamento de "Produtos da Loja" contando a madeira junto, aquele
+número agora é só da loja; defina o de Madeiras pelo botão "Definir orçamento para
+Madeiras" na tela da obra.
+
+**O catálogo da loja não mudou.** Produto de madeira que estava cadastrado no Catálogo
+continua lá — o que mudou foi a seção em que o gasto da obra aparece.
 
 ### Modo escuro
 

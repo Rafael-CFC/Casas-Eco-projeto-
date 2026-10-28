@@ -51,15 +51,22 @@ export function parsePrecoBR(s) {
   return parseFloat(t);
 }
 
+// As quatro seções da obra, na ordem em que aparecem na tela do
+// lançamento. Madeiras é uma seção como as outras desde que deixou de ser
+// só um agrupamento de relatório: ela é a maior parte do custo de uma
+// casa da Casas Eco, vem toda de uma distribuidora só e tem a própria
+// lista de itens — misturada em "Produtos da Loja" ela escondia o resto.
 export const CATEGORIAS = {
   mao_de_obra: { label: 'Mão de obra', icon: HardHat, cls: 'amber' },
   material_bruto: { label: 'Materiais Brutos', icon: Mountain, cls: 'orange' },
+  madeiras: { label: 'Madeiras', icon: Trees, cls: 'madeira' },
   produto_loja: { label: 'Produtos da Loja', icon: Store, cls: 'blue' },
 };
 
 export const CLS = {
   amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', solid: 'bg-amber-600' },
   orange: { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', solid: 'bg-orange-600' },
+  madeira: { bg: 'bg-madeira-50', border: 'border-madeira-200', text: 'text-madeira-700', solid: 'bg-madeira-600' },
   blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', solid: 'bg-blue-600' },
 };
 
@@ -80,17 +87,18 @@ export const CORES_CATEGORIA = {
   produto_loja: '#2563eb',
 };
 
-// Grupos dos RELATÓRIOS de gasto: as categorias de lançamento com a
-// madeira separada num grupo próprio (ver grupoDeGasto em
-// src/produtos/madeiras.js). Fica fora de CATEGORIAS de propósito —
-// CATEGORIAS é o que a tela da obra oferece para LANÇAR, e madeira
-// continua sendo lançada como Produto da Loja ou Material Bruto.
-// A ordem daqui é a ordem em que os grupos aparecem nos cards do
-// Financeiro. É fixa de propósito: no fechamento do mês o valor de cada
-// grupo tem que estar sempre no mesmo lugar, e não pulando de posição
-// conforme quem gastou mais.
+// Grupos dos RELATÓRIOS de gasto: as mesmas quatro seções da obra, em
+// outra ordem. Madeiras vem primeiro porque é quase sempre o maior gasto,
+// e a ordem daqui é fixa de propósito: no fechamento do mês o valor de
+// cada grupo tem que estar sempre no mesmo lugar da tela, e não pulando de
+// posição conforme quem gastou mais.
+//
+// Continua existindo separado de CATEGORIAS porque a ordem é outra e
+// porque é por aqui que passa o lançamento antigo, de quando madeira era
+// lançada dentro de Produtos da Loja (ver grupoDeGasto em
+// src/produtos/madeiras.js).
 export const GRUPOS_GASTO = {
-  madeiras: { label: 'Madeiras', icon: Trees },
+  madeiras: { label: CATEGORIAS.madeiras.label, icon: CATEGORIAS.madeiras.icon },
   produto_loja: { label: CATEGORIAS.produto_loja.label, icon: CATEGORIAS.produto_loja.icon },
   material_bruto: { label: CATEGORIAS.material_bruto.label, icon: CATEGORIAS.material_bruto.icon },
   mao_de_obra: { label: CATEGORIAS.mao_de_obra.label, icon: CATEGORIAS.mao_de_obra.icon },
