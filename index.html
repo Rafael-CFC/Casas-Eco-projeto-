@@ -2,7 +2,19 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- `viewport-fit=cover`: a tela chega até a borda do aparelho, e aí o
+         CSS usa env(safe-area-inset-*) para nada ficar embaixo da barrinha
+         do iPhone.
+         `interactive-widget=resizes-content`: quando o teclado abre, o
+         Android encolhe a PÁGINA em vez de empurrar a tela para cima — era
+         uma das coisas que faziam a tela "andar" sozinha ao digitar.
+         O zoom continua liberado de propósito: quem precisa aumentar para
+         enxergar tem que poder. O que sumiu foi o zoom que o aparelho dava
+         sem ninguém pedir (ver src/index.css). -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <link rel="icon" type="image/jpeg" href="/logo-casas-eco.jpeg" />
     <title>Casas Eco — Custo de Obra</title>
     <meta name="theme-color" content="#12100f" />

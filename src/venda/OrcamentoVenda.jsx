@@ -289,7 +289,7 @@ export default function OrcamentoVenda({ onAviso, onErro }) {
 
       {/* ---- barra de total: flutua acima do menu no celular, encaixada no fluxo no desktop ---- */}
       {carrinho.length > 0 && (
-        <div className="fixed inset-x-0 bottom-28 sm:static sm:bottom-auto z-30 px-3 sm:px-0">
+        <div className="fixed inset-x-0 eco-acima-da-barra sm:static sm:bottom-auto z-30 px-3 sm:px-0">
           <div className="eco-card max-w-5xl mx-auto sm:mx-0 p-3 flex items-center justify-between gap-3 shadow-elevated sm:shadow-soft">
             {formatoPdf !== 'atual' ? (
               <div>

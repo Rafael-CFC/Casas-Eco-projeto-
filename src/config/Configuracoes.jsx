@@ -331,7 +331,7 @@ export default function Configuracoes({
       )}
 
       {sujo && (
-        <div className="fixed inset-x-0 bottom-16 sm:bottom-0 z-30 px-3 sm:px-0 sm:static">
+        <div className="fixed inset-x-0 eco-acima-da-barra sm:bottom-0 z-30 px-3 sm:px-0 sm:static">
           <div className="eco-card max-w-5xl mx-auto sm:mx-0 p-3 flex items-center justify-between gap-3 shadow-elevated sm:shadow-soft border-green-200">
             <p className="text-sm text-stone-600">Alterações não salvas.</p>
             <div className="flex gap-2 flex-shrink-0">

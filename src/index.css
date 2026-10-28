@@ -115,6 +115,70 @@
 
   html {
     scroll-behavior: smooth;
+
+    /* ---- a tela presa no celular ----
+
+       Três coisas que faziam a tela "se ajeitar" sozinha no aparelho:
+
+       * `-webkit-text-size-adjust`: o navegador aumentava a letra por
+         conta própria ao virar o aparelho, e a página inteira se
+         remontava;
+       * `overscroll-behavior-y: none`: puxar a lista para baixo quando ela
+         já estava no topo recarregava o site ou fazia a tela "esticar" e
+         voltar. Aqui é um sistema de trabalho, não uma página de notícia:
+         recarregar sem querer é perder o que estava na tela;
+       * `-webkit-tap-highlight-color`: o quadrado cinza que piscava em
+         cima de tudo que era tocado. Cada botão já tem o próprio aperto
+         (`:active`), que é o aviso certo. */
+    -webkit-text-size-adjust: 100%;
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ---- O ZOOM QUE MEXIA A TELA ----
+
+     É a causa principal da queixa. No iPhone, tocar num campo com letra
+     MENOR que 16px faz o Safari dar um zoom na página sozinho — e ele não
+     volta sozinho depois. Daí a sensação de que a tela não fica presa: ela
+     aproxima a cada campo tocado e fica torta até a pessoa afastar com os
+     dedos.
+
+     Os campos do sistema são `text-sm` (14px) de propósito, porque a tela
+     é cheia de formulário e 14px cabe mais. A saída é deixar 16px só onde
+     o problema existe: aparelho de TOQUE (`pointer: coarse`). No
+     computador, onde o mouse não dispara zoom nenhum, continua 14px.
+
+     Vale para qualquer campo do sistema, inclusive os que não usam a
+     classe .eco-input — por isso é na etiqueta (`input`), e não na classe.
+     Os dois `:not()` existem para esta regra ganhar das classes de tamanho
+     do Tailwind (text-sm, text-xs) sem precisar de `!important`. */
+  @media (pointer: coarse) {
+    input:not([type='checkbox']):not([type='radio']),
+    textarea,
+    select {
+      font-size: 16px;
+    }
+  }
+
+  /* `manipulation` tira o zoom do toque-duplo em cima de botão e link (que
+     também torcia a tela), e com ele some a espera de 300ms que o
+     navegador fazia para ver se vinha um segundo toque — o botão responde
+     na hora. `user-select` impede que segurar o dedo num botão selecione o
+     texto dele e abra o menu de copiar. Só em controle: texto de tela
+     continua selecionável. */
+  button,
+  a,
+  label,
+  summary,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+
+  button,
+  [role='button'] {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
   }
 
   body {
@@ -202,58 +266,29 @@
     background-color: var(--verde-solido);
     box-shadow: var(--sombra-suave);
   }
-  .eco-btn-primary:hover {
-    background-color: var(--verde-solido-hover);
-    box-shadow: var(--sombra-alta);
-  }
   .eco-btn-secondary {
     @apply eco-btn;
     background-color: var(--superficie);
     color: var(--texto-3);
     border: 1px solid var(--borda-forte);
   }
-  .eco-btn-secondary:hover {
-    background-color: var(--realce);
-    border-color: var(--texto-5);
-    color: var(--texto);
-  }
   .eco-btn-danger {
     @apply eco-btn bg-red-600 text-white;
     box-shadow: var(--sombra-suave);
-  }
-  .eco-btn-danger:hover {
-    @apply bg-red-700;
-    box-shadow: var(--sombra-alta);
   }
   .eco-btn-dark {
     @apply eco-btn text-white;
     background-color: var(--superficie-inversa);
     box-shadow: var(--sombra-suave);
   }
-  .eco-btn-dark:hover {
-    background-color: var(--superficie-inversa-hover);
-    box-shadow: var(--sombra-alta);
-  }
   .eco-btn-ghost {
     @apply eco-btn;
     color: var(--texto-4);
-  }
-  .eco-btn-ghost:hover {
-    background-color: var(--realce);
-    color: var(--texto);
   }
   .eco-icon-btn {
     @apply inline-flex items-center justify-center w-8 h-8 rounded-lg
       transition-all duration-150 ease-out active:scale-90;
     color: var(--texto-5);
-  }
-  .eco-icon-btn:hover {
-    background-color: var(--realce);
-    color: var(--texto-2);
-  }
-  .eco-icon-btn-danger:hover {
-    background-color: var(--vermelho-fraco);
-    color: var(--vermelho-texto);
   }
 
   /* tamanhos — sempre depois das variantes de cor acima (ver nota) */
@@ -262,6 +297,41 @@
   }
   .eco-btn-xs {
     @apply px-2.5 py-1 text-xs gap-1;
+  }
+
+  /* ---- a altura da tela e as bordas do aparelho ----
+
+     `100vh` no celular é a tela COM a barra de endereço escondida. Como
+     ela aparece e some conforme a rolagem, a página ficava mais alta que
+     o visível e o conteúdo escorregava para cima e para baixo sozinho ao
+     rolar — a tela "solta" que o dono descreve. `100dvh` é a parte
+     realmente visível agora, e acompanha a barra. O `100vh` fica antes,
+     como rede para navegador antigo que não conhece `dvh`. */
+  .eco-tela {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /* A barrinha do iPhone (e o canto arredondado) comem a parte de baixo
+     da tela. `env(safe-area-inset-bottom)` é a altura que o próprio
+     aparelho informa; em aparelho sem isso, vale 0 e nada muda. */
+  .eco-rodape-seguro {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Espaço no fim da página para o conteúdo não terminar embaixo da barra
+     de navegação fixa do celular. */
+  .eco-espaco-rodape {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Barra que fica colada logo ACIMA da navegação do celular (o aviso de
+     "alterações não salvas", o total do orçamento). Era `bottom-16`, um
+     número fixo: agora que a navegação cresce o tanto da barrinha do
+     aparelho, o número fixo deixava uma em cima da outra. No computador o
+     Tailwind devolve `bottom: 0` (sm:bottom-0), que vem depois desta. */
+  .eco-acima-da-barra {
+    bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
   }
 
   /* ---- cards ---- */
@@ -274,22 +344,62 @@
   .eco-card-hover {
     @apply transition-all duration-200 ease-out hover:-translate-y-0.5;
   }
-  .eco-card-hover:hover {
-    box-shadow: var(--sombra-alta);
-    border-color: var(--borda-forte);
-  }
 
   /* ---- tabelas ---- */
   .eco-table-row {
     @apply transition-colors duration-150;
   }
-  .eco-table-row:hover {
-    background-color: var(--realce);
-  }
 
   /* ---- badges ---- */
   .eco-badge {
     @apply inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full;
+  }
+
+  /* ---- passar o mouse por cima ----
+
+     Tudo junto num lugar só, e dentro de `(hover: hover)`, porque no
+     celular o toque imita o mouse: o dedo encostava num botão e ele ficava
+     com a cor de "mouse em cima" DEPOIS do toque, grudada até tocar em
+     outro lugar. Parecia botão travado. Quem tem mouse de verdade continua
+     vendo tudo isso; no dedo, o aviso é o aperto (`:active`), que já está
+     em cada botão. */
+  @media (hover: hover) and (pointer: fine) {
+    .eco-btn-primary:hover {
+      background-color: var(--verde-solido-hover);
+      box-shadow: var(--sombra-alta);
+    }
+    .eco-btn-secondary:hover {
+      background-color: var(--realce);
+      border-color: var(--texto-5);
+      color: var(--texto);
+    }
+    .eco-btn-danger:hover {
+      @apply bg-red-700;
+      box-shadow: var(--sombra-alta);
+    }
+    .eco-btn-dark:hover {
+      background-color: var(--superficie-inversa-hover);
+      box-shadow: var(--sombra-alta);
+    }
+    .eco-btn-ghost:hover {
+      background-color: var(--realce);
+      color: var(--texto);
+    }
+    .eco-icon-btn:hover {
+      background-color: var(--realce);
+      color: var(--texto-2);
+    }
+    .eco-icon-btn-danger:hover {
+      background-color: var(--vermelho-fraco);
+      color: var(--vermelho-texto);
+    }
+    .eco-card-hover:hover {
+      box-shadow: var(--sombra-alta);
+      border-color: var(--borda-forte);
+    }
+    .eco-table-row:hover {
+      background-color: var(--realce);
+    }
   }
 
   /* ---- skeleton ---- */
@@ -433,30 +543,36 @@
 .dark .border-orange-200 { border-color: rgba(251,146,60,0.26); }
 .dark .border-madeira-200 { border-color: rgba(217,182,138,0.30); }
 
-/* mesmas cores, na hora de passar o mouse */
-.dark .hover\:bg-stone-50:hover { background-color: var(--realce); }
-.dark .hover\:bg-stone-100:hover { background-color: var(--realce-forte); }
-.dark .hover\:bg-stone-700:hover { background-color: var(--superficie-inversa-hover); }
-.dark .hover\:bg-green-50:hover { background-color: var(--verde-fraco); }
-.dark .hover\:bg-green-50\/60:hover { background-color: rgba(74,222,128,0.08); }
-.dark .hover\:bg-green-100:hover { background-color: rgba(74,222,128,0.20); }
-.dark .hover\:bg-red-50:hover { background-color: var(--vermelho-fraco); }
-.dark .hover\:text-stone-500:hover { color: var(--texto-4); }
-.dark .hover\:text-stone-600:hover { color: var(--texto-3); }
-.dark .hover\:text-stone-700:hover { color: var(--texto-2); }
-.dark .hover\:text-stone-800:hover { color: var(--texto); }
-.dark .hover\:text-green-700:hover { color: var(--verde-texto); }
-.dark .hover\:text-green-800:hover { color: var(--verde-texto-forte); }
-.dark .hover\:text-red-600:hover { color: var(--vermelho-texto); }
-.dark .hover\:border-stone-200:hover { border-color: var(--borda); }
-.dark .hover\:border-stone-300:hover { border-color: var(--borda-forte); }
-.dark .hover\:border-stone-400:hover { border-color: var(--texto-5); }
+/* mesmas cores, na hora de passar o mouse — e SÓ com mouse de verdade:
+   no celular o dedo imitava o mouse e a cor ficava grudada no botão
+   depois do toque (ver o bloco (hover: hover) lá em cima). */
+@media (hover: hover) and (pointer: fine) {
+  .dark .hover\:bg-stone-50:hover { background-color: var(--realce); }
+  .dark .hover\:bg-stone-100:hover { background-color: var(--realce-forte); }
+  .dark .hover\:bg-stone-700:hover { background-color: var(--superficie-inversa-hover); }
+  .dark .hover\:bg-green-50:hover { background-color: var(--verde-fraco); }
+  .dark .hover\:bg-green-50\/60:hover { background-color: rgba(74,222,128,0.08); }
+  .dark .hover\:bg-green-100:hover { background-color: rgba(74,222,128,0.20); }
+  .dark .hover\:bg-red-50:hover { background-color: var(--vermelho-fraco); }
+  .dark .hover\:text-stone-500:hover { color: var(--texto-4); }
+  .dark .hover\:text-stone-600:hover { color: var(--texto-3); }
+  .dark .hover\:text-stone-700:hover { color: var(--texto-2); }
+  .dark .hover\:text-stone-800:hover { color: var(--texto); }
+  .dark .hover\:text-green-700:hover { color: var(--verde-texto); }
+  .dark .hover\:text-green-800:hover { color: var(--verde-texto-forte); }
+  .dark .hover\:text-red-600:hover { color: var(--vermelho-texto); }
+  .dark .hover\:border-stone-200:hover { border-color: var(--borda); }
+  .dark .hover\:border-stone-300:hover { border-color: var(--borda-forte); }
+  .dark .hover\:border-stone-400:hover { border-color: var(--texto-5); }
+}
 
 /* sombras: no escuro a sombra tem que ser preta, senão some no fundo */
 .dark .shadow-soft { box-shadow: var(--sombra-suave); }
 .dark .shadow-elevated { box-shadow: var(--sombra-alta); }
 .dark .shadow-popover { box-shadow: var(--sombra-flutuante); }
-.dark .hover\:shadow-elevated:hover { box-shadow: var(--sombra-alta); }
+@media (hover: hover) and (pointer: fine) {
+  .dark .hover\:shadow-elevated:hover { box-shadow: var(--sombra-alta); }
+}
 
 /* gráficos do Financeiro (recharts desenha em SVG, com cor fixa) */
 .dark .recharts-cartesian-grid line { stroke: var(--borda); }
