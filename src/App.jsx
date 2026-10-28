@@ -7,7 +7,7 @@ import {
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
   FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search, NotebookPen, Trees,
-  LogOut, KeyRound, BarChart3, PlayCircle, CalendarDays, Repeat, FileUp,
+  LogOut, KeyRound, BarChart3, PlayCircle, CalendarDays, Repeat, FileUp, ClipboardList,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit, chaveFornecedor } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, GRUPOS_GASTO, CLS } from './domain';
@@ -15,6 +15,7 @@ import FinanceiroDashboard from './dashboard/FinanceiroDashboard';
 import ToastStack from './ui/Toast';
 import RelatorioContas from './contas/RelatorioContas';
 import BoletosPorDia from './contas/BoletosPorDia';
+import ColarListaModal from './obra/ColarListaModal';
 import ImportarNotasXml from './contas/ImportarNotasXml';
 import { nomeDaConta, proximoVencimentoBoleto, nomesDeDistribuidoras } from './contas/contasCalc';
 import SeletorComBusca from './ui/SeletorComBusca';
@@ -187,6 +188,7 @@ function CustoObraApp({ usuario }) {
   const [view, setView] = useState('home');
   const [obraAtivaId, setObraAtivaId] = useState(null);
   const [categoriaAtiva, setCategoriaAtiva] = useState('produto_loja');
+  const [colarListaAberta, setColarListaAberta] = useState(false);
   const [filtroObras, setFiltroObras] = useState('todas'); // 'todas' | 'andamento' | 'concluidas'
 
   const [novaObraNome, setNovaObraNome] = useState('');
@@ -1549,6 +1551,58 @@ function CustoObraApp({ usuario }) {
     }
 
     if (ok) resetFormLancamento();
+  }
+
+  // ---- lista colada ----
+  //
+  // A compra inteira numa gravação só. É o mesmo lançamento de sempre,
+  // com três diferenças: a data, a distribuidora, a etapa e a observação
+  // vêm de fora (valem para a lista toda, que é uma compra só), os itens
+  // chegam prontos da tela de conferência, e tudo é gravado de uma vez —
+  // meia lista lançada porque a internet caiu no meio seria pior do que
+  // não ter lançado nada.
+  async function lancarListaColada(itens, { data, fornecedorNome, etapaId, observacao }) {
+    if (!itens || itens.length === 0) return false;
+    const quando = data || todayISO();
+
+    // Produto da loja continua alimentando o catálogo, igual ao
+    // lançamento de um item só.
+    let listaProdutos = produtos;
+    if (categoriaAtiva === 'produto_loja') {
+      itens.forEach((i) => {
+        listaProdutos = upsertProduto(listaProdutos, { nome: i.descricao, preco: i.preco, unidade: i.unidade }, quando);
+      });
+      const okProduto = await salvarProdutos(listaProdutos);
+      if (!okProduto) return false;
+    }
+
+    const novos = itens.map((i) => ({
+      id: crypto.randomUUID(),
+      obraId: obraAtivaId,
+      categoria: categoriaAtiva,
+      secaoManual: categoriaAtiva !== CATEGORIA_MADEIRAS && ehMadeira(i.descricao, categoriaAtiva),
+      produtoId: categoriaAtiva === 'produto_loja'
+        ? (listaProdutos.find((p) => p.nome.toLowerCase() === i.descricao.toLowerCase()) || {}).id || null
+        : null,
+      descricao: i.descricao,
+      unidade: i.unidade,
+      quantidade: i.quantidade,
+      preco: i.preco,
+      total: i.quantidade * i.preco,
+      data: quando,
+      observacao: observacao || '',
+      etapaId: etapaId || null,
+      fornecedorNome: fornecedorNome || '',
+    }));
+
+    const ok = await salvarLancamentos([...novos, ...lancamentos]);
+    if (!ok) return false;
+    if (fornecedorNome) salvarFornecedores(upsertFornecedor(fornecedores, fornecedorNome));
+    const total = novos.reduce((a, l) => a + l.total, 0);
+    setAviso(novos.length === 1
+      ? `"${novos[0].descricao}" lançado — ${formatMoney(total)}.`
+      : `${novos.length} itens lançados — ${formatMoney(total)}.`);
+    return true;
   }
 
   if (loading) {
@@ -3301,9 +3355,28 @@ function CustoObraApp({ usuario }) {
                     Cancelar
                   </button>
                 )}
+                {/* A compra que veio em lista (nota da madeireira, papel,
+                    WhatsApp) não precisa ser digitada item por item. */}
+                {!editandoId && !pagamentoMaoDeObra && (
+                  <button type="button" onClick={() => setColarListaAberta(true)} className="eco-btn-secondary flex-1">
+                    <ClipboardList size={15} /> Colar lista
+                  </button>
+                )}
               </div>
             </div>
             )}
+            {colarListaAberta && !obraConcluida && createPortal(
+              <ColarListaModal
+                secaoLabel={CATEGORIAS[categoriaAtiva].label}
+                fornecedorSugerido={categoriaAtiva === CATEGORIA_MADEIRAS ? fornecedorDasMadeiras(configuracao) : ''}
+                nomesFornecedores={nomesDistribuidoras}
+                etapas={etapas.filter((et) => et.obraId === obraAtiva.id)}
+                onCancelar={() => setColarListaAberta(false)}
+                onLancar={lancarListaColada}
+              />,
+              document.body
+            )}
+
             {!obraConcluida && categoriaAtiva === 'produto_loja' && produtos.length === 0 && (
               <p className="text-xs text-stone-400 -mt-3">Ainda não tem produto cadastrado — pode digitar o nome, a unidade e o preço aqui mesmo que ele já entra no catálogo sozinho.</p>
             )}

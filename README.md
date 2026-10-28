@@ -151,6 +151,53 @@ Madeiras" na tela da obra.
 **O catálogo da loja não mudou.** Produto de madeira que estava cadastrado no Catálogo
 continua lá — o que mudou foi a seção em que o gasto da obra aparece.
 
+### Colar lista — a compra inteira de uma vez
+
+A listagem da madeireira vem com seis, dez, vinte linhas. Digitar item por item é onde o
+tempo se perde e onde o número sai errado. Na tela da obra, do lado do botão de lançar,
+tem **"Colar lista"**.
+
+1. **Cole o texto do jeito que ele veio** — copiado da nota em PDF, do WhatsApp do vendedor
+   ou digitado na mão. Uma linha por item. Clique em **"Ler lista"**.
+2. O sistema separa **nome, quantidade, unidade e valor** de cada linha e mostra tudo numa
+   lista de conferência. Cabeçalho, total, vendedor e forma de pagamento ele pula sozinho —
+   e diz quantas linhas pulou, com um "ver quais" para você conferir que não sumiu nada seu.
+3. **Em cima ficam a data, a distribuidora, a etapa e a observação**, valendo para a lista
+   inteira: é uma compra só, não precisa repetir em cada item.
+4. Confira, desmarque o que não quer, corrija o que o sistema leu torto — **todo campo é
+   editável** — e clique em **"Lançar 6 itens"**. Entram todos de uma vez, na seção que
+   estiver aberta.
+
+**Os formatos que ele entende.** Os dois que aparecem na prática:
+
+```
+000350  EUCALIPTO ROLIÇO AUTOCLAVADO 18A22 3,00 MT  UN  5,00  90,00  0,00  450,00
+5 eucalipto 18a22 3m 90,00
+```
+
+Na linha da nota impressa ele sabe que a primeira coluna é o **código do produto** (e joga
+fora), que `UN` é a **unidade**, e que `5,00 90,00 ... 450,00` são quantidade, valor de cada
+um e total — **e confere a multiplicação**: 5 × 90 = 450. Quando não fecha, a linha vem com
+aviso em vez de entrar calada. Na linha escrita na mão, o número da frente é a quantidade. O
+tamanho da peça ("3,00 MT") **continua no nome**, que é onde ele faz falta.
+
+**A conferência da lista toda.** Quando o texto traz o total ("Valor dos produtos:
+5.914,00"), o sistema compara com a soma do que leu e diz se bate. Lista que não fecha é
+lista que foi lida errado — ou que tem desconto.
+
+**Desconto:** se a lista traz um ("Valor descontos: 294,00"), ele avisa. Os itens entram
+pelo **preço cheio**, porque o lançamento é quantidade × valor e não existe campo de
+desconto — vale anotar na observação ("venda 15592, desconto de R$ 294,00"), que fica em
+todos os itens daquela compra.
+
+**Atenção à distribuidora:** na seção Madeiras o campo já vem com a distribuidora de sempre
+(a das Configurações). Se a compra foi em outra — a Cargnin, por exemplo —, troque antes de
+lançar, senão o gasto entra no nome errado no Financeiro.
+
+Vale para Madeiras, Materiais Brutos e Produtos da Loja. Em Produtos da Loja os itens também
+**entram no catálogo** sozinhos, como no lançamento de um item só. Mão de obra não tem o
+botão: lá o lançamento é um pagamento (quem recebeu e quanto), não uma lista de compra.
+
 ### No celular — a tela presa no lugar
 
 O sistema é usado principalmente no celular, e a tela **se ajeitava sozinha**: aproximava
