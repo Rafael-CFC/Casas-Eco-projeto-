@@ -37,7 +37,7 @@ import ResumoFinalObra from './obra/ResumoFinalObra';
 import { ehPagamentoDeMaoDeObra, nomesDeQuemRecebe, totalJaRecebido } from './obra/maoDeObra';
 import ProdutoSeletor from './produtos/ProdutoSeletor';
 import { catalogoPorCategoria, filtrarOrdenarProdutos, ORDENS_CATALOGO } from './produtos/catalogoUtils';
-import { ehMadeira, fornecedorDasMadeiras, grupoDeGasto, madeirasSemFornecedor, vincularMadeirasAoFornecedor } from './produtos/madeiras';
+import { CATEGORIA_MADEIRAS, ehMadeira, fornecedorDasMadeiras, grupoDeGasto, madeirasSemFornecedor, migrarMadeirasParaSecao, vincularMadeirasAoFornecedor } from './produtos/madeiras';
 import OrcamentoVenda from './venda/OrcamentoVenda';
 import Contratos from './contratos/Contratos';
 import Configuracoes from './config/Configuracoes';
@@ -242,11 +242,20 @@ function CustoObraApp({ usuario }) {
           if (descricao === lanc.descricao && unidade === lanc.unidade) return lanc;
           return { ...lanc, descricao, unidade };
         });
-        const lancamentosMudaram = lancamentosNormalizados.some((lanc, idx) => lanc !== lancamentosCarregados[idx]);
+
+        // Madeira que foi lançada antes de existir a seção Madeiras (quase
+        // sempre dentro de "Produtos da Loja") passa para a seção dela.
+        // Troca só a categoria do lançamento: mesmo id, mesmo valor, mesma
+        // data, mesma obra — ver migrarMadeirasParaSecao.
+        const { lista: lancamentosComMadeiras, movidos: madeirasMovidas } =
+          migrarMadeirasParaSecao(lancamentosNormalizados);
+
+        const lancamentosMudaram = madeirasMovidas > 0
+          || lancamentosNormalizados.some((lanc, idx) => lanc !== lancamentosCarregados[idx]);
 
         setObras(o ? JSON.parse(o.value) : []);
         setProdutos(produtosNormalizados);
-        setLancamentos(lancamentosNormalizados);
+        setLancamentos(lancamentosComMadeiras);
         setEtapas(et ? JSON.parse(et.value) : []);
         setFornecedores(fo ? JSON.parse(fo.value) : []);
         setContas(co ? JSON.parse(co.value) : []);
@@ -261,7 +270,12 @@ function CustoObraApp({ usuario }) {
           window.storage.set('produtos', JSON.stringify(produtosNormalizados), false).catch(() => {});
         }
         if (lancamentosMudaram) {
-          window.storage.set('lancamentos', JSON.stringify(lancamentosNormalizados), false).catch(() => {});
+          window.storage.set('lancamentos', JSON.stringify(lancamentosComMadeiras), false).catch(() => {});
+        }
+        if (madeirasMovidas > 0) {
+          setAviso(madeirasMovidas === 1
+            ? '1 lançamento de madeira foi para a seção Madeiras.'
+            : `${madeirasMovidas} lançamentos de madeira foram para a seção Madeiras.`);
         }
       } catch (e) {
         setErro('Não foi possível carregar os dados salvos.');
@@ -1499,10 +1513,18 @@ function CustoObraApp({ usuario }) {
       salvarFornecedores(upsertFornecedor(fornecedores, fornecedorNome));
     }
 
+    // Item com nome de madeira lançado DE PROPÓSITO em outra seção
+    // ("FORRO PVC" em Produtos da Loja) fica marcado, e aí nem a migração
+    // nem os relatórios o puxam para Madeiras. Sem a marca, o sistema
+    // devolveria o item para Madeiras no carregamento seguinte e pareceria
+    // que a escolha do dono foi ignorada.
+    const secaoManual = categoriaAtiva !== CATEGORIA_MADEIRAS && ehMadeira(nome, categoriaAtiva);
+
     const item = {
       id: editandoId || crypto.randomUUID(),
       obraId: obraAtivaId,
       categoria: categoriaAtiva,
+      secaoManual,
       produtoId,
       descricao: nome,
       unidade,
@@ -3036,7 +3058,7 @@ function CustoObraApp({ usuario }) {
               );
             })()}
 
-            <nav className="grid grid-cols-3 gap-2">
+            <nav className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {Object.entries(CATEGORIAS).map(([key, cat]) => {
                 const Icon = cat.icon;
                 const c = CLS[cat.cls];
@@ -3045,14 +3067,18 @@ function CustoObraApp({ usuario }) {
                   <button
                     key={key}
                     onClick={() => { setCategoriaAtiva(key); resetFormLancamento(); }}
-                    className={`min-w-0 text-xs sm:text-sm px-2 sm:px-3 py-2 rounded-lg border flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 text-center transition-colors duration-150 ${
+                    // Com quatro seções, o rótulo e o valor só cabem
+                    // lado a lado em tela larga: em 4 colunas "Materiais
+                    // Brutos R$ 1.320,00" numa linha só virava
+                    // "Materia... R$ 1...". Até lá, um embaixo do outro.
+                    className={`min-w-0 text-xs lg:text-sm px-2 lg:px-3 py-2 rounded-lg border flex flex-col lg:flex-row items-center justify-center gap-0.5 lg:gap-1.5 text-center transition-colors duration-150 ${
                       ativo ? `${c.solid} text-white border-transparent` : `bg-white ${c.text} ${c.border}`
                     }`}
                   >
                     <span className="flex items-center gap-1 min-w-0">
                       <Icon size={15} className="flex-shrink-0" /> <span className="truncate">{cat.label}</span>
                     </span>
-                    <span className="opacity-80 sm:ml-1 truncate">{formatMoney(totalObraCategoria(obraAtiva.id, key))}</span>
+                    <span className="opacity-80 lg:ml-1 truncate">{formatMoney(totalObraCategoria(obraAtiva.id, key))}</span>
                   </button>
                 );
               })}
@@ -3187,7 +3213,9 @@ function CustoObraApp({ usuario }) {
                     placeholder={
                       categoriaAtiva === 'produto_loja'
                         ? 'Digite ou escolha — se já existir, o preço vem sozinho'
-                        : 'Ex: Areia lavada'
+                        : categoriaAtiva === CATEGORIA_MADEIRAS
+                          ? 'Ex: Tábua pinus 30cm'
+                          : 'Ex: Areia lavada'
                     }
                   />
                 )}

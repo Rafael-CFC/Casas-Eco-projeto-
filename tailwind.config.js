@@ -5,6 +5,20 @@ export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
     extend: {
+      colors: {
+        // O marrom das MADEIRAS, a quarta categoria da obra. As outras
+        // três usam famílias que o Tailwind já traz (âmbar, laranja,
+        // azul); madeira não tem marrom pronto, e pintá-la de âmbar a
+        // deixaria igual à mão de obra. Os tons saem de CORES_CATEGORIA
+        // em src/domain.js (#926230), que já foi conferido no contraste
+        // e nas simulações de daltonismo junto com as outras categorias.
+        madeira: {
+          50: '#f8f2ea',
+          200: '#e5d5be',
+          600: '#926230',
+          700: '#7a5227',
+        },
+      },
       boxShadow: {
         soft: '0 1px 2px 0 rgba(28,25,23,0.04), 0 1px 3px 0 rgba(28,25,23,0.06)',
         elevated: '0 4px 10px -2px rgba(28,25,23,0.10), 0 2px 6px -2px rgba(28,25,23,0.06)',
