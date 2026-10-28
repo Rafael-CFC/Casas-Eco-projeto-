@@ -169,7 +169,7 @@ export default function ProdutoSeletor({
         ref={painelRef}
         style={mobile ? undefined : (ancora ? { top: ancora.bottom + 6, left: ancora.left, width: ancora.width } : { display: 'none' })}
         className={mobile
-          ? 'fixed inset-x-0 bottom-0 z-50 rounded-t-2xl shadow-popover bg-white flex flex-col max-h-[75vh] animate-sheet-up'
+          ? 'fixed inset-x-0 bottom-0 z-50 rounded-t-2xl shadow-popover bg-white flex flex-col max-h-[75dvh] animate-sheet-up eco-rodape-seguro'
           : 'fixed z-50 rounded-xl shadow-popover bg-white flex flex-col max-h-80 animate-scale-in'}
       >
         {mobile && (

@@ -64,7 +64,7 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.error) {
       return (
-        <div className="min-h-screen bg-red-50 p-6">
+        <div className="eco-tela bg-red-50 p-6">
           <div className="max-w-2xl mx-auto bg-white border-2 border-red-300 rounded-lg p-5">
             <p className="font-semibold text-red-700 mb-2">Deu um erro no software</p>
             <p className="text-sm text-stone-600 mb-3">Copia a mensagem abaixo e me manda no chat, assim eu acho e conserto exatamente o problema:</p>
@@ -1585,7 +1585,7 @@ function CustoObraApp({ usuario }) {
   const obraDoSucesso = sucessoFinalizacaoId ? obras.find((o) => o.id === sucessoFinalizacaoId) : null;
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-800 flex">
+    <div className="eco-tela bg-stone-50 text-stone-800 flex">
       {/* ---- barra lateral (desktop) ---- */}
       <aside className={`hidden sm:flex flex-col eco-sidebar bg-white border-r border-stone-200 flex-shrink-0 ${sidebarColapsada ? 'w-[76px]' : 'w-64'}`}>
         <button
@@ -1665,7 +1665,7 @@ function CustoObraApp({ usuario }) {
 
       {/* barra de navegação fixa embaixo, só no celular: os itens principais
           ficam à mão e o resto abre no botão "Mais" */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-stone-200 flex z-20">
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-stone-200 flex z-20 eco-rodape-seguro">
         {NAV_ITEMS.filter((i) => i.primario).sort((a, b) => a.ordemMobile - b.ordemMobile).map((item) => {
           const Icon = item.icon;
           const ativo = view === item.key || (item.key === 'home' && (view === 'obra' || view === 'resumo'));
@@ -1699,7 +1699,7 @@ function CustoObraApp({ usuario }) {
       {menuMaisAberto && createPortal(
         <>
           <div className="fixed inset-0 bg-black/30 z-40 animate-fade-in sm:hidden" onClick={() => setMenuMaisAberto(false)} />
-          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl shadow-popover bg-white animate-sheet-up sm:hidden">
+          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl shadow-popover bg-white animate-sheet-up sm:hidden eco-rodape-seguro">
             <div className="flex justify-center pt-2 pb-1">
               <span className="w-10 h-1 rounded-full bg-stone-200" />
             </div>
@@ -1785,7 +1785,7 @@ function CustoObraApp({ usuario }) {
           <span className="sm:hidden inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: window.storage ? '#22c55e' : '#ef4444' }}></span>
         </header>
 
-        <main key={view} className="flex-1 w-full max-w-5xl mx-auto px-4 py-6 pb-24 sm:pb-6 animate-fade-in-up">
+        <main key={view} className="flex-1 w-full max-w-5xl mx-auto px-4 py-6 eco-espaco-rodape sm:pb-6 animate-fade-in-up">
           {/* ---------------- HOME: lista de obras ---------------- */}
         {view === 'home' && (
           <div className="space-y-6">
@@ -2482,7 +2482,13 @@ function CustoObraApp({ usuario }) {
 
           return (
             <div className="space-y-6">
-              <div className="flex gap-1.5">
+              {/* As abas QUEBRAM em mais de uma linha no celular. Em fila
+                  única, as cinco somavam 605px num espaço de 358: a página
+                  inteira esticava para caber e o navegador respondia
+                  afastando a tela — era a tela "se ajeitando" sozinha ao
+                  abrir Contas. Quebrando, cada aba continua inteira e
+                  visível, sem rolagem lateral escondendo as últimas. */}
+              <div className="flex flex-wrap gap-1.5">
                 {abas.map(([key, label, Icon]) => (
                   <button
                     key={key}

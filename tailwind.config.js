@@ -2,6 +2,15 @@
 export default {
   // o modo escuro entra pela classe `dark` no <html> (src/ui/temaStore.js)
   darkMode: 'class',
+  future: {
+    // Todo `hover:` do Tailwind passa a valer só onde existe mouse de
+    // verdade. No celular o toque imitava o mouse: o dedo encostava e a
+    // cor de "mouse em cima" ficava grudada no botão depois do toque,
+    // como se ele tivesse travado. Com isto, no dedo vale o aperto
+    // (`active:`), que é o aviso certo. Ver também o bloco
+    // `(hover: hover)` em src/index.css.
+    hoverOnlyWhenSupported: true,
+  },
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
     extend: {

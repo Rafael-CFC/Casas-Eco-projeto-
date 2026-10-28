@@ -151,6 +151,38 @@ Madeiras" na tela da obra.
 **O catálogo da loja não mudou.** Produto de madeira que estava cadastrado no Catálogo
 continua lá — o que mudou foi a seção em que o gasto da obra aparece.
 
+### No celular — a tela presa no lugar
+
+O sistema é usado principalmente no celular, e a tela **se ajeitava sozinha**: aproximava
+ao tocar num campo, afastava ao abrir Contas, pulava ao rolar. Eram quatro coisas
+diferentes, todas resolvidas:
+
+- **Tocar num campo não dá mais zoom.** O iPhone aproximava a página sempre que o dedo
+  tocava num campo com letra menor que 16px — e não voltava sozinho depois. Agora, **no
+  celular**, todo campo do sistema tem letra de 16px, que é o tamanho que o aparelho
+  aceita sem mexer na tela. No computador continua do tamanho de antes, porque lá o
+  problema não existe.
+- **A tela de Contas não afasta mais.** As cinco abas (Por dia, Registrar, Importar XML,
+  Fixas do mês, Relatório) não cabiam numa linha só: a página inteira esticava para caber
+  e o navegador respondia afastando tudo. Agora elas **quebram em duas linhas** e cada uma
+  continua inteira, sem rolagem lateral escondendo as últimas.
+- **Tocar duas vezes num botão não aproxima mais a tela**, e o botão responde na hora (o
+  navegador esperava um terceiro de segundo para ver se vinha um segundo toque).
+- **A altura acompanha a barra do navegador.** Quando ela some ao rolar, a tela não
+  escorrega mais atrás dela.
+
+Também sumiram dois incômodos menores: o quadrado cinza que piscava em cima de tudo que
+era tocado, e a cor de "mouse em cima" que ficava **grudada** no botão depois do toque,
+como se ele tivesse travado.
+
+**O que mudou de hábito:** puxar a lista para baixo **não recarrega mais o site**. Isso era
+o que fazia a tela esticar e voltar, e recarregar sem querer no meio de um lançamento é
+perder o que estava na tela. Para forçar uma atualização (depois de uma mudança nova, por
+exemplo), use o **botão de recarregar do próprio navegador**, ou feche e abra a aba.
+
+O zoom com dois dedos continua funcionando normalmente — quem precisa aumentar para
+enxergar melhor continua podendo.
+
 ### Modo escuro
 
 O site abre no **modo escuro**. Para trocar, use o seletor **Escuro / Claro / Automático**:

@@ -47,7 +47,7 @@ export default function Login() {
   }
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden bg-stone-900">
+    <div className="relative eco-tela flex items-center justify-center p-4 overflow-hidden bg-stone-900">
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{

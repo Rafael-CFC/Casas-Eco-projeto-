@@ -17,7 +17,7 @@ aplicarTema(temaAtivo());
 
 function Carregando() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-stone-50">
+    <div className="eco-tela flex items-center justify-center bg-stone-50">
       <Loader2 size={26} className="animate-spin text-green-700" />
     </div>
   );
