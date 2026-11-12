@@ -1,5 +1,5 @@
 import React, { useDeferredValue, useMemo, useState } from 'react';
-import { ClipboardList, Pencil, Plus, Trees } from 'lucide-react';
+import { ClipboardList, FileText, Pencil, Plus, Trees } from 'lucide-react';
 import { todayISO, formatMoney, formatDateBR, parsePrecoBR } from '../domain';
 import { upperInput, normalizeProductName, normalizeUnit } from '../textUtils';
 import ProdutoSeletor from '../produtos/ProdutoSeletor';
@@ -132,6 +132,7 @@ export default function FormLancamento({
   onCancelarEdicao,
   onErro,
   onColarLista,
+  onLerNota,
   classificar,
   historicoDoProduto,
   onCorrigirClassificacao,
@@ -365,10 +366,17 @@ export default function FormLancamento({
           </button>
         )}
         {/* A compra que veio em lista (nota da madeireira, papel, WhatsApp)
-            não precisa ser digitada item por item. */}
+            não precisa ser digitada item por item. E quando o que chegou
+            foi a NOTA inteira, o sistema tira dela o fornecedor, a data e
+            o número também — e avisa se essa nota já foi lançada. */}
         {!emEdicao && onColarLista && (
           <button type="button" onClick={onColarLista} className="eco-btn-secondary flex-1">
             <ClipboardList size={15} /> Colar lista
+          </button>
+        )}
+        {!emEdicao && onLerNota && (
+          <button type="button" onClick={onLerNota} className="eco-btn-secondary flex-1">
+            <FileText size={15} /> Ler nota
           </button>
         )}
       </div>

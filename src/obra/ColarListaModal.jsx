@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, Check, ClipboardList, Info, X } from 'lucide-react';
-import { formatMoney, parsePrecoBR, todayISO } from '../domain';
+import { AlertTriangle, Camera, Check, ClipboardList, FileText, Info, X } from 'lucide-react';
+import { formatMoney, formatDateBR, parsePrecoBR, todayISO } from '../domain';
 import { upperInput, normalizeProductName, normalizeUnit } from '../textUtils';
 import { lerListaColada } from './colarLista';
+import { lerNotaDeTexto, notaJaLancada, casarFornecedor } from '../notas/lerNota';
+import { iaConfigurada, motivoIaDesligada, lerNotaPorFoto } from '../ia/cliente';
 
 // Colar a lista da compra em vez de digitar item por item.
 //
@@ -17,6 +19,16 @@ import { lerListaColada } from './colarLista';
 // Nada entra sozinho: a leitura é um chute bem informado em cima do texto,
 // então todo campo continua editável e a conferência (soma dos itens
 // contra o total que a própria lista declara) aparece antes do botão.
+//
+// MODO NOTA (modo="nota"): a mesma tela, lendo a nota INTEIRA em vez de
+// só a lista de itens. Além dos itens, ela tira do texto o fornecedor, a
+// data de emissão e o número da nota, e já preenche os campos de cima com
+// isso. O número vai para a observação de cada lançamento — é o que faz o
+// sistema reconhecer a nota depois e avisar se ela já foi lançada.
+//
+// A foto da nota só vira texto se houver um endereço de IA configurado
+// (ver src/ia/cliente.js). Sem isso, o botão explica o que falta em vez
+// de fingir que leu — e colar o texto continua funcionando.
 
 function Aviso({ tom = 'amber', children }) {
   const cls = tom === 'red'
@@ -41,8 +53,10 @@ CIMENTO CP-II 50KG  10  42,00`;
 
 export default function ColarListaModal({
   secaoLabel, fornecedorSugerido = '', nomesFornecedores = [], etapas = [],
+  modo = 'lista', lancamentos = [],
   onCancelar, onLancar,
 }) {
+  const ehNota = modo === 'nota';
   const [texto, setTexto] = useState('');
   const [leitura, setLeitura] = useState(null);
   const [itens, setItens] = useState([]);
@@ -53,14 +67,21 @@ export default function ColarListaModal({
   const [verIgnoradas, setVerIgnoradas] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
+  // só no modo nota
+  const [nota, setNota] = useState(null);
+  const [repetida, setRepetida] = useState(null);
+  const [lendoFoto, setLendoFoto] = useState(false);
 
-  function ler() {
+  function ler(textoBruto) {
+    const bruto = typeof textoBruto === 'string' ? textoBruto : texto;
     setErro('');
-    const r = lerListaColada(texto);
+    const r = ehNota ? lerNotaDeTexto(bruto) : lerListaColada(bruto);
     if (r.itens.length === 0) {
       setLeitura(r);
       setItens([]);
-      setErro('Não achei nenhum item nesse texto. Cada item numa linha, com o nome, a quantidade e o valor.');
+      setErro(ehNota
+        ? 'Não achei nenhum item nessa nota. Confira se o texto veio inteiro — cada item precisa estar numa linha, com nome, quantidade e valor.'
+        : 'Não achei nenhum item nesse texto. Cada item numa linha, com o nome, a quantidade e o valor.');
       return;
     }
     setLeitura(r);
@@ -71,6 +92,34 @@ export default function ColarListaModal({
       quantidade: String(i.quantidade).replace('.', ','),
       preco: String(i.preco).replace('.', ','),
     })));
+
+    // No modo nota, o que a nota diz preenche o cabeçalho — e só o que
+    // ela REALMENTE diz: campo não encontrado fica como estava, em vez
+    // de receber um palpite.
+    if (ehNota) {
+      setNota(r);
+      if (r.data) setData(r.data);
+      // se a distribuidora já existe no sistema com outro nome, usa o
+      // nome de lá — senão o histórico da mesma empresa racha em dois
+      if (r.fornecedor) setFornecedor(casarFornecedor(r.fornecedor, nomesFornecedores) || r.fornecedor);
+      if (r.numero) {
+        setObservacao((atual) => (atual.trim() ? atual : `nota ${r.numero}`));
+      }
+      setRepetida(notaJaLancada(lancamentos, r));
+    }
+  }
+
+  // A foto só vira texto se o endereço de IA estiver configurado. Quem
+  // lê o texto e monta os itens continua sendo o código daqui.
+  async function lerFoto(arquivo) {
+    setErro('');
+    if (!iaConfigurada()) { setErro(motivoIaDesligada()); return; }
+    setLendoFoto(true);
+    const r = await lerNotaPorFoto(arquivo);
+    setLendoFoto(false);
+    if (!r.ok) { setErro(r.erro); return; }
+    setTexto(r.texto);
+    ler(r.texto);
   }
 
   function alterar(id, campos) {
@@ -81,6 +130,8 @@ export default function ColarListaModal({
     setLeitura(null);
     setItens([]);
     setErro('');
+    setNota(null);
+    setRepetida(null);
   }
 
   // O que está marcado e tem número que presta. É daqui que saem o total
@@ -119,7 +170,7 @@ export default function ColarListaModal({
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-stone-100 flex-shrink-0">
           <div className="min-w-0">
             <p className="font-semibold text-stone-800 flex items-center gap-2">
-              <ClipboardList size={17} /> Colar lista
+              {ehNota ? <><FileText size={17} /> Ler nota</> : <><ClipboardList size={17} /> Colar lista</>}
             </p>
             <p className="text-xs text-stone-400 truncate">
               Os itens entram em <strong>{secaoLabel}</strong>, nesta obra.
@@ -135,9 +186,37 @@ export default function ColarListaModal({
           {!leitura || itens.length === 0 ? (
             <>
               <p className="text-sm text-stone-600">
-                Cole a lista do jeito que ela veio — da nota da madeireira, do WhatsApp ou
-                digitada na mão. Uma linha por item.
+                {ehNota
+                  ? 'Cole o texto da nota inteira — do e-mail da distribuidora, do PDF ou do WhatsApp do vendedor. O sistema tira dela o fornecedor, a data, o número e os itens.'
+                  : 'Cole a lista do jeito que ela veio — da nota da madeireira, do WhatsApp ou digitada na mão. Uma linha por item.'}
               </p>
+
+              {/* A foto da nota: só funciona de verdade com o endereço de
+                  IA configurado. Sem ele, o botão fica desligado dizendo o
+                  que falta — nunca lendo errado e lançando errado. */}
+              {ehNota && (
+                <div className="rounded-lg border border-stone-200 p-2.5 space-y-2">
+                  <label className={`eco-btn-secondary w-full justify-center ${iaConfigurada() ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}>
+                    <Camera size={15} />
+                    {lendoFoto ? 'Lendo a foto…' : 'Tirar foto da nota'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      disabled={!iaConfigurada() || lendoFoto}
+                      onChange={(e) => {
+                        const arq = e.target.files && e.target.files[0];
+                        e.target.value = '';
+                        if (arq) lerFoto(arq);
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                  {!iaConfigurada() && (
+                    <p className="text-xs text-stone-400 leading-snug">{motivoIaDesligada()}</p>
+                  )}
+                </div>
+              )}
               <textarea
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
@@ -195,6 +274,34 @@ export default function ColarListaModal({
               <p className="text-xs text-stone-400 -mt-2">
                 Data, distribuidora, etapa e observação valem para <strong>todos</strong> os itens da lista.
               </p>
+
+              {/* ---- o que a nota disse de si mesma ---- */}
+              {ehNota && nota && (
+                <div className="rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-xs text-stone-600 space-y-0.5">
+                  <p>
+                    <span className="text-stone-400">Nota:</span>{' '}
+                    {nota.numero ? <strong>nº {nota.numero}</strong> : <span className="text-stone-400">número não encontrado</span>}
+                    {nota.cnpj && <> · CNPJ {nota.cnpj}</>}
+                  </p>
+                  <p>
+                    <span className="text-stone-400">Emissão:</span>{' '}
+                    {nota.data ? formatDateBR(nota.data) : <span className="text-stone-400">data não encontrada — confira o campo acima</span>}
+                  </p>
+                  <p>
+                    <span className="text-stone-400">Fornecedor:</span>{' '}
+                    {nota.fornecedor || <span className="text-stone-400">não encontrado — preencha a distribuidora acima</span>}
+                  </p>
+                </div>
+              )}
+
+              {/* ---- essa nota já foi lançada? ---- */}
+              {ehNota && repetida && repetida.repetida && (
+                <Aviso tom={repetida.certeza === 'alta' ? 'red' : 'amber'}>
+                  {repetida.certeza === 'alta'
+                    ? <><strong>Essa nota parece já estar lançada:</strong> {repetida.motivo}. Lançar de novo vai dobrar o gasto da obra.</>
+                    : <><strong>Confira antes:</strong> {repetida.motivo}. Pode ser outra compra do mesmo valor — só não dá para o sistema garantir.</>}
+                </Aviso>
+              )}
 
               {/* ---- conferência ---- */}
               {leitura.descontoDeclarado > 0 && (
@@ -334,13 +441,15 @@ export default function ColarListaModal({
         <div className="border-t border-stone-100 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 flex-shrink-0 eco-rodape-seguro">
           {!leitura || itens.length === 0 ? (
             <>
-              <p className="text-sm text-stone-500">Cole a lista e confira antes de lançar.</p>
+              <p className="text-sm text-stone-500">
+                {ehNota ? 'Leia a nota e confira antes de lançar.' : 'Cole a lista e confira antes de lançar.'}
+              </p>
               <div className="flex gap-2">
                 <button type="button" onClick={onCancelar} className="eco-btn-secondary eco-btn-sm flex-1 sm:flex-none">
                   Cancelar
                 </button>
-                <button type="button" onClick={ler} disabled={!texto.trim()} className="eco-btn-primary eco-btn-sm flex-1 sm:flex-none">
-                  <ClipboardList size={15} /> Ler lista
+                <button type="button" onClick={() => ler()} disabled={!texto.trim() || lendoFoto} className="eco-btn-primary eco-btn-sm flex-1 sm:flex-none">
+                  {ehNota ? <><FileText size={15} /> Ler nota</> : <><ClipboardList size={15} /> Ler lista</>}
                 </button>
               </div>
             </>

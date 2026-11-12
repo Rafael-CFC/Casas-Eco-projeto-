@@ -202,7 +202,11 @@ function CustoObraApp({ usuario }) {
   const [view, setView] = useState('home');
   const [obraAtivaId, setObraAtivaId] = useState(null);
   const [categoriaAtiva, setCategoriaAtiva] = useState('produto_loja');
+  // 'lista' = colar a lista de itens; 'nota' = ler a nota inteira
+  // (fornecedor, data, número e itens). A tela é a mesma; o que muda é
+  // o que o sistema procura no texto.
   const [colarListaAberta, setColarListaAberta] = useState(false);
+  const [modoColar, setModoColar] = useState('lista');
   const [filtroObras, setFiltroObras] = useState('todas'); // 'todas' | 'andamento' | 'concluidas'
 
   const [novaObraNome, setNovaObraNome] = useState('');
@@ -3321,7 +3325,8 @@ function CustoObraApp({ usuario }) {
                 onLancar={salvarLancamento}
                 onCancelarEdicao={() => setEditandoId(null)}
                 onErro={setErro}
-                onColarLista={() => setColarListaAberta(true)}
+                onColarLista={() => { setModoColar('lista'); setColarListaAberta(true); }}
+                onLerNota={() => { setModoColar('nota'); setColarListaAberta(true); }}
                 classificar={classificarItem}
                 historicoDoProduto={historicoDoProduto}
                 onCorrigirClassificacao={corrigirClassificacao}
@@ -3330,6 +3335,8 @@ function CustoObraApp({ usuario }) {
 
             {colarListaAberta && !obraConcluida && createPortal(
               <ColarListaModal
+                modo={modoColar}
+                lancamentos={lancamentos}
                 secaoLabel={CATEGORIAS[categoriaAtiva].label}
                 fornecedorSugerido={categoriaAtiva === CATEGORIA_MADEIRAS ? fornecedorDasMadeiras(configuracao) : ''}
                 nomesFornecedores={nomesDistribuidoras}
