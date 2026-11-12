@@ -16,6 +16,8 @@ import ToastStack from './ui/Toast';
 import RelatorioContas from './contas/RelatorioContas';
 import BoletosPorDia from './contas/BoletosPorDia';
 import ColarListaModal from './obra/ColarListaModal';
+import PrevisaoObra from './financeiro/PrevisaoObra';
+import RelatorioMensal from './financeiro/RelatorioMensal';
 import FormLancamento from './obra/FormLancamento';
 import DetalheProduto from './produtos/DetalheProduto';
 import Assistente from './assistente/Assistente';
@@ -2202,6 +2204,7 @@ function CustoObraApp({ usuario }) {
             lancamentos={lancamentos}
             fornecedores={fornecedores}
             contas={contas}
+            etapas={etapas}
           />
         )}
 
@@ -2845,6 +2848,15 @@ function CustoObraApp({ usuario }) {
           const totalGeral = lancamentos.reduce((a, l) => a + l.total, 0);
           return (
             <div className="space-y-6">
+              {/* O fechamento do mês vem primeiro: é o que o dono abre
+                  Relatórios para ver. Exportar é o que ele faz depois. */}
+              <RelatorioMensal
+                lancamentos={lancamentos}
+                obras={obras}
+                contas={contas}
+                hojeISO={todayISO()}
+              />
+
               <div className="eco-card p-4">
                 <p className="text-sm font-semibold text-stone-700 mb-3">Exportar dados</p>
                 <div className="flex flex-wrap gap-2">
@@ -3241,6 +3253,18 @@ function CustoObraApp({ usuario }) {
                 </div>
               );
             })()}
+
+            {/* ---- Previsão desta obra ----
+                Fica acima das etapas de propósito: a primeira coisa que o
+                dono quer saber não é onde o dinheiro foi, é onde ele vai
+                parar. Vem fechada, e só calcula quando é aberta. */}
+            <PrevisaoObra
+              obra={obraAtiva}
+              etapas={etapas}
+              lancamentos={lancamentos}
+              obras={obras}
+              hojeISO={todayISO()}
+            />
 
             {/* ---- Etapas da obra ---- */}
             <div className="eco-card p-4">
