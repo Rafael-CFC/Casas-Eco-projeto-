@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { ClipboardList, Plus, Trees } from 'lucide-react';
-import { todayISO, parsePrecoBR } from '../domain';
+import React, { useDeferredValue, useMemo, useState } from 'react';
+import { ClipboardList, Pencil, Plus, Trees } from 'lucide-react';
+import { todayISO, formatMoney, formatDateBR, parsePrecoBR } from '../domain';
 import { upperInput, normalizeProductName, normalizeUnit } from '../textUtils';
 import ProdutoSeletor from '../produtos/ProdutoSeletor';
 import SeletorComBusca from '../ui/SeletorComBusca';
+import { nivelDeConfianca, precisaDeAjuda, opcoesDeSubcategoria } from '../produtos/classificacao';
 
 // O formulário de lançar um gasto na obra, com estado PRÓPRIO.
 //
@@ -47,6 +48,73 @@ function estadoInicial(emEdicao, pagamentoMaoDeObra) {
   };
 }
 
+// A bolinha de confiança: verde = o sistema tem certeza, âmbar = achou
+// parecido, cinza = não sabe. É de propósito discreta — é um palpite
+// ajudando, não um alarme.
+const CORES_CONFIANCA = {
+  alta: 'bg-green-500',
+  media: 'bg-amber-500',
+  baixa: 'bg-stone-300',
+  nenhuma: 'bg-stone-300',
+};
+
+// O que o sistema reconheceu do item, embaixo do campo: categoria,
+// unidade e a última compra. Tudo aqui é sugestão — o dono troca no
+// "trocar", e a troca vira aprendizado para a próxima vez.
+function FaixaDeSugestao({ sugestao, historico, aberto, onAbrir, onEscolher }) {
+  const nivel = nivelDeConfianca(sugestao);
+  const pedeAjuda = precisaDeAjuda(sugestao);
+  const opcoes = useMemo(() => opcoesDeSubcategoria(), []);
+
+  return (
+    <div className="mt-1.5 text-[11px] leading-snug">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${CORES_CONFIANCA[nivel]}`} />
+        {sugestao.subcategoria ? (
+          <span className="text-stone-500">
+            {sugestao.subcategoriaLabel}
+            {sugestao.unidade ? ` · ${sugestao.unidade}` : ''}
+            {sugestao.tipo ? ` · ${sugestao.tipo === 'servico' ? 'serviço' : 'material'}` : ''}
+            {sugestao.origem === 'aprendido' ? ' · você ensinou' : ''}
+            {sugestao.origem === 'historico' && sugestao.vezes > 1 ? ` · já lançado ${sugestao.vezes}×` : ''}
+          </span>
+        ) : (
+          <span className="text-stone-400">{pedeAjuda ? 'não reconheci este item' : ''}</span>
+        )}
+        <button type="button" onClick={onAbrir} className="text-stone-400 underline hover:text-green-700">
+          {aberto ? 'fechar' : pedeAjuda ? 'escolher' : 'trocar'}
+        </button>
+      </div>
+
+      {historico && historico.ultimo && (
+        <p className="text-stone-400 mt-0.5">
+          última compra {formatMoney(historico.ultimo.preco)} em {formatDateBR(historico.ultimo.data)}
+          {historico.ultimo.fornecedorNome ? ` · ${historico.ultimo.fornecedorNome}` : ''}
+          {historico.variacao !== null && Math.abs(historico.variacao) >= 5 && (
+            <span className={historico.variacao > 0 ? ' text-amber-700' : ' text-green-700'}>
+              {' '}({historico.variacao > 0 ? '+' : ''}{historico.variacao.toFixed(0)}% desde a primeira)
+            </span>
+          )}
+        </p>
+      )}
+
+      {aberto && (
+        <select
+          autoFocus
+          value={sugestao.subcategoria || ''}
+          onChange={(e) => onEscolher(e.target.value)}
+          className="eco-input-sm mt-1.5 w-full"
+        >
+          <option value="">Escolha a categoria…</option>
+          {opcoes.map((o) => (
+            <option key={o.key} value={o.key}>{o.label} · {o.categoria}</option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+}
+
 export default function FormLancamento({
   categoria,
   categoriaLabel,
@@ -64,10 +132,42 @@ export default function FormLancamento({
   onCancelarEdicao,
   onErro,
   onColarLista,
+  classificar,
+  historicoDoProduto,
+  onCorrigirClassificacao,
 }) {
   const [form, setForm] = useState(() => estadoInicial(emEdicao, pagamentoMaoDeObra));
   const [salvando, setSalvando] = useState(false);
+  const [escolhendoCategoria, setEscolhendoCategoria] = useState(false);
   const mudar = (campos) => setForm((f) => ({ ...f, ...campos }));
+
+  // O reconhecimento roda sobre o nome ADIADO (useDeferredValue): a letra
+  // digitada aparece na hora e a faixa de sugestão se atualiza logo
+  // atrás, sem segurar o teclado.
+  const nomeAdiado = useDeferredValue(form.descricao);
+  const sugestao = useMemo(
+    () => (classificar ? classificar(nomeAdiado) : null),
+    [classificar, nomeAdiado]
+  );
+  const historico = useMemo(
+    () => (historicoDoProduto && nomeAdiado.trim() ? historicoDoProduto(nomeAdiado) : null),
+    [historicoDoProduto, nomeAdiado]
+  );
+
+  // O dono trocou a categoria: aplica a unidade sugerida (se ele ainda
+  // não digitou uma própria) e ensina o sistema.
+  function escolherCategoria(chave) {
+    if (!chave) return;
+    const escolha = opcoesDeSubcategoria().find((o) => o.key === chave);
+    if (!escolha) return;
+    setEscolhendoCategoria(false);
+    setForm((f) => ({ ...f, unidade: f.unidade && f.unidade !== 'UN' ? f.unidade : escolha.unidade }));
+    if (onCorrigirClassificacao) {
+      onCorrigirClassificacao(form.descricao, {
+        subcategoria: escolha.key, unidade: escolha.unidade, secao: escolha.secao, tipo: escolha.tipo,
+      });
+    }
+  }
 
   // A madeira vem toda de uma distribuidora só (ver Configurações >
   // Madeiras). Quando o item lançado é madeira, o fornecedor já entra
@@ -133,6 +233,10 @@ export default function FormLancamento({
       observacao: form.observacao.trim(),
       etapaId: form.etapaId || null,
       fornecedorNome: form.fornecedor.trim(),
+      // o que o sistema reconheceu fica gravado junto: é o que permite
+      // somar por categoria depois sem adivinhar de novo
+      subcategoria: sugestao && sugestao.subcategoria ? sugestao.subcategoria : null,
+      tipo: sugestao && sugestao.tipo ? sugestao.tipo : null,
     });
     setSalvando(false);
     if (ok) setForm(estadoInicial(null, pagamentoMaoDeObra));
@@ -171,6 +275,15 @@ export default function FormLancamento({
                   ? 'Ex: Tábua pinus 30cm'
                   : 'Ex: Areia lavada'
             }
+          />
+        )}
+        {sugestao && form.descricao.trim().length > 2 && (
+          <FaixaDeSugestao
+            sugestao={sugestao}
+            historico={historico}
+            aberto={escolhendoCategoria}
+            onAbrir={() => setEscolhendoCategoria((v) => !v)}
+            onEscolher={escolherCategoria}
           />
         )}
       </div>
