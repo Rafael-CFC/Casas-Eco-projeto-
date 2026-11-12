@@ -16,6 +16,7 @@ import {
   agruparPorObra, agruparPorCategoria, agruparPorFornecedor, evoluirPorPeriodo,
   orcamentoDaObra, orcamentoTotalEscopo, gerarAlertasFinanceiro,
 } from './dashboardCalc';
+import { alertasDePrevisao } from '../financeiro/previsao';
 
 const VERDE = '#16a34a';
 const VERMELHO = '#dc2626';
@@ -315,7 +316,7 @@ function TabelaLancamentos({ titulo, itens }) {
   );
 }
 
-export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, contas }) {
+export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, contas, etapas = [] }) {
   const [obraId, setObraId] = useState('todas');
   const [periodo, setPeriodo] = useState('todos');
   const [dataInicioPersonalizada, setDataInicioPersonalizada] = useState('');
@@ -375,6 +376,19 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
   const alertas = useMemo(
     () => gerarAlertasFinanceiro(obrasEscopo, escopo, categoria, GRUPOS_GASTO),
     [obrasEscopo, escopo, categoria]
+  );
+
+  // Estes alertas olham a obra INTEIRA — previsão de custo final, ritmo,
+  // preço de material e compra fora do padrão. Por isso ficam numa seção
+  // separada, com o recado de que não mudam com o filtro de período: um
+  // "subiu 20%" que mudasse de valor conforme o filtro não serviria para
+  // decidir nada.
+  const previsoes = useMemo(
+    () => alertasDePrevisao(
+      { obras: obrasEscopo, etapas, lancamentos, hojeISO: hoje },
+      { formatarMoeda: formatMoney, formatarData: formatDateBR }
+    ),
+    [obrasEscopo, etapas, lancamentos, hoje]
   );
 
   const orcamentoRealizadoDados = useMemo(() => {
@@ -577,6 +591,17 @@ export default function FinanceiroDashboard({ obras, lancamentos, fornecedores, 
         <SectionCard title="Alertas financeiros">
           <div className="space-y-1.5 eco-stagger">
             {alertas.slice(0, 8).map((a, i) => <AlertaItem key={i} alerta={a} />)}
+          </div>
+        </SectionCard>
+      )}
+
+      {previsoes.length > 0 && (
+        <SectionCard
+          title="Previsão e preços"
+          subtitle="Contas feitas na obra inteira e no histórico de cada material — não mudam com o filtro de período"
+        >
+          <div className="space-y-1.5 eco-stagger">
+            {previsoes.slice(0, 8).map((a, i) => <AlertaItem key={i} alerta={a} />)}
           </div>
         </SectionCard>
       )}

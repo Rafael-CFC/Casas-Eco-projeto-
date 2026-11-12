@@ -305,6 +305,80 @@ Vale para Madeiras, Materiais Brutos e Produtos da Loja. Em Produtos da Loja os 
 **entram no catálogo** sozinhos, como no lançamento de um item só. Mão de obra não tem o
 botão: lá o lançamento é um pagamento (quem recebeu e quanto), não uma lista de compra.
 
+### Previsão desta obra — onde o dinheiro vai parar
+
+Na tela da obra, acima das etapas, tem uma faixa **"Previsão desta obra"**. Ela vem fechada
+(só calcula quando você abre) e responde quatro perguntas, cada uma dizendo de onde tirou o
+número:
+
+**1. Previsto × realizado, por etapa.** Cada etapa com o que já gastou, o que resta e quanto
+passou. Duas coisas que antes ninguém via:
+
+- o **gasto que não está em etapa nenhuma** aparece em destaque — esse dinheiro não entra em
+  barra nenhuma e é por onde a conta escapa;
+- quando as etapas com orçamento **não cobrem** o orçamento da obra, ele diz quanto cobrem
+  ("somam R$ 70.000,00, que é 70% do orçamento").
+
+**2. Previsão de custo final.** O número e, logo abaixo, **como ele foi calculado** — previsão
+sem origem é chute. Duas bases, nesta ordem:
+
+- **pelas etapas** (quando elas têm orçamento cobrindo ao menos 70% da obra): soma, de cada
+  etapa, o maior valor entre o que ela já gastou e o orçamento dela — etapa que estourou não
+  volta, e etapa que não acabou pelo menos chega no orçamento dela — mais o gasto fora de
+  etapa, mais a parte do orçamento que as etapas não cobrem;
+- **pelo ritmo** (sem etapas que sirvam): projeta até o dia em que o orçamento termina no
+  ritmo atual, deixando claro que **o que termina é o orçamento, não o serviço**.
+
+Sem orçamento e sem etapas, ele não prevê nada — e diz isso, em vez de inventar.
+
+**3. Ritmo dos últimos 30 dias.** Quanto a obra consome por dia e, com orçamento definido, em
+que data ele acaba nesse ritmo. São os últimos 30 dias, não a média da obra inteira: obra que
+parou um mês e voltou tem o ritmo de agora.
+
+**4. Comparada com obras de porte parecido.** "Parecido" é orçamento até 35% de diferença —
+comparar casa com barracão não diz nada, e quando não há nenhuma parecida ele diz isso. Mostra
+o gasto e o gasto por dia de obra contra a mediana das parecidas, e aponta a categoria em que
+a divisão do seu dinheiro foge do padrão ("Mão de obra: 50% do gasto desta obra, contra 5% nas
+parecidas").
+
+### Relatório do mês — o fechamento pronto
+
+Em **Relatórios**, no topo, o mês fechado num lugar só. Escolhe o mês e está pronto: gasto do
+mês contra o mês anterior, por obra, por categoria, quem mais recebeu, o que subiu de preço,
+as compras fora do padrão e as contas (pagas e em aberto). Nada é digitado à parte — é o mesmo
+lançamento que entrou na obra, somado por mês.
+
+O botão **"Copiar texto"** entrega o relatório inteiro em texto, pronto para mandar no WhatsApp
+ou guardar junto da contabilidade. Se o navegador não deixar copiar sozinho, o texto aparece
+numa caixa para você copiar na mão — o botão nunca fica sem fazer nada.
+
+### Previsão e preços — os avisos no Financeiro
+
+No **Financeiro**, abaixo dos alertas de sempre, tem uma seção **"Previsão e preços"**. Ela
+olha a obra inteira e o histórico de cada material, então **não muda com o filtro de período**
+— e o cabeçalho diz isso, porque um "subiu 20%" que mudasse conforme o filtro não serviria
+para decidir nada. O que entra lá:
+
+- **obra que deve estourar**: "pelas etapas, o custo final deve chegar a R$ 110.900,00 —
+  R$ 10.900,00 acima do orçamento";
+- **orçamento acabando**: "no ritmo de R$ 693,33 por dia, o orçamento termina em 02/02/2027
+  (82 dias)". Prazo muito longe não vira aviso: "acaba em 2032" é ruído entre os que importam;
+- **material que subiu de preço**: compara as duas últimas compras com o patamar anterior
+  (mediana das compras antigas), a partir de 10% de alta;
+- **compra fora do padrão**: uma compra em que o valor unitário ficou 25% ou mais acima do que
+  aquele produto costuma custar — "CIMENTO CP-II 50KG em 20/10/2026: R$ 62,00 contra os
+  R$ 40,00 de costume (CASA DO CONSTRUTOR) — R$ 4.400,00 a mais nessa compra". A ordem é por
+  dinheiro: diferença × quantidade, que é o que dói.
+
+Três cuidados que evitam aviso besta:
+
+- a referência é a **mediana** das compras anteriores, não a média: uma compra absurda antiga
+  não puxa o padrão;
+- exige **histórico mínimo** (3 compras anteriores): com duas compras na vida, "fora do
+  padrão" não quer dizer nada;
+- **pagamento de mão de obra fica de fora** das contas de preço. "JOÃO - DIÁRIA subiu 300%" só
+  quer dizer que o João trabalhou mais dias, não que o preço mudou.
+
 ### Ler nota — a nota inteira, e o aviso de nota repetida
 
 Do lado de "Colar lista" tem agora **"Ler nota"**. É a mesma tela de conferência, só que
