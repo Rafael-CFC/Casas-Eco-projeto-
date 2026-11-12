@@ -7,7 +7,7 @@ import {
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
   FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search, NotebookPen, Trees,
-  LogOut, KeyRound, BarChart3, PlayCircle, CalendarDays, Repeat, FileUp, ClipboardList, Star,
+  LogOut, KeyRound, BarChart3, PlayCircle, CalendarDays, Repeat, FileUp, ClipboardList, Star, Sparkles,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit, chaveFornecedor } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, GRUPOS_GASTO, CLS } from './domain';
@@ -18,6 +18,7 @@ import BoletosPorDia from './contas/BoletosPorDia';
 import ColarListaModal from './obra/ColarListaModal';
 import FormLancamento from './obra/FormLancamento';
 import DetalheProduto from './produtos/DetalheProduto';
+import Assistente from './assistente/Assistente';
 import ImportarNotasXml from './contas/ImportarNotasXml';
 import { nomeDaConta, proximoVencimentoBoleto, nomesDeDistribuidoras } from './contas/contasCalc';
 import SeletorComBusca from './ui/SeletorComBusca';
@@ -119,6 +120,7 @@ function parseImportado(texto) {
 // olhar no computador.
 const NAV_ITEMS = [
   { key: 'home', label: 'Início', icon: Home, primario: true, ordemMobile: 1 },
+  { key: 'assistente', label: 'Assistente', icon: Sparkles },
   { key: 'financeiro', label: 'Financeiro', icon: LayoutDashboard },
   { key: 'contratos', label: 'Contratos', icon: FileSignature, primario: true, ordemMobile: 4 },
   { key: 'catalogo', label: 'Catálogo', icon: Package },
@@ -133,6 +135,7 @@ const NAV_ITEMS = [
 
 const PAGINA_META = {
   home: { titulo: 'Início', subtitulo: 'Visão geral de todas as obras' },
+  assistente: { titulo: 'Assistente Casas Eco', subtitulo: 'Pergunte sobre as obras e receba o número, não o chute' },
   financeiro: { titulo: 'Financeiro', subtitulo: 'Indicadores, gráficos e alertas de custo' },
   catalogo: { titulo: 'Catálogo', subtitulo: 'Produtos e preços cadastrados' },
   crediario: { titulo: 'Crediário dos montadores', subtitulo: 'Anotação do que cada um pegou — não é venda, não gera nota nem imposto' },
@@ -2456,6 +2459,10 @@ function CustoObraApp({ usuario }) {
             onFechar={() => setProdutoDetalhe(null)}
           />,
           document.body
+        )}
+
+        {view === 'assistente' && (
+          <Assistente lancamentos={lancamentos} obras={obras} contas={contas} hojeISO={todayISO()} />
         )}
 
         {/* ---------------- FORNECEDORES ---------------- */}

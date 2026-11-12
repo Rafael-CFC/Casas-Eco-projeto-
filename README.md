@@ -228,6 +228,36 @@ o par e você decide, porque juntar errado estraga preço e histórico. E ele **
 diferentes de nome parecido: "TUBO PVC 100MM" e "TUBO PVC 50MM" nunca são apontados como
 repetidos, porque os números não batem.
 
+### Assistente Casas Eco — perguntar e receber o número
+
+Tem uma área nova, **Assistente**, onde você pergunta em português e recebe a resposta com
+os números das suas obras:
+
+- *Quanto gastamos na obra do João?* → o total, quanto é do orçamento, e a quebra por
+  categoria.
+- *Qual categoria está consumindo mais dinheiro?* → a maior, com a fatia que ela
+  representa e as outras embaixo.
+- *Quais os materiais mais comprados neste mês?*
+- *Qual obra está acima do orçamento?* e *qual tem risco de estourar?* (risco = passou de
+  80% sem estar concluída).
+- *Quanto gastamos com mão de obra?* → o total e quanto cada pessoa recebeu.
+- *Preço médio do cimento* → média, última compra, e quanto subiu desde a primeira.
+- *Quais materiais aumentaram de preço?*
+- *Compare as obras finalizadas.*
+- *Quanto tenho de contas a pagar?* → total, quantos boletos e quantos já venceram.
+
+Dá para escrever do seu jeito ("quanto gastei na obra da Maria em março") — ele entende o
+nome da obra, o mês e o produto citado.
+
+**Ele não inventa.** Toda resposta é uma conta feita em cima dos seus lançamentos. Quando
+não dá para responder, ele diz: *"Não achei essa obra pelo nome"*, *"Não entendi a
+pergunta"*, *"Nenhuma obra tem orçamento definido"*. Nunca sai um número chutado.
+
+Por baixo, entender a pergunta e calcular a resposta são duas coisas separadas. Hoje quem
+entende é uma lista de palavras, e isso roda no próprio celular, sem internet e sem custo.
+Se um dia ligarmos uma IA de verdade, ela entra **só na parte de entender** — a conta
+continua sendo feita com os dados reais, que é o que garante que o número está certo.
+
 ### Colar lista — a compra inteira de uma vez
 
 A listagem da madeireira vem com seis, dez, vinte linhas. Digitar item por item é onde o
