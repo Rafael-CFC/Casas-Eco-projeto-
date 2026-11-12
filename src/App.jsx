@@ -16,6 +16,7 @@ import ToastStack from './ui/Toast';
 import RelatorioContas from './contas/RelatorioContas';
 import BoletosPorDia from './contas/BoletosPorDia';
 import ColarListaModal from './obra/ColarListaModal';
+import FormLancamento from './obra/FormLancamento';
 import ImportarNotasXml from './contas/ImportarNotasXml';
 import { nomeDaConta, proximoVencimentoBoleto, nomesDeDistribuidoras } from './contas/contasCalc';
 import SeletorComBusca from './ui/SeletorComBusca';
@@ -36,7 +37,6 @@ import {
 } from './obra/buscaLancamentos';
 import ResumoFinalObra from './obra/ResumoFinalObra';
 import { ehPagamentoDeMaoDeObra, nomesDeQuemRecebe, totalJaRecebido } from './obra/maoDeObra';
-import ProdutoSeletor from './produtos/ProdutoSeletor';
 import { catalogoPorCategoria, filtrarOrdenarProdutos, ORDENS_CATALOGO } from './produtos/catalogoUtils';
 import { CATEGORIA_MADEIRAS, ehMadeira, fornecedorDasMadeiras, grupoDeGasto, madeirasSemFornecedor, migrarMadeirasParaSecao, vincularMadeirasAoFornecedor } from './produtos/madeiras';
 import OrcamentoVenda from './venda/OrcamentoVenda';
@@ -1268,12 +1268,20 @@ function CustoObraApp({ usuario }) {
   const [npPreco, setNpPreco] = useState('');
   const [npEditandoId, setNpEditandoId] = useState(null);
 
+  // Devolve a MESMA lista quando nada mudou de verdade (mesmo preço, mesma
+  // unidade). Antes, comprar duas vezes o mesmo item pelo mesmo preço
+  // reescrevia o catálogo inteiro no banco e ainda acrescentava uma linha
+  // repetida no histórico de preço. Com o catálogo do PDV isso era quase
+  // 700 KB subindo a cada lançamento, sem nenhuma informação nova.
   function upsertProduto(lista, { nome, preco, unidade }, hoje) {
     const nomeNormalizado = normalizeProductName(nome);
     const unidadeNormalizada = normalizeUnit(unidade);
     const idx = lista.findIndex((p) => p.nome.toLowerCase() === nomeNormalizado.toLowerCase());
     if (idx >= 0) {
       const existente = lista[idx];
+      const mesmoPreco = Number(existente.preco) === Number(preco);
+      const mesmaUnidade = !unidadeNormalizada || existente.unidade === unidadeNormalizada;
+      if (mesmoPreco && mesmaUnidade) return lista;
       const historico = [...(existente.historico || []), { preco: existente.preco, data: existente.atualizadoEm }];
       const copia = lista.slice();
       copia[idx] = { ...existente, preco, unidade: unidadeNormalizada || existente.unidade, atualizadoEm: hoje, historico };
@@ -1394,133 +1402,51 @@ function CustoObraApp({ usuario }) {
   }
 
   // ---- lançamento dentro de uma obra ----
-  const [ldDescricao, setLdDescricao] = useState('');
-  const [ldQuantidade, setLdQuantidade] = useState('1');
-  const [ldUnidade, setLdUnidade] = useState('UN');
-  const [ldPreco, setLdPreco] = useState('');
-  const [ldData, setLdData] = useState(todayISO());
-  const [ldObservacao, setLdObservacao] = useState('');
-  const [ldEtapaId, setLdEtapaId] = useState('');
-  const [ldFornecedor, setLdFornecedor] = useState('');
-  // marca que o fornecedor no campo foi posto pelo sistema (item de
-  // madeira), e não digitado por uma pessoa. Só o que foi posto pelo
-  // sistema pode ser trocado ou apagado sozinho depois.
-  const [ldFornecedorAutomatico, setLdFornecedorAutomatico] = useState(false);
+  //
+  // Os campos do formulário NÃO moram aqui: eles ficam dentro do próprio
+  // formulário (src/obra/FormLancamento.jsx). O App é uma tela só, com
+  // dezenas de estados, e cada tecla digitada num campo daqui
+  // re-renderizava tudo — no celular, com o catálogo do PDV carregado,
+  // isso dava mais de um décimo de segundo de atraso por letra. O que o
+  // App guarda é só QUAL lançamento está sendo editado.
   const [editandoId, setEditandoId] = useState(null);
   const [buscaLancamento, setBuscaLancamento] = useState('');
 
-  function resetFormLancamento() {
-    setLdDescricao(''); setLdQuantidade('1'); setLdUnidade('UN');
-    setLdPreco(''); setLdData(todayISO());
-    setLdObservacao(''); setLdEtapaId(''); setLdFornecedor('');
-    setLdFornecedorAutomatico(false); setEditandoId(null);
-  }
-
-  // A madeira vem toda de uma distribuidora só (ver Configurações >
-  // Madeiras). Quando o item lançado é madeira, o fornecedor já entra
-  // preenchido — assim o gasto aparece no Financeiro sem depender de
-  // alguém lembrar de digitar. O campo continua editável: se a compra
-  // foi em outro lugar, é só trocar, e o que foi digitado à mão nunca é
-  // apagado pelo sistema.
-  function ajustarFornecedorMadeira(nome, categoria) {
-    const distribuidora = fornecedorDasMadeiras(configuracao);
-    if (!distribuidora) return;
-    const madeira = ehMadeira(nome, categoria);
-    if (madeira && (!ldFornecedor.trim() || ldFornecedorAutomatico)) {
-      setLdFornecedor(distribuidora);
-      setLdFornecedorAutomatico(true);
-    } else if (!madeira && ldFornecedorAutomatico) {
-      setLdFornecedor('');
-      setLdFornecedorAutomatico(false);
-    }
-  }
-
-  function aoDigitarDescricao(valor) {
-    const nome = upperInput(valor);
-    setLdDescricao(nome);
-    const catalogo = catalogoPorCategoria(categoriaAtiva, produtos, lancamentos);
-    const item = catalogo.find((it) => it.nome.toLowerCase() === nome.trim().toLowerCase());
-    if (item) { setLdPreco(String(item.preco)); setLdUnidade(item.unidade); }
-    ajustarFornecedorMadeira(nome, categoriaAtiva);
-  }
-
-  function selecionarItemCatalogo(item) {
-    setLdDescricao(item.nome);
-    setLdUnidade(item.unidade);
-    setLdPreco(String(item.preco));
-    ajustarFornecedorMadeira(item.nome, categoriaAtiva);
-  }
-
+  // Abrir um lançamento para editar: o formulário se remonta já com os
+  // valores dele (ver a `key` do FormLancamento lá embaixo).
   function editarLancamento(item) {
     setCategoriaAtiva(item.categoria);
     setEditandoId(item.id);
-    setLdDescricao(item.descricao);
-    if (ehPagamentoDeMaoDeObra(item.categoria)) {
-      // O formulário de mão de obra tem um valor só: o que foi pago.
-      // Lançamento antigo, feito quando a tela pedia quantidade e preço
-      // unitário ("5 diárias x R$ 150"), volta pelo TOTAL — assim editar
-      // a data não muda o valor que já estava gravado.
-      setLdQuantidade('1');
-      setLdUnidade('');
-      setLdPreco(String(item.total));
-    } else {
-      setLdQuantidade(String(item.quantidade));
-      setLdUnidade(item.unidade);
-      setLdPreco(String(item.preco));
-    }
-    setLdData(item.data);
-    setLdObservacao(item.observacao || '');
-    setLdEtapaId(item.etapaId || '');
-    setLdFornecedor(item.fornecedorNome || '');
-    setLdFornecedorAutomatico(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  async function lancar(e) {
-    if (e && e.preventDefault) e.preventDefault();
+  // Grava o que o formulário entregou. A validação (campo vazio, valor
+  // inválido) já aconteceu lá dentro; aqui fica só a parte que mexe em
+  // dado: catálogo, fornecedor e a lista de lançamentos.
+  async function salvarLancamento({ nome, quantidade, preco, unidade, data, observacao, etapaId, fornecedorNome }) {
     setErro('');
-    // Mão de obra é pagamento de gente: só quem recebeu, quanto e quando.
-    // Não passa por quantidade, unidade nem preço unitário — o valor pago
-    // é o total (quantidade 1), que é o que o Financeiro e o resumo somam.
-    const pagamento = ehPagamentoDeMaoDeObra(categoriaAtiva);
-    const quantidade = pagamento ? 1 : parsePrecoBR(ldQuantidade);
-    const preco = parsePrecoBR(ldPreco);
-    const nome = normalizeProductName(ldDescricao);
-    const unidade = pagamento ? '' : (normalizeUnit(ldUnidade) || 'UN');
-
-    if (!nome) { setErro(pagamento ? 'Diga quem recebeu o pagamento.' : 'Descreva o item.'); return; }
-    if (!pagamento && (isNaN(quantidade) || quantidade <= 0)) { setErro('Informe uma quantidade válida.'); return; }
-    if (isNaN(preco) || preco < 0 || (pagamento && preco === 0)) {
-      setErro(pagamento ? 'Informe quanto foi pago.' : 'Informe um valor válido.');
-      return;
-    }
-    // Pagamento sem data não serve para nada: a data é metade do que se
-    // quer saber ("quanto o pedreiro recebeu e quando").
-    if (pagamento && !ldData) { setErro('Informe a data do pagamento.'); return; }
-
-    const hoje = ldData || todayISO();
+    const hoje = data || todayISO();
     let produtoId = null;
 
-    // categoria "produto da loja": salva/atualiza automaticamente no catálogo, como uma planilha
+    // categoria "produto da loja": o catálogo acompanha o que foi
+    // comprado, como uma planilha. A LISTA nova é montada aqui, mas a
+    // gravação dela não segura o lançamento: ver o Promise.all abaixo.
+    let listaProdutos = null;
     if (categoriaAtiva === 'produto_loja') {
-      const novaListaProdutos = upsertProduto(produtos, { nome, preco, unidade }, hoje);
-      const okProduto = await salvarProdutos(novaListaProdutos);
-      if (!okProduto) return;
-      const encontrado = novaListaProdutos.find((p) => p.nome.toLowerCase() === nome.toLowerCase());
+      listaProdutos = upsertProduto(produtos, { nome, preco, unidade }, hoje);
+      const encontrado = listaProdutos.find((p) => p.nome.toLowerCase() === nome.toLowerCase());
       produtoId = encontrado ? encontrado.id : null;
     }
 
-    const fornecedorNome = ldFornecedor.trim();
     if (fornecedorNome) {
       salvarFornecedores(upsertFornecedor(fornecedores, fornecedorNome));
     }
 
-    // Item com nome de madeira lançado DE PROPÓSITO em outra seção
+    // Item de nome amadeirado lançado DE PROPÓSITO em outra seção
     // ("FORRO PVC" em Produtos da Loja) fica marcado, e aí nem a migração
-    // nem os relatórios o puxam para Madeiras. Sem a marca, o sistema
-    // devolveria o item para Madeiras no carregamento seguinte e pareceria
-    // que a escolha do dono foi ignorada.
+    // nem os relatórios o puxam para Madeiras.
     const secaoManual = categoriaAtiva !== CATEGORIA_MADEIRAS && ehMadeira(nome, categoriaAtiva);
+    const pagamento = ehPagamentoDeMaoDeObra(categoriaAtiva);
 
     const item = {
       id: editandoId || crypto.randomUUID(),
@@ -1530,27 +1456,39 @@ function CustoObraApp({ usuario }) {
       produtoId,
       descricao: nome,
       unidade,
-      quantidade, preco, total: quantidade * preco,
+      quantidade,
+      preco,
+      total: quantidade * preco,
       data: hoje,
-      observacao: ldObservacao.trim(),
-      etapaId: ldEtapaId || null,
+      observacao,
+      etapaId,
       fornecedorNome,
     };
 
-    let ok;
-    if (editandoId) {
-      ok = await salvarLancamentos(lancamentos.map((l) => l.id === editandoId ? item : l));
-      if (ok) setAviso(`"${item.descricao}" atualizado.`);
-    } else {
-      ok = await salvarLancamentos([item, ...lancamentos]);
-      if (ok) {
-        setAviso(pagamento
+    // As duas gravações saem JUNTAS, não uma esperando a outra. Antes o
+    // catálogo (quase 700 KB) subia primeiro e só então a lista de
+    // lançamentos: o item levava mais de dois segundos para aparecer na
+    // tela, mesmo já estando pronto aqui. Quem escreve na tela é o
+    // `salvarLancamentos`, que atualiza o estado antes de falar com o
+    // banco — por isso o item aparece na hora.
+    const listaFinal = editandoId
+      ? lancamentos.map((l) => (l.id === editandoId ? item : l))
+      : [item, ...lancamentos];
+
+    const [ok, okProduto] = await Promise.all([
+      salvarLancamentos(listaFinal),
+      listaProdutos && listaProdutos !== produtos ? salvarProdutos(listaProdutos) : Promise.resolve(true),
+    ]);
+
+    if (ok && okProduto) {
+      setAviso(editandoId
+        ? `"${item.descricao}" atualizado.`
+        : pagamento
           ? `${formatMoney(item.total)} pagos a ${item.descricao} em ${formatDateBR(item.data)}.`
           : `"${item.descricao}" lançado.`);
-      }
     }
-
-    if (ok) resetFormLancamento();
+    if (ok) setEditandoId(null);
+    return ok;
   }
 
   // ---- lista colada ----
@@ -1605,27 +1543,47 @@ function CustoObraApp({ usuario }) {
     return true;
   }
 
+  // ---- contas pesadas, feitas uma vez por mudança de dado ----
+  //
+  // Tudo daqui varre o catálogo inteiro e a lista de lançamentos. Sem o
+  // useMemo, cada tecla digitada no formulário refazia TODAS elas (o app
+  // inteiro re-renderiza a cada tecla), e com o catálogo do PDV isso dava
+  // uns quatro décimos de segundo de atraso por letra. Agora só refazem
+  // quando o dado de que dependem muda.
+  const catalogoAtivo = useMemo(
+    () => catalogoPorCategoria(categoriaAtiva, produtos, lancamentos),
+    [categoriaAtiva, produtos, lancamentos]
+  );
+  // Mão de obra não tem catálogo de item: o que se repete é o NOME de quem
+  // recebe. Ver src/obra/maoDeObra.js.
+  const pagamentoMaoDeObra = ehPagamentoDeMaoDeObra(categoriaAtiva);
+  const nomesQuemRecebe = useMemo(
+    () => (pagamentoMaoDeObra ? nomesDeQuemRecebe({ lancamentos, montadores }) : []),
+    [pagamentoMaoDeObra, lancamentos, montadores]
+  );
+  // lista que a tela do Catálogo mostra: o catálogo inteiro passado pela
+  // busca e pela ordenação escolhidas na própria tela.
+  const produtosDoCatalogo = useMemo(
+    () => filtrarOrdenarProdutos(produtos, buscaCatalogo, ordemCatalogo),
+    [produtos, buscaCatalogo, ordemCatalogo]
+  );
+  // catálogo oferecido no crediário: produtos cadastrados + tabela de
+  // madeiras, que são as duas listas de itens que a loja já tem.
+  const catalogoCrediario = useMemo(() => catalogoParaRetirada(produtos, CATALOGO_VENDA), [produtos]);
+  // lançamentos de madeira que ficaram sem fornecedor (os de antes do
+  // vínculo com a distribuidora existir) — a tela de Configurações
+  // oferece corrigir todos de uma vez
+  const madeirasPendentes = useMemo(() => madeirasSemFornecedor(lancamentos), [lancamentos]);
+
   if (loading) {
     return <DashboardSkeleton />;
   }
 
   const obraAtiva = obras.find((o) => o.id === obraAtivaId);
   const obraConcluida = obraEstaConcluida(obraAtiva);
-  const catalogoAtivo = catalogoPorCategoria(categoriaAtiva, produtos, lancamentos);
-  // Mão de obra não tem catálogo de item: o que se repete é o NOME de quem
-  // recebe. Ver src/obra/maoDeObra.js.
-  const pagamentoMaoDeObra = ehPagamentoDeMaoDeObra(categoriaAtiva);
-  const nomesQuemRecebe = pagamentoMaoDeObra ? nomesDeQuemRecebe({ lancamentos, montadores }) : [];
-  // lista que a tela do Catálogo mostra: o catálogo inteiro passado pela
-  // busca e pela ordenação escolhidas na própria tela.
-  const produtosDoCatalogo = filtrarOrdenarProdutos(produtos, buscaCatalogo, ordemCatalogo);
-  // catálogo oferecido no crediário: produtos cadastrados + tabela de
-  // madeiras, que são as duas listas de itens que a loja já tem.
-  const catalogoCrediario = catalogoParaRetirada(produtos, CATALOGO_VENDA);
-  // lançamentos de madeira que ficaram sem fornecedor (os de antes do
-  // vínculo com a distribuidora existir) — a tela de Configurações
-  // oferece corrigir todos de uma vez
-  const madeirasPendentes = madeirasSemFornecedor(lancamentos);
+  const etapasDaObra = obraAtiva ? etapas.filter((et) => et.obraId === obraAtiva.id) : [];
+  const lancamentoEmEdicao = editandoId ? lancamentos.find((l) => l.id === editandoId) || null : null;
+
   const paginaAtual = (view === 'obra' || view === 'resumo') && obraAtiva
     ? {
         titulo: obraAtiva.nome,
@@ -3126,7 +3084,7 @@ function CustoObraApp({ usuario }) {
                 return (
                   <button
                     key={key}
-                    onClick={() => { setCategoriaAtiva(key); resetFormLancamento(); }}
+                    onClick={() => { setCategoriaAtiva(key); setEditandoId(null); }}
                     // Com quatro seções, o rótulo e o valor só cabem
                     // lado a lado em tela larga: em 4 colunas "Materiais
                     // Brutos R$ 1.320,00" numa linha só virava
@@ -3238,133 +3196,33 @@ function CustoObraApp({ usuario }) {
               <p className="text-xs text-stone-400 flex items-center gap-1 -mb-2"><Lock size={12} /> Obra concluída — reabra a obra para lançar novos gastos.</p>
             )}
             {!obraConcluida && (
-            <div className="eco-card p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 items-end">
-              {/* Mão de obra é pagamento de gente: quem recebeu, quanto e
-                  quando. Sem quantidade, unidade, preço unitário nem
-                  distribuidora — campo de compra de material só atrapalhava
-                  quem só quer anotar o que o pedreiro já recebeu. */}
-              <div className="col-span-2 sm:col-span-4 lg:col-span-2">
-                <label className="text-xs text-stone-500 block mb-1">
-                  {pagamentoMaoDeObra ? 'Quem recebeu' : categoriaAtiva === 'produto_loja' ? 'Produto' : 'Descrição'}
-                </label>
-                {pagamentoMaoDeObra ? (
-                  <SeletorComBusca
-                    value={ldDescricao}
-                    onChange={setLdDescricao}
-                    nomes={nomesQuemRecebe}
-                    titulo="Quem recebeu"
-                    placeholder="Ex: JOÃO PEDREIRO"
-                    buscaPlaceholder="Procurar pelo nome…"
-                    textoNovo="Usar este nome"
-                    textoListaVazia="Ninguém recebeu pagamento ainda — digite o nome."
-                    contagem={{ singular: 'nome já usado', plural: 'nomes já usados' }}
-                    detalhe={(nome) => {
-                      const jaRecebeu = totalJaRecebido(lancamentos, obraAtiva.id, nome);
-                      return jaRecebeu > 0 ? `já recebeu ${formatMoney(jaRecebeu)}` : null;
-                    }}
-                  />
-                ) : (
-                  <ProdutoSeletor
-                    value={ldDescricao}
-                    onChangeTexto={aoDigitarDescricao}
-                    onSelecionar={selecionarItemCatalogo}
-                    itens={catalogoAtivo}
-                    categoriaLabel={CATEGORIAS[categoriaAtiva].label}
-                    placeholder={
-                      categoriaAtiva === 'produto_loja'
-                        ? 'Digite ou escolha — se já existir, o preço vem sozinho'
-                        : categoriaAtiva === CATEGORIA_MADEIRAS
-                          ? 'Ex: Tábua pinus 30cm'
-                          : 'Ex: Areia lavada'
-                    }
-                  />
-                )}
-              </div>
-              {!pagamentoMaoDeObra && (
-                <div className="col-span-1">
-                  <label className="text-xs text-stone-500 block mb-1">Qtd.</label>
-                  <input value={ldQuantidade} onChange={(e) => setLdQuantidade(e.target.value)} inputMode="decimal"
-                    className="eco-input" />
-                </div>
-              )}
-              {!pagamentoMaoDeObra && (
-                <div className="col-span-1">
-                  <label className="text-xs text-stone-500 block mb-1">Unid.</label>
-                  <input value={ldUnidade} onChange={(e) => setLdUnidade(upperInput(e.target.value))} placeholder="UN, M³..."
-                    className="eco-input" />
-                </div>
-              )}
-              <div className="col-span-1">
-                <label className="text-xs text-stone-500 block mb-1">
-                  {pagamentoMaoDeObra ? 'Quanto recebeu (R$)' : 'Valor (R$)'}
-                </label>
-                <input value={ldPreco} onChange={(e) => setLdPreco(e.target.value)} placeholder="0,00" inputMode="decimal"
-                  className="eco-input" />
-              </div>
-              <div className="col-span-1">
-                <label className="text-xs text-stone-500 block mb-1">
-                  {pagamentoMaoDeObra ? 'Data do pagamento' : 'Data'}
-                </label>
-                <input type="date" value={ldData} onChange={(e) => setLdData(e.target.value)}
-                  className="eco-input" />
-              </div>
-              {etapas.filter((et) => et.obraId === obraAtiva.id).length > 0 && (
-                <div className="col-span-1">
-                  <label className="text-xs text-stone-500 block mb-1">Etapa (opc.)</label>
-                  <select value={ldEtapaId} onChange={(e) => setLdEtapaId(e.target.value)}
-                    className="eco-input">
-                    <option value="">Nenhuma</option>
-                    {etapas.filter((et) => et.obraId === obraAtiva.id).map((et) => (
-                      <option key={et.id} value={et.id}>{et.nome}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {!pagamentoMaoDeObra && (
-                <div className="col-span-2 sm:col-span-2 lg:col-span-2">
-                  <label className="text-xs text-stone-500 block mb-1">Fornecedor (opcional)</label>
-                  <input
-                    value={ldFornecedor}
-                    onChange={(e) => { setLdFornecedor(e.target.value); setLdFornecedorAutomatico(false); }}
-                    placeholder="Ex: Depósito São José"
-                    list="lista-fornecedores-lancamento"
-                    className="eco-input"
-                  />
-                  <datalist id="lista-fornecedores-lancamento">
-                    {fornecedores.map((f) => <option key={f.id} value={f.nome} />)}
-                  </datalist>
-                  {ldFornecedorAutomatico && (
-                    <p className="text-[11px] text-green-700 mt-1 flex items-center gap-1">
-                      <Trees size={11} /> madeira — gasto vinculado a {ldFornecedor} (dá para trocar)
-                    </p>
-                  )}
-                </div>
-              )}
-              <div className="col-span-2 sm:col-span-2 lg:col-span-2">
-                <label className="text-xs text-stone-500 block mb-1">Observação (opcional)</label>
-                <input value={ldObservacao} onChange={(e) => setLdObservacao(e.target.value)}
-                  placeholder={pagamentoMaoDeObra ? 'Ex: adiantamento da semana' : 'Ex: comprado em outra loja'}
-                  className="eco-input" />
-              </div>
-              <div className="col-span-2 sm:col-span-4 lg:col-span-2 flex gap-2">
-                <button type="button" onClick={lancar} className={`flex-1 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-[0.97] ${CLS[CATEGORIAS[categoriaAtiva].cls].solid} hover:opacity-90`}>
-                  <Plus size={15} /> {editandoId ? 'Salvar edição' : pagamentoMaoDeObra ? 'Registrar pagamento' : 'Lançar'}
-                </button>
-                {editandoId && (
-                  <button type="button" onClick={resetFormLancamento} className="eco-btn-secondary flex-1">
-                    Cancelar
-                  </button>
-                )}
-                {/* A compra que veio em lista (nota da madeireira, papel,
-                    WhatsApp) não precisa ser digitada item por item. */}
-                {!editandoId && !pagamentoMaoDeObra && (
-                  <button type="button" onClick={() => setColarListaAberta(true)} className="eco-btn-secondary flex-1">
-                    <ClipboardList size={15} /> Colar lista
-                  </button>
-                )}
-              </div>
-            </div>
+              // A `key` troca quando muda a obra, a seção ou o lançamento
+              // em edição: o formulário se remonta já com os valores
+              // certos, sem precisar de efeito nenhum para sincronizar.
+              <FormLancamento
+                key={`${obraAtiva.id}-${categoriaAtiva}-${editandoId || 'novo'}`}
+                categoria={categoriaAtiva}
+                categoriaLabel={CATEGORIAS[categoriaAtiva].label}
+                classeBotao={CLS[CATEGORIAS[categoriaAtiva].cls].solid}
+                pagamentoMaoDeObra={pagamentoMaoDeObra}
+                catalogo={catalogoAtivo}
+                nomesQuemRecebe={nomesQuemRecebe}
+                detalheDoNome={(nome) => {
+                  const jaRecebeu = totalJaRecebido(lancamentos, obraAtiva.id, nome);
+                  return jaRecebeu > 0 ? `já recebeu ${formatMoney(jaRecebeu)}` : null;
+                }}
+                fornecedores={fornecedores}
+                etapas={etapasDaObra}
+                fornecedorMadeiras={fornecedorDasMadeiras(configuracao)}
+                ehMadeira={ehMadeira}
+                emEdicao={lancamentoEmEdicao}
+                onLancar={salvarLancamento}
+                onCancelarEdicao={() => setEditandoId(null)}
+                onErro={setErro}
+                onColarLista={() => setColarListaAberta(true)}
+              />
             )}
+
             {colarListaAberta && !obraConcluida && createPortal(
               <ColarListaModal
                 secaoLabel={CATEGORIAS[categoriaAtiva].label}

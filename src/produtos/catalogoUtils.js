@@ -82,15 +82,22 @@ export function catalogoPorCategoria(categoria, produtos, lancamentos) {
 // busca. As seções de destaque só aparecem quando há dados reais o
 // suficiente para fazer sentido (senão ficam ocultas, como pedido).
 export function selecionarSecoes(itens, busca, opcoes = {}) {
-  const { minMaisUtilizados = 3, minRecentes = 2, limiteSecao = 5 } = opcoes;
+  const { minMaisUtilizados = 3, minRecentes = 2, limiteSecao = 5, limiteLista = 60 } = opcoes;
   const termo = busca.trim();
   const filtrados = termo
     ? itens.filter((it) => combinaBusca(termo, it.nome, it.unidade))
     : itens.slice();
   filtrados.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 
+  // A lista sai CORTADA no que cabe na tela. Com o catálogo do PDV (uns
+  // três mil produtos), desenhar a lista inteira a cada tecla digitada
+  // custava décimos de segundo por letra — era a maior parte da demora
+  // ao lançar. Ninguém rola três mil linhas: quem procura, digita. O
+  // `total` volta junto para a tela poder dizer quantos existem.
+  const cortar = (lista) => (lista.length > limiteLista ? lista.slice(0, limiteLista) : lista);
+
   if (termo) {
-    return { maisUtilizados: [], recentes: [], lista: filtrados };
+    return { maisUtilizados: [], recentes: [], lista: cortar(filtrados), total: filtrados.length };
   }
 
   const comUso = itens.filter((it) => it.usoCount > 0);
@@ -103,5 +110,5 @@ export function selecionarSecoes(itens, busca, opcoes = {}) {
     ? [...comData].sort((a, b) => b.ultimaData.localeCompare(a.ultimaData)).slice(0, limiteSecao)
     : [];
 
-  return { maisUtilizados, recentes, lista: filtrados };
+  return { maisUtilizados, recentes, lista: cortar(filtrados), total: filtrados.length };
 }
