@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Package, Plus, Trash2, AlertCircle,
@@ -7,7 +7,7 @@ import {
   Home, Users, Receipt, FileText, Download, LayoutDashboard,
   ChevronsLeft, ChevronsRight, ShieldCheck, Lock, RotateCcw, ClipboardCheck,
   FileSignature, Settings, MoreHorizontal, Wallet, Boxes, Search, NotebookPen, Trees,
-  LogOut, KeyRound, BarChart3, PlayCircle, CalendarDays, Repeat, FileUp, ClipboardList,
+  LogOut, KeyRound, BarChart3, PlayCircle, CalendarDays, Repeat, FileUp, ClipboardList, Star,
 } from 'lucide-react';
 import { upperInput, normalizeProductName, normalizeUnit, chaveFornecedor } from './textUtils';
 import { todayISO, formatDateBR, formatMoney, parsePrecoBR, CATEGORIAS, GRUPOS_GASTO, CLS } from './domain';
@@ -17,6 +17,7 @@ import RelatorioContas from './contas/RelatorioContas';
 import BoletosPorDia from './contas/BoletosPorDia';
 import ColarListaModal from './obra/ColarListaModal';
 import FormLancamento from './obra/FormLancamento';
+import DetalheProduto from './produtos/DetalheProduto';
 import ImportarNotasXml from './contas/ImportarNotasXml';
 import { nomeDaConta, proximoVencimentoBoleto, nomesDeDistribuidoras } from './contas/contasCalc';
 import SeletorComBusca from './ui/SeletorComBusca';
@@ -39,6 +40,8 @@ import ResumoFinalObra from './obra/ResumoFinalObra';
 import { ehPagamentoDeMaoDeObra, nomesDeQuemRecebe, totalJaRecebido } from './obra/maoDeObra';
 import { catalogoPorCategoria, filtrarOrdenarProdutos, ORDENS_CATALOGO } from './produtos/catalogoUtils';
 import { CATEGORIA_MADEIRAS, ehMadeira, fornecedorDasMadeiras, grupoDeGasto, madeirasSemFornecedor, migrarMadeirasParaSecao, vincularMadeirasAoFornecedor } from './produtos/madeiras';
+import { classificar, aprenderCorrecao } from './produtos/classificacao';
+import { historicoDePrecos, catalogoCompleto, possiveisDuplicados, alternarFavorito, ehFavorito } from './produtos/catalogoCentral';
 import OrcamentoVenda from './venda/OrcamentoVenda';
 import Contratos from './contratos/Contratos';
 import Configuracoes from './config/Configuracoes';
@@ -154,6 +157,14 @@ function CustoObraApp({ usuario }) {
   const [clientes, setClientes] = useState([]);
   const [montadores, setMontadores] = useState([]);
   const [crediario, setCrediario] = useState([]);
+  // O que o dono já corrigiu na classificação dos itens ({ nome: {...} })
+  // e os produtos que ele marcou como favoritos. Ver
+  // src/produtos/classificacao.js e src/produtos/catalogoCentral.js.
+  const [classificacoes, setClassificacoes] = useState({});
+  const [favoritos, setFavoritos] = useState([]);
+  // qual produto está com a ficha aberta no Catálogo (nome, não id: a
+  // ficha junta o cadastro com o que só existe nos lançamentos)
+  const [produtoDetalhe, setProdutoDetalhe] = useState(null);
   const [configuracao, setConfiguracao] = useState(configuracaoVazia);
   const [menuMaisAberto, setMenuMaisAberto] = useState(false);
   const [trocandoSenha, setTrocandoSenha] = useState(false);
@@ -208,7 +219,7 @@ function CustoObraApp({ usuario }) {
         return;
       }
       try {
-        const [o, p, l, et, fo, co, cfx, ct, cl, cf, mt, cr] = await Promise.all([
+        const [o, p, l, et, fo, co, cfx, ct, cl, cf, mt, cr, cls, fav] = await Promise.all([
           window.storage.get('obras', false).catch(() => null),
           window.storage.get('produtos', false).catch(() => null),
           window.storage.get('lancamentos', false).catch(() => null),
@@ -221,6 +232,8 @@ function CustoObraApp({ usuario }) {
           window.storage.get('configuracao', false).catch(() => null),
           window.storage.get('montadores', false).catch(() => null),
           window.storage.get('crediario', false).catch(() => null),
+          window.storage.get('classificacoes', false).catch(() => null),
+          window.storage.get('favoritos', false).catch(() => null),
         ]);
 
         // Migração não destrutiva: padroniza nome/unidade de produtos e
@@ -267,6 +280,8 @@ function CustoObraApp({ usuario }) {
         setConfiguracao(normalizarConfiguracao(cf ? JSON.parse(cf.value) : null));
         setMontadores(mt ? JSON.parse(mt.value) : []);
         setCrediario(cr ? JSON.parse(cr.value) : []);
+        setClassificacoes(cls ? JSON.parse(cls.value) : {});
+        setFavoritos(fav ? JSON.parse(fav.value) : []);
 
         if (produtosMudaram) {
           window.storage.set('produtos', JSON.stringify(produtosNormalizados), false).catch(() => {});
@@ -328,6 +343,8 @@ function CustoObraApp({ usuario }) {
   // é anotação interna, não custo de obra nem venda.
   const salvarMontadores = (l) => persist('montadores', l, setMontadores);
   const salvarCrediario = (l) => persist('crediario', l, setCrediario);
+  const salvarClassificacoes = (c) => persist('classificacoes', c, setClassificacoes);
+  const salvarFavoritos = (l) => persist('favoritos', l, setFavoritos);
 
   async function criarObra(e) {
     if (e && e.preventDefault) e.preventDefault();
@@ -1412,6 +1429,25 @@ function CustoObraApp({ usuario }) {
   const [editandoId, setEditandoId] = useState(null);
   const [buscaLancamento, setBuscaLancamento] = useState('');
 
+  // ---- reconhecimento do item (catálogo inteligente) ----
+  //
+  // Quem responde o que é o item: primeiro o que o dono já corrigiu,
+  // depois o que ele já lançou, depois o catálogo local de palavras. Ver
+  // src/produtos/classificacao.js — nenhuma dessas três chama rede.
+  const classificarItem = useCallback(
+    (nome) => classificar(nome, { lancamentos, aprendidas: classificacoes }),
+    [lancamentos, classificacoes]
+  );
+  const historicoDoProduto = useCallback(
+    (nome) => historicoDePrecos(nome, lancamentos, obras),
+    [lancamentos, obras]
+  );
+  // A correção do dono vira regra para sempre, para o sistema não errar
+  // duas vezes a mesma coisa.
+  function corrigirClassificacao(nome, escolha) {
+    salvarClassificacoes(aprenderCorrecao(classificacoes, nome, escolha));
+  }
+
   // Abrir um lançamento para editar: o formulário se remonta já com os
   // valores dele (ver a `key` do FormLancamento lá embaixo).
   function editarLancamento(item) {
@@ -1423,7 +1459,7 @@ function CustoObraApp({ usuario }) {
   // Grava o que o formulário entregou. A validação (campo vazio, valor
   // inválido) já aconteceu lá dentro; aqui fica só a parte que mexe em
   // dado: catálogo, fornecedor e a lista de lançamentos.
-  async function salvarLancamento({ nome, quantidade, preco, unidade, data, observacao, etapaId, fornecedorNome }) {
+  async function salvarLancamento({ nome, quantidade, preco, unidade, data, observacao, etapaId, fornecedorNome, subcategoria, tipo }) {
     setErro('');
     const hoje = data || todayISO();
     let produtoId = null;
@@ -1463,6 +1499,10 @@ function CustoObraApp({ usuario }) {
       observacao,
       etapaId,
       fornecedorNome,
+      // o que o sistema reconheceu (ou o que o dono corrigiu): fica
+      // gravado para o relatório não ter que adivinhar de novo
+      subcategoria: subcategoria || null,
+      tipo: tipo || null,
     };
 
     // As duas gravações saem JUNTAS, não uma esperando a outra. Antes o
@@ -1574,6 +1614,14 @@ function CustoObraApp({ usuario }) {
   // vínculo com a distribuidora existir) — a tela de Configurações
   // oferece corrigir todos de uma vez
   const madeirasPendentes = useMemo(() => madeirasSemFornecedor(lancamentos), [lancamentos]);
+
+  // Produtos que podem ser o mesmo item escrito de dois jeitos. O
+  // sistema NUNCA junta sozinho — só mostra o par para o dono decidir.
+  // Ver possiveisDuplicados em src/produtos/catalogoCentral.js.
+  const duplicadosDoCatalogo = useMemo(
+    () => possiveisDuplicados(catalogoCompleto({ produtos, lancamentos, obras, favoritos })),
+    [produtos, lancamentos, obras, favoritos]
+  );
 
   if (loading) {
     return <DashboardSkeleton />;
@@ -2302,6 +2350,32 @@ function CustoObraApp({ usuario }) {
               </div>
             </div>
 
+            {/* Mesmo item escrito de dois jeitos. O sistema não junta
+                sozinho: mostra o par e deixa o dono decidir, porque
+                juntar errado estraga preço e histórico. */}
+            {duplicadosDoCatalogo.length > 0 && (
+              <div className="eco-card p-3 border-amber-200 bg-amber-50">
+                <p className="text-sm text-amber-800 font-medium mb-1.5">
+                  {duplicadosDoCatalogo.length === 1
+                    ? '1 par de produtos pode ser o mesmo item'
+                    : `${duplicadosDoCatalogo.length} pares de produtos podem ser o mesmo item`}
+                </p>
+                <ul className="space-y-1">
+                  {duplicadosDoCatalogo.slice(0, 5).map((d, i) => (
+                    <li key={i} className="text-xs text-amber-700 leading-snug">
+                      <button onClick={() => setProdutoDetalhe(d.a.nome)} className="underline">{d.a.nome}</button>
+                      {' e '}
+                      <button onClick={() => setProdutoDetalhe(d.b.nome)} className="underline">{d.b.nome}</button>
+                      <span className="text-amber-600"> — {d.motivo}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[11px] text-amber-600 mt-1.5">
+                  Nada foi juntado. Para unificar, renomeie um dos dois para ficar igual ao outro.
+                </p>
+              </div>
+            )}
+
             <div className="eco-card overflow-hidden">
               <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[560px]">
@@ -2326,7 +2400,16 @@ function CustoObraApp({ usuario }) {
                     const variacao = anterior && anterior.preco > 0 ? ((p.preco - anterior.preco) / anterior.preco) * 100 : null;
                     return (
                       <tr key={p.id} className="border-t border-stone-100 eco-table-row">
-                        <td className="px-3 py-2">{p.nome}</td>
+                        <td className="px-3 py-2">
+                          <button
+                            onClick={() => setProdutoDetalhe(p.nome)}
+                            className="text-left hover:text-green-700 hover:underline flex items-center gap-1"
+                            title="Ver histórico de preço e em que obras foi usado"
+                          >
+                            {ehFavorito(favoritos, p.nome) && <Star size={12} className="text-amber-500 flex-shrink-0" fill="currentColor" />}
+                            {p.nome}
+                          </button>
+                        </td>
                         <td className="px-3 py-2 text-stone-500">{p.unidade}</td>
                         <td className="px-3 py-2 text-right">
                           <div className="font-medium">{formatMoney(p.preco)}</div>
@@ -2361,6 +2444,18 @@ function CustoObraApp({ usuario }) {
               )}
             </div>
           </div>
+        )}
+
+        {produtoDetalhe && createPortal(
+          <DetalheProduto
+            nome={produtoDetalhe}
+            lancamentos={lancamentos}
+            obras={obras}
+            favoritos={favoritos}
+            onFavoritar={(nome) => salvarFavoritos(alternarFavorito(favoritos, nome))}
+            onFechar={() => setProdutoDetalhe(null)}
+          />,
+          document.body
         )}
 
         {/* ---------------- FORNECEDORES ---------------- */}
@@ -3220,6 +3315,9 @@ function CustoObraApp({ usuario }) {
                 onCancelarEdicao={() => setEditandoId(null)}
                 onErro={setErro}
                 onColarLista={() => setColarListaAberta(true)}
+                classificar={classificarItem}
+                historicoDoProduto={historicoDoProduto}
+                onCorrigirClassificacao={corrigirClassificacao}
               />
             )}
 

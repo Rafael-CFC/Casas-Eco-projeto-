@@ -180,6 +180,54 @@ As três causas eram estas, e o que mudou:
 
 Nada disso muda o que é salvo: os lançamentos, os preços e o histórico continuam iguais.
 
+### O sistema reconhece o que você está lançando
+
+Ao digitar o item na obra, aparece uma linha discreta embaixo do campo:
+
+```
+● Cimento · SC · material · já lançado 3×          trocar
+  última compra R$ 45,50 em 02/10/2026 · ALBERTINA (+20% desde a primeira)
+```
+
+O que ela diz: a **categoria** reconhecida, a **unidade** sugerida (que já entra no campo),
+se é **material ou serviço**, e **quanto você pagou da última vez** — com o aviso quando o
+preço subiu. A bolinha é a confiança: **verde** o sistema tem certeza, **âmbar** achou
+parecido, **cinza** não sabe.
+
+**Quem responde, nesta ordem:**
+
+1. **o que você já corrigiu** — sua correção vale mais que qualquer regra;
+2. **o que você já lançou** com esse nome — se a areia sempre foi em CARRADA, continua em
+   CARRADA, mesmo que a regra diga M³;
+3. **a lista de palavras do sistema** — cimento, areia, brita, tijolo, telha, fio, tubo,
+   madeira, prego, tinta, piso, porta, diesel, aluguel de equipamento, projeto, frete, e as
+   profissões (pedreiro, servente, eletricista…);
+4. **nada**: aí ele diz *"não reconheci este item"* e pede para você escolher.
+
+**Ele aprende.** Clicando em **"trocar"** (ou **"escolher"**) você define a categoria certa.
+Daí em diante aquele nome entra certo sozinho — e a linha passa a dizer *"você ensinou"*.
+Nenhuma sugestão trava nada: todo campo continua editável.
+
+Nada disso chama internet nem custa nada: é lista de palavras e o seu próprio histórico.
+
+### Catálogo: o mesmo produto, em todas as obras
+
+Na tela do **Catálogo**, clicando no nome do produto abre a ficha dele:
+
+- **quanto custou em cada compra**, com data, obra e fornecedor;
+- **última, média, menor e maior**, e quanto subiu ou caiu desde a primeira compra;
+- **em que obras foi usado**, com quantidade e valor em cada uma;
+- **favorito** (a estrela), para achar rápido o que se compra sempre.
+
+A ficha junta o que está no cadastro com o que só existe nos lançamentos — areia, madeira,
+material bruto digitado na mão. Pagamento de pedreiro não entra: não é item de catálogo.
+
+**Produtos repetidos:** no alto da tela aparece um aviso quando dois nomes podem ser o mesmo
+item ("CIMENTO CP-II 50KG" e "CIMENTO CPII 50 KG"). O sistema **nunca junta sozinho** — mostra
+o par e você decide, porque juntar errado estraga preço e histórico. E ele **não acusa** coisas
+diferentes de nome parecido: "TUBO PVC 100MM" e "TUBO PVC 50MM" nunca são apontados como
+repetidos, porque os números não batem.
+
 ### Colar lista — a compra inteira de uma vez
 
 A listagem da madeireira vem com seis, dez, vinte linhas. Digitar item por item é onde o
