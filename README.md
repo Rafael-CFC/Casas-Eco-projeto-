@@ -305,6 +305,76 @@ Vale para Madeiras, Materiais Brutos e Produtos da Loja. Em Produtos da Loja os 
 **entram no catálogo** sozinhos, como no lançamento de um item só. Mão de obra não tem o
 botão: lá o lançamento é um pagamento (quem recebeu e quanto), não uma lista de compra.
 
+### Ler nota — a nota inteira, e o aviso de nota repetida
+
+Do lado de "Colar lista" tem agora **"Ler nota"**. É a mesma tela de conferência, só que
+lendo a nota **inteira** em vez de só a lista de itens: ela tira do texto o **fornecedor**, a
+**data de emissão**, o **número da nota/venda** e o **CNPJ**, além dos itens.
+
+1. Cole o texto da nota — do e-mail da distribuidora, do PDF, do WhatsApp do vendedor — e
+   clique em **"Ler nota"**.
+2. Em cima aparece um quadro com o que a nota diz de si mesma: `Nota: nº 15592 · CNPJ
+   01887828000176`, `Emissão: 23/10/2026`, `Fornecedor: MADEIREIRA IRMAOS CARGNIN LTDA`.
+   Campo que ele **não** achou aparece dizendo isso — "data não encontrada", "número não
+   encontrado" — em vez de vir com um palpite.
+3. **A data e a distribuidora já vêm preenchidas** com o que a nota diz, e o número vai para
+   a observação (`nota 15592`). Tudo editável, como sempre.
+4. Confira e lance. Daí para frente os itens dessa compra ficam marcados com o número da
+   nota.
+
+**A distribuidora não vira duas.** A nota traz a razão social inteira ("MADEIREIRA IRMAOS
+CARGNIN LTDA") e no seu sistema ela já existe como "MADEIREIRA CARGNIN". O sistema reconhece
+que é a mesma e usa o nome que você já usa — senão o histórico da empresa racharia em dois.
+A regra é estreita de propósito: "DEPOSITO SAO PEDRO" **não** casa com "DEPOSITO SAO JOSE".
+
+**O aviso de nota repetida.** Lançar a mesma nota duas vezes dobra o gasto da obra, e é um
+erro fácil de cometer (a nota chega no WhatsApp e depois em papel). Ao ler uma nota, o
+sistema procura nos lançamentos e avisa:
+
+- **Vermelho — "essa nota parece já estar lançada"**: o número da nota já aparece em
+  lançamentos seus, ou já existe uma compra daquele fornecedor **no mesmo dia e com o mesmo
+  total**.
+- **Amarelo — "confira antes"**: mesma distribuidora e mesmo total, em data próxima (até 3
+  dias). Aí pode ser outra compra de valor igual — o sistema avisa e deixa você decidir, em
+  vez de barrar.
+
+O aviso não impede o lançamento: quem decide é você.
+
+### Ler a nota pela foto (precisa ser ligado)
+
+O botão **"Tirar foto da nota"** existe na tela, e hoje ele vem **desligado**, dizendo o que
+falta. Isso é de propósito, por dois motivos.
+
+**Primeiro: a leitura de foto feita dentro do navegador não serve para dinheiro.** Testei
+com as suas duas fotos reais. Na nota de papel da Cargnin a leitura saiu com 65% de
+confiança e errou justamente os números: `4.104,00` virou `104,00`, `15592` virou `45592`,
+`5.914,00` virou `917400`. Na foto da tela do PDV foi pior — 38% de confiança, a maioria dos
+valores embaralhada. Um nome lido torto você corrige na conferência; um valor lido torto
+entra no custo da obra parecendo certo. Então essa leitura **não foi para o sistema**.
+
+**Segundo: a chave da IA não pode ficar no site.** O site é uma página aberta — qualquer
+chave escrita nele fica à vista de quem abrir o código no navegador, e a fatura chega para
+você. Por isso o site não fala com a IA direto: ele fala com um endereço **nosso**, onde a
+chave fica do lado do servidor. Esse endereço já está escrito no repositório, em
+`supabase/functions/ler-nota`, com o passo a passo no começo do arquivo:
+
+1. `supabase secrets set ANTHROPIC_API_KEY=sk-ant-...` (a chave fica **no servidor**);
+2. `supabase functions deploy ler-nota`;
+3. na Vercel, criar `VITE_IA_ENDPOINT = https://<projeto>.supabase.co/functions/v1/ler-nota`.
+
+Enquanto o passo 3 não existir, o botão continua explicando que falta configurar — e colar o
+texto segue funcionando.
+
+**Quando ligado, o modelo só transcreve.** Ele devolve o texto do papel; quem separa os
+itens, confere a multiplicação de cada linha e compara a soma com o total continua sendo o
+código do sistema, o mesmo do "Colar lista". O modelo não decide número nenhum. Dígito que
+ele não conseguir ler vem como `?`, para você ver e corrigir.
+
+**O custo fica controlado:** só quem está logado consegue chamar (o crachá da sessão vai na
+chamada e o Supabase confere antes), foto acima de 6 MB é recusada antes de virar gasto, a
+espera tem limite de 45 segundos, e o esforço do modelo fica no mínimo — transcrever não
+precisa de raciocínio longo, e é aí que o preço cresce. Cada leitura devolve quanto gastou.
+
 ### No celular — a tela presa no lugar
 
 O sistema é usado principalmente no celular, e a tela **se ajeitava sozinha**: aproximava
