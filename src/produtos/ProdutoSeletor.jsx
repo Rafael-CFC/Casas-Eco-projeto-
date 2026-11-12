@@ -39,10 +39,11 @@ export default function ProdutoSeletor({
   const listRef = useRef(null);
   const mobile = usarLayoutMobile();
 
-  const { maisUtilizados, recentes, lista } = useMemo(
+  const { maisUtilizados, recentes, lista, total } = useMemo(
     () => selecionarSecoes(itens, value),
     [itens, value]
   );
+  const sobraram = (total || 0) - lista.length;
 
   const existeExato = useMemo(
     () => itens.some((it) => it.nome.trim().toLowerCase() === value.trim().toLowerCase()),
@@ -207,6 +208,12 @@ export default function ProdutoSeletor({
 
           {semResultados && (
             <p className="px-3 py-6 text-center text-sm text-stone-400">Nenhum resultado para "{value.trim()}".</p>
+          )}
+
+          {sobraram > 0 && (
+            <p className="px-3 py-2 text-xs text-stone-400 border-t border-stone-100">
+              Mostrando {lista.length} de {total} — digite mais do nome para achar o resto.
+            </p>
           )}
 
           {mostrarCadastrarNovo && (

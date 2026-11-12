@@ -151,6 +151,35 @@ Madeiras" na tela da obra.
 **O catálogo da loja não mudou.** Produto de madeira que estava cadastrado no Catálogo
 continua lá — o que mudou foi a seção em que o gasto da obra aparece.
 
+### Lançar ficou rápido (e o que mudou na tela)
+
+Lançar produto dentro da obra travava: a tela demorava a responder a cada letra digitada e o
+item custava a aparecer depois do clique. Medimos com o catálogo do tamanho do seu (três mil
+produtos) e mil e quinhentos lançamentos, num celular mediano:
+
+| | antes | agora |
+| :--- | ---: | ---: |
+| cada letra digitada | ~400 ms | **~90 ms** |
+| abrir a lista de produtos (1ª letra) | ~2,5 s | **~0,15 s** |
+| do clique em Lançar até o item na tela | ~2,1 s | **~0,47 s** |
+| dados enviados ao lançar de novo o mesmo item | 1 MB | **344 KB** |
+
+As três causas eram estas, e o que mudou:
+
+1. **A lista de produtos desenhava o catálogo inteiro.** Três mil linhas na tela a cada
+   letra. Agora ela **mostra 60 por vez** e avisa embaixo: *"Mostrando 60 de 3.000 — digite
+   mais do nome para achar o resto"*. Na prática não muda nada para quem usa: ninguém rola
+   três mil linhas, quem procura digita.
+2. **Digitar no formulário atualizava a tela inteira** (a lista de obras, os cartões, a
+   tabela). Agora o formulário de lançamento é uma peça separada: digitar nele não mexe no
+   resto da tela.
+3. **O item só aparecia depois que o catálogo inteiro subia para o banco.** Eram duas
+   gravações em fila, quase 700 KB na frente. Agora as duas vão juntas, e o item aparece na
+   hora. E quando você lança de novo o mesmo produto **pelo mesmo preço**, o catálogo nem é
+   regravado — não mudou nada nele.
+
+Nada disso muda o que é salvo: os lançamentos, os preços e o histórico continuam iguais.
+
 ### Colar lista — a compra inteira de uma vez
 
 A listagem da madeireira vem com seis, dez, vinte linhas. Digitar item por item é onde o
