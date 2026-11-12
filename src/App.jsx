@@ -17,7 +17,10 @@ import RelatorioContas from './contas/RelatorioContas';
 import BoletosPorDia from './contas/BoletosPorDia';
 import ColarListaModal from './obra/ColarListaModal';
 import FormLancamento from './obra/FormLancamento';
+<<<<<<< HEAD
 import DetalheProduto from './produtos/DetalheProduto';
+=======
+>>>>>>> origin/claude/import-boletos-xml-xpmmdc
 import ImportarNotasXml from './contas/ImportarNotasXml';
 import { nomeDaConta, proximoVencimentoBoleto, nomesDeDistribuidoras } from './contas/contasCalc';
 import SeletorComBusca from './ui/SeletorComBusca';
@@ -1429,6 +1432,7 @@ function CustoObraApp({ usuario }) {
   const [editandoId, setEditandoId] = useState(null);
   const [buscaLancamento, setBuscaLancamento] = useState('');
 
+<<<<<<< HEAD
   // ---- reconhecimento do item (catálogo inteligente) ----
   //
   // Quem responde o que é o item: primeiro o que o dono já corrigiu,
@@ -1448,6 +1452,8 @@ function CustoObraApp({ usuario }) {
     salvarClassificacoes(aprenderCorrecao(classificacoes, nome, escolha));
   }
 
+=======
+>>>>>>> origin/claude/import-boletos-xml-xpmmdc
   // Abrir um lançamento para editar: o formulário se remonta já com os
   // valores dele (ver a `key` do FormLancamento lá embaixo).
   function editarLancamento(item) {
@@ -1459,7 +1465,11 @@ function CustoObraApp({ usuario }) {
   // Grava o que o formulário entregou. A validação (campo vazio, valor
   // inválido) já aconteceu lá dentro; aqui fica só a parte que mexe em
   // dado: catálogo, fornecedor e a lista de lançamentos.
+<<<<<<< HEAD
   async function salvarLancamento({ nome, quantidade, preco, unidade, data, observacao, etapaId, fornecedorNome, subcategoria, tipo }) {
+=======
+  async function salvarLancamento({ nome, quantidade, preco, unidade, data, observacao, etapaId, fornecedorNome }) {
+>>>>>>> origin/claude/import-boletos-xml-xpmmdc
     setErro('');
     const hoje = data || todayISO();
     let produtoId = null;
@@ -1615,6 +1625,7 @@ function CustoObraApp({ usuario }) {
   // oferece corrigir todos de uma vez
   const madeirasPendentes = useMemo(() => madeirasSemFornecedor(lancamentos), [lancamentos]);
 
+<<<<<<< HEAD
   // Produtos que podem ser o mesmo item escrito de dois jeitos. O
   // sistema NUNCA junta sozinho — só mostra o par para o dono decidir.
   // Ver possiveisDuplicados em src/produtos/catalogoCentral.js.
@@ -1623,6 +1634,8 @@ function CustoObraApp({ usuario }) {
     [produtos, lancamentos, obras, favoritos]
   );
 
+=======
+>>>>>>> origin/claude/import-boletos-xml-xpmmdc
   if (loading) {
     return <DashboardSkeleton />;
   }
@@ -3315,9 +3328,12 @@ function CustoObraApp({ usuario }) {
                 onCancelarEdicao={() => setEditandoId(null)}
                 onErro={setErro}
                 onColarLista={() => setColarListaAberta(true)}
+<<<<<<< HEAD
                 classificar={classificarItem}
                 historicoDoProduto={historicoDoProduto}
                 onCorrigirClassificacao={corrigirClassificacao}
+=======
+>>>>>>> origin/claude/import-boletos-xml-xpmmdc
               />
             )}
 

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import React, { useDeferredValue, useMemo, useState } from 'react';
 import { ClipboardList, Pencil, Plus, Trees } from 'lucide-react';
 import { todayISO, formatMoney, formatDateBR, parsePrecoBR } from '../domain';
@@ -5,6 +6,14 @@ import { upperInput, normalizeProductName, normalizeUnit } from '../textUtils';
 import ProdutoSeletor from '../produtos/ProdutoSeletor';
 import SeletorComBusca from '../ui/SeletorComBusca';
 import { nivelDeConfianca, precisaDeAjuda, opcoesDeSubcategoria } from '../produtos/classificacao';
+=======
+import React, { useState } from 'react';
+import { ClipboardList, Plus, Trees } from 'lucide-react';
+import { todayISO, parsePrecoBR } from '../domain';
+import { upperInput, normalizeProductName, normalizeUnit } from '../textUtils';
+import ProdutoSeletor from '../produtos/ProdutoSeletor';
+import SeletorComBusca from '../ui/SeletorComBusca';
+>>>>>>> origin/claude/import-boletos-xml-xpmmdc
 
 // O formulário de lançar um gasto na obra, com estado PRÓPRIO.
 //
@@ -48,6 +57,7 @@ function estadoInicial(emEdicao, pagamentoMaoDeObra) {
   };
 }
 
+<<<<<<< HEAD
 // A bolinha de confiança: verde = o sistema tem certeza, âmbar = achou
 // parecido, cinza = não sabe. É de propósito discreta — é um palpite
 // ajudando, não um alarme.
@@ -115,6 +125,8 @@ function FaixaDeSugestao({ sugestao, historico, aberto, onAbrir, onEscolher }) {
   );
 }
 
+=======
+>>>>>>> origin/claude/import-boletos-xml-xpmmdc
 export default function FormLancamento({
   categoria,
   categoriaLabel,
@@ -132,6 +144,7 @@ export default function FormLancamento({
   onCancelarEdicao,
   onErro,
   onColarLista,
+<<<<<<< HEAD
   classificar,
   historicoDoProduto,
   onCorrigirClassificacao,
@@ -169,6 +182,13 @@ export default function FormLancamento({
     }
   }
 
+=======
+}) {
+  const [form, setForm] = useState(() => estadoInicial(emEdicao, pagamentoMaoDeObra));
+  const [salvando, setSalvando] = useState(false);
+  const mudar = (campos) => setForm((f) => ({ ...f, ...campos }));
+
+>>>>>>> origin/claude/import-boletos-xml-xpmmdc
   // A madeira vem toda de uma distribuidora só (ver Configurações >
   // Madeiras). Quando o item lançado é madeira, o fornecedor já entra
   // preenchido — assim o gasto aparece no Financeiro sem depender de
@@ -233,10 +253,13 @@ export default function FormLancamento({
       observacao: form.observacao.trim(),
       etapaId: form.etapaId || null,
       fornecedorNome: form.fornecedor.trim(),
+<<<<<<< HEAD
       // o que o sistema reconheceu fica gravado junto: é o que permite
       // somar por categoria depois sem adivinhar de novo
       subcategoria: sugestao && sugestao.subcategoria ? sugestao.subcategoria : null,
       tipo: sugestao && sugestao.tipo ? sugestao.tipo : null,
+=======
+>>>>>>> origin/claude/import-boletos-xml-xpmmdc
     });
     setSalvando(false);
     if (ok) setForm(estadoInicial(null, pagamentoMaoDeObra));
@@ -277,6 +300,7 @@ export default function FormLancamento({
             }
           />
         )}
+<<<<<<< HEAD
         {sugestao && form.descricao.trim().length > 2 && (
           <FaixaDeSugestao
             sugestao={sugestao}
@@ -286,6 +310,8 @@ export default function FormLancamento({
             onEscolher={escolherCategoria}
           />
         )}
+=======
+>>>>>>> origin/claude/import-boletos-xml-xpmmdc
       </div>
       {!pagamentoMaoDeObra && (
         <div className="col-span-1">
